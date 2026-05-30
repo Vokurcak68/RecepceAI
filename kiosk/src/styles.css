@@ -148,9 +148,11 @@ svg.av * { transform-box: fill-box; }
 .voice-heard { color: var(--muted); font-style: italic; font-size: 18px; }
 
 /* AI asistent */
-.assistant { width: 100%; max-width: 780px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+/* Jen kontejner obrazovky asistenta (přímý potomek .content) — NE chatové
+   bubliny, které mají taky třídu "assistant" (.bubble.assistant). */
+.content > .assistant { width: 100%; max-width: 780px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
 .chat { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; overflow-y: auto; width: 100%; padding: 4px; }
-.bubble { padding: 14px 18px; border-radius: 18px; font-size: 20px; line-height: 1.4; max-width: 85%; white-space: pre-wrap; }
+.bubble { padding: 14px 18px; border-radius: 18px; font-size: 20px; line-height: 1.4; max-width: 85%; white-space: pre-wrap; overflow-wrap: anywhere; flex-shrink: 0; }
 .bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 6px; }
 .bubble.assistant { align-self: flex-start; background: var(--card); border: 1px solid #2b3760; border-bottom-left-radius: 6px; }
 .chat-input { display: flex; gap: 10px; width: 100%; align-items: center; }
@@ -191,7 +193,7 @@ svg.av * { transform-box: fill-box; }
 .stepper button { width: 64px; height: 64px; border-radius: 50%; font-size: 32px; border: none; background: var(--bg2); color: var(--text); cursor: pointer; }
 .stepper .val { font-size: 40px; font-weight: 800; min-width: 60px; text-align: center; }
 
-.footer { display: flex; justify-content: space-between; align-items: center; min-height: 64px; gap: 14px; }
+.footer { display: flex; justify-content: space-between; align-items: center; min-height: 64px; gap: 14px; margin-top: 16px; flex-shrink: 0; }
 
 .error { color: var(--danger); font-size: 19px; text-align: center; }
 .spinner { font-size: 22px; color: var(--muted); }

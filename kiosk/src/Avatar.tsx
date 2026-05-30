@@ -28,6 +28,26 @@ function VoiceOrb({ speaking }: { speaking: boolean }) {
   );
 }
 
+// ── Čištění textu (model může poslat Markdown/emoji) ─────────
+/** Odstraní Markdown zvýraznění — pro zobrazení v bublině. */
+export function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.*?)\*\*/gs, "$1")   // **tučné**
+    .replace(/__(.*?)__/gs, "$1")       // __tučné__
+    .replace(/\*(.*?)\*/gs, "$1")       // *kurzíva*
+    .replace(/`([^`]*)`/g, "$1")        // `kód`
+    .replace(/^#{1,6}\s+/gm, "")         // nadpisy #
+    .replace(/\*/g, "");                 // zbylé osamocené hvězdičky
+}
+
+/** Pro předčítání: navíc pryč emoji/symboly, ať je TTS nečte. */
+function cleanForSpeech(s: string): string {
+  return stripMarkdown(s)
+    .replace(/[\p{Extended_Pictographic}️⃣]/gu, "") // emoji
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 // ── Hlas ─────────────────────────────────────────────────────
 export function useSpeech(lang: Lang) {
   const [speaking, setSpeaking] = useState(false);
@@ -35,8 +55,10 @@ export function useSpeech(lang: Lang) {
 
   const speak = (text: string) => {
     if (!enabled.current || !("speechSynthesis" in window)) return;
+    const clean = cleanForSpeech(text);
+    if (!clean) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(clean);
     u.lang = SPEECH_LANG[lang];
     u.rate = 1;
     u.pitch = 1.05;

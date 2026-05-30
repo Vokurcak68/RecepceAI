@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, money, loadProperty, type Reservation, type Available, type Folio, type PropertyInfo, type ChatMsg } from "./api";
 import { makeT, type Lang } from "./i18n";
-import { Avatar, useSpeech, AVATAR_VARIANTS, type AvatarVariant } from "./Avatar";
+import { Avatar, useSpeech, stripMarkdown, AVATAR_VARIANTS, type AvatarVariant } from "./Avatar";
 import { StaffCall } from "./StaffCall";
 import { useRecognition, matchIntent, recognitionSupported } from "./speech";
 
@@ -317,7 +317,7 @@ export function App() {
                 <div className="screen-hint">{t("assistantHint")}</div>
                 <div className="chat" ref={chatBoxRef}>
                   {chatMessages.map((m, i) => (
-                    <div key={i} className={`bubble ${m.role}`}>{m.content}</div>
+                    <div key={i} className={`bubble ${m.role}`}>{m.role === "assistant" ? stripMarkdown(m.content) : m.content}</div>
                   ))}
                   {chatBusy && <div className="bubble assistant muted">{t("thinking")}</div>}
                 </div>
