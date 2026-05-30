@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build výstupy
+dist/
+build/
+**/dist/
+**/build/
+
+# Tajné / lokální prostředí — NIKDY necommitovat
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+pat.txt
+
+# WhatsApp Web session (přihlášení — citlivé)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# TLS certifikáty (privátní klíč)
+kiosk/certs/*.pem
+
+# Claude lokální konfigurace
+.claude/
+
+# Logy / OS
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

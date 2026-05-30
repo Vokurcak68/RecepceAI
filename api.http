@@ -1,0 +1,65 @@
+### Kiosek API — ukázkové requesty (VS Code REST Client / IntelliJ HTTP).
+### Sedí na seed data. Spusť: npm run dev
+
+@base = http://localhost:3000
+
+### Health
+GET {{base}}/health
+
+### Dostupnost na 2 noci od dneška pro 2 hosty (walk-in Krok 2–3)
+GET {{base}}/availability?from=2026-05-28&to=2026-05-30&guests=2
+
+### Identifikace rezervace přes kód z QR (check-in Krok 2)
+GET {{base}}/reservations/lookup?code=RC-DEMO01
+
+### Identifikace přes příjmení
+GET {{base}}/reservations/lookup?lastName=Novák
+
+### Check-in: přiřadí pokoj + checked_in (uprav :id na id z lookupu)
+POST {{base}}/reservations/REZERVACE_ID/checkin
+
+### Doplatek na kiosku (check-in Krok 5)
+POST {{base}}/reservations/REZERVACE_ID/payments
+Content-Type: application/json
+
+{ "type": "balance", "amount": 2700, "method": "card_terminal" }
+
+### Vyúčtování (check-out Krok 2) — zkus na RC-DEMO02
+GET {{base}}/reservations/REZERVACE_ID/folio
+
+### Walk-in: vytvoření blokace (roomTypeId vezmi z /availability)
+POST {{base}}/reservations/walkin
+Content-Type: application/json
+
+{
+  "roomTypeId": "TYP_POKOJE_ID",
+  "from": "2026-05-28",
+  "to": "2026-05-29",
+  "adults": 2,
+  "guest": { "firstName": "Petr", "lastName": "Dvořák", "email": "petr@example.com", "language": "cs" }
+}
+
+### Potvrzení po platbě
+POST {{base}}/reservations/REZERVACE_ID/confirm
+
+### Ohlašovací povinnost (check-in / walk-in Krok 4)
+POST {{base}}/reservations/REZERVACE_ID/registration
+Content-Type: application/json
+
+{
+  "guestId": "GUEST_ID",
+  "fullName": "Petr Dvořák",
+  "dateOfBirth": "1990-06-15",
+  "nationality": "CZ",
+  "documentType": "id_card",
+  "documentNumber": "123456789",
+  "homeAddress": "Hlavní 1, Praha",
+  "stayFrom": "2026-05-28",
+  "stayTo": "2026-05-29"
+}
+
+### Check-out (vyžaduje vyrovnaný účet)
+POST {{base}}/reservations/REZERVACE_ID/checkout
+
+### Údržba — uvolnit expirované blokace (cron)
+POST {{base}}/maintenance/release-holds

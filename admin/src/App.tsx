@@ -1,0 +1,1120 @@
+import { useEffect, useState, type ReactNode } from "react";
+import QRCode from "qrcode";
+import {
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON,
+  type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
+  type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
+} from "./api";
+
+const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
+
+// Adresa portálu hosta (přepsatelné přes VITE_GUEST_URL při buildu).
+const GUEST_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_GUEST_URL || "http://localhost:5175";
+const guestUrl = (code: string) => `${GUEST_BASE}/?code=${encodeURIComponent(code)}`;
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const tomorrowIso = () => new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+
+export function App() {
+  const [session, setSession] = useState<LoginResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selId, setSelId] = useState(getProperty());
+  const [tab, setTab] = useState("dashboard");
+
+  useEffect(() => {
+    if (!localStorage.getItem("adminToken")) { setLoading(false); return; }
+    api.me()
+      .then((s) => { setSession({ token: "", ...s }); pickInitial(s.properties); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function pickInitial(props: Property[]) {
+    const cur = getProperty();
+    if ((!cur || !props.find((p) => p.id === cur)) && props[0]) { setProperty(props[0].id); setSelId(props[0].id); }
+    else setSelId(cur);
+  }
+
+  if (loading) return <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }} className="muted">Načítám…</div>;
+  if (!session) return <Login onLogin={(s) => { setSession(s); pickInitial(s.properties); }} />;
+
+  const logout = () => { localStorage.removeItem("adminToken"); localStorage.removeItem("propertyId"); setSession(null); };
+
+  // Personál (uklízečka/údržbář) má vlastní zjednodušený portál.
+  if (session.user.role === "housekeeping" || session.user.role === "maintenance") return <StaffPortal session={session} onLogout={logout} />;
+
+  const isSuper = session.user.role === "super_admin";
+  const prop = session.properties.find((p) => p.id === selId);
+
+  const propTabs = [
+    { id: "dashboard", label: "Přehled", icon: "📊" },
+    { id: "reservations", label: "Rezervace", icon: "📋" },
+    { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
+    { id: "equipment", label: "Vybavení", icon: "🧰" },
+    { id: "requests", label: "Požadavky", icon: "🛎️" },
+    { id: "types", label: "Typy & ceny", icon: "🏷️" },
+    { id: "book", label: "Kniha hostů", icon: "📖" },
+  ];
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="logo">🛎️ Recepce</div>
+
+        <select className="prop-switch" value={selId} onChange={(e) => { setProperty(e.target.value); setSelId(e.target.value); }}>
+          {session.properties.map((p) => <option key={p.id} value={p.id}>{p.name} · {TYPE_LABEL[p.type]}</option>)}
+        </select>
+
+        <nav className="nav">
+          {propTabs.map((t) => (
+            <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}><span>{t.icon}</span> {t.label}</button>
+          ))}
+          {isSuper && (
+            <>
+              <div className="nav-sep">CENTRÁLA</div>
+              <button className={tab === "properties" ? "active" : ""} onClick={() => setTab("properties")}><span>🏢</span> Provozovny</button>
+              <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}><span>👤</span> Uživatelé</button>
+              <button className={tab === "cequipment" ? "active" : ""} onClick={() => setTab("cequipment")}><span>🧰</span> Vybavení</button>
+              <button className={tab === "whatsapp" ? "active" : ""} onClick={() => setTab("whatsapp")}><span>📲</span> WhatsApp</button>
+            </>
+          )}
+          <button onClick={logout} style={{ marginTop: 24 }}>🚪 Odhlásit ({session.user.name})</button>
+        </nav>
+      </aside>
+
+      <main className="main">
+        {prop && tab === "dashboard" && <DashboardView selId={selId} />}
+        {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
+        {prop && tab === "rooms" && <RoomsView selId={selId} />}
+        {prop && tab === "beds" && <BedsView selId={selId} />}
+        {prop && tab === "equipment" && <EquipmentView selId={selId} />}
+        {prop && tab === "requests" && <RequestsView selId={selId} />}
+        {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
+        {prop && tab === "book" && <BookView selId={selId} />}
+        {isSuper && tab === "properties" && <PropertiesView />}
+        {isSuper && tab === "users" && <UsersView currentUserId={session.user.id} />}
+        {isSuper && tab === "cequipment" && <CentralEquipmentView />}
+        {isSuper && tab === "whatsapp" && <WhatsAppView />}
+      </main>
+    </div>
+  );
+}
+
+// ── Login ────────────────────────────────────────────────────
+function Login({ onLogin }: { onLogin: (s: LoginResult) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true); setError("");
+    try { const s = await api.login(email, password); setToken(s.token); onLogin(s); }
+    catch { setError("Nesprávný e-mail nebo heslo."); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
+      <div className="panel" style={{ width: 380, padding: 28 }}>
+        <div className="logo" style={{ padding: "0 0 8px" }}>🛎️ Hotelový systém</div>
+        <div className="muted" style={{ marginBottom: 16 }}>Přihlášení správce</div>
+        {error && <div className="error">{error}</div>}
+        <input placeholder="E-mail" value={email} autoFocus style={{ width: "100%", marginBottom: 10 }} onChange={(e) => setEmail(e.target.value)} />
+        <input type="password" placeholder="Heslo" value={password} style={{ width: "100%", marginBottom: 12 }} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+        <button className="btn" style={{ width: "100%" }} disabled={busy} onClick={submit}>{busy ? "Přihlašuji…" : "Přihlásit"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Hook ─────────────────────────────────────────────────────
+function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState("");
+  const reload = () => { setError(""); fn().then(setData).catch((e) => setError(e.message)); };
+  useEffect(reload, deps); // eslint-disable-line
+  return { data, error, reload };
+}
+
+// ── Dashboard ────────────────────────────────────────────────
+function DashboardView({ selId }: { selId: string }) {
+  const today = todayIso();
+  const { data, error, reload } = useAsync<Dashboard>(() => api.dashboard(today), [selId]);
+  const doCheckin = async (id: string) => { await api.checkin(id); reload(); };
+  const doClean = async (id: string) => { await api.cleanRoom(id); reload(); };
+  return (
+    <>
+      <div className="h1">Přehled <span className="muted" style={{ fontSize: 15 }}>{today}</span></div>
+      {error && <div className="error">{error}</div>}
+      {data && (
+        <>
+          <div className="stats">
+            <div className="stat"><div className="n">{data.counts.arrivals}</div><div className="l">Dnešní příjezdy</div></div>
+            <div className="stat"><div className="n">{data.counts.inHouse}</div><div className="l">Ubytovaní</div></div>
+            <div className="stat"><div className="n">{data.counts.departures}</div><div className="l">Dnešní odjezdy</div></div>
+            <div className="stat warn"><div className="n">{data.counts.dirtyRooms}</div><div className="l">K úklidu</div></div>
+            <div className="stat"><div className="n">{data.counts.activeHolds}</div><div className="l">Blokace</div></div>
+          </div>
+          <div className="grid2">
+            <div className="panel"><h3>🛬 Dnešní příjezdy</h3>
+              <Table cols={["Host", "Jednotka", "Kód", ""]} rows={data.arrivals} empty="Žádné"
+                render={(r: Reservation) => (<tr key={r.id}><td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td><td>{r.roomType?.name}</td><td className="muted">{r.code}</td><td className="right"><button className="btn sm ok" onClick={() => doCheckin(r.id)}>Check-in</button></td></tr>)} />
+            </div>
+            <div className="panel"><h3>🛫 Dnešní odjezdy</h3>
+              <Table cols={["Host", "Jednotka", "Kód"]} rows={data.departures} empty="Žádné"
+                render={(r: Reservation) => (<tr key={r.id}><td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td><td>{r.room?.number ?? r.bed?.label ?? "—"}</td><td className="muted">{r.code}</td></tr>)} />
+            </div>
+          </div>
+          <div className="grid2">
+            <div className="panel"><h3>🏨 Ubytovaní</h3>
+              <Table cols={["Host", "Jednotka", "Odjezd"]} rows={data.inHouse} empty="Nikdo"
+                render={(r: Reservation) => (<tr key={r.id}><td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td><td>{r.room?.number ?? r.bed?.label ?? "—"}</td><td>{d(r.checkOutDate)}</td></tr>)} />
+            </div>
+            <div className="panel"><h3>🧹 K úklidu</h3>
+              <Table cols={["Pokoj", "Patro", ""]} rows={data.dirtyRooms} empty="Vše uklizeno"
+                render={(r: Room) => (<tr key={r.id}><td>{r.number}</td><td>{r.floor}.</td><td className="right"><button className="btn sm ghost" onClick={() => doClean(r.id)}>Uklizeno</button></td></tr>)} />
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── Reservations ─────────────────────────────────────────────
+function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("");
+  const { data, error, reload } = useAsync<Reservation[]>(() => api.reservations(q, status), [selId, status]);
+  const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formErr, setFormErr] = useState("");
+  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", billingCompany: "", billingIco: "" });
+
+  const cancel = async (id: string) => { if (confirm("Zrušit rezervaci?")) { await api.cancel(id); reload(); } };
+  const create = async () => {
+    setFormErr("");
+    if (!f.roomTypeId || !f.firstName || !f.lastName) { setFormErr("Vyplň typ, jméno a příjmení."); return; }
+    try {
+      await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults),
+        guest: { firstName: f.firstName, lastName: f.lastName, email: f.email || undefined, phone: f.phone || undefined },
+        billingCompany: f.billingCompany || undefined, billingIco: f.billingIco || undefined });
+      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", billingCompany: "", billingIco: "" }); reload();
+    } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); }
+  };
+
+  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
+
+  return (
+    <>
+      <div className="h1">Rezervace <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? "Zavřít" : "+ Nová rezervace"}</button></div>
+      {error && <div className="error">{error}</div>}
+      {showForm && (
+        <div className="panel" style={{ padding: 18 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Nová rezervace</h3>
+          {formErr && <div className="error">{formErr}</div>}
+          <div className="toolbar">
+            <select value={f.roomTypeId} onChange={(e) => setF({ ...f, roomTypeId: e.target.value })}>
+              <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
+              {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
+            </select>
+            <label className="row">Příjezd <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
+            <label className="row">Odjezd <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
+            <label className="row">Osob <input type="number" min={1} style={{ width: 70 }} value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></label>
+          </div>
+          <div className="toolbar">
+            <input placeholder="Jméno" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} />
+            <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} />
+            <input placeholder="E-mail" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+            <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          </div>
+          {prop.type === "ubytovna" && (
+            <div className="toolbar">
+              <input placeholder="Fakturovat firmě (název)" value={f.billingCompany} onChange={(e) => setF({ ...f, billingCompany: e.target.value })} />
+              <input placeholder="IČO" value={f.billingIco} onChange={(e) => setF({ ...f, billingIco: e.target.value })} />
+              <button className="btn" onClick={create}>Vytvořit</button>
+            </div>
+          )}
+          {prop.type !== "ubytovna" && <button className="btn" onClick={create}>Vytvořit rezervaci</button>}
+        </div>
+      )}
+      <div className="toolbar">
+        <input placeholder="Hledat jméno / kód…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && reload()} />
+        <button className="btn ghost" onClick={reload}>Hledat</button>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Všechny stavy</option>
+          {["pending", "hold", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button className="btn ghost" onClick={() => setGuestQr((data ?? []).filter((r) => ["confirmed", "checked_in"].includes(r.status)))}>🏷 QR hostů</button>
+      </div>
+      <div className="panel">
+        <Table cols={["Kód", "Host", "Termín", "Jednotka", "Stav", "Částka", ""]} rows={data ?? []} empty="Žádné rezervace"
+          render={(r: Reservation) => (
+            <tr key={r.id}>
+              <td className="muted">{r.code}</td>
+              <td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td>
+              <td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td>
+              <td>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</td>
+              <td><Badge s={r.status} /></td>
+              <td>{money(r.totalAmount)}{r.billingCycle === "monthly" && <span className="chip">měsíčně</span>}</td>
+              <td className="right">
+                <button className="btn sm ghost" onClick={() => setDetailId(r.id)}>Detail</button>{" "}
+                {!["cancelled", "checked_out", "no_show"].includes(r.status) && <button className="btn sm danger" onClick={() => cancel(r.id)}>Zrušit</button>}
+              </td>
+            </tr>
+          )} />
+      </div>
+      {guestQr && <GuestQrLabels rows={guestQr.map((r) => ({ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.roomType?.name ?? r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }))} onClose={() => setGuestQr(null)} />}
+    </>
+  );
+}
+
+// ── Rooms ────────────────────────────────────────────────────
+function RoomsView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<Room[]>(() => api.rooms(), [selId]);
+  const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const [form, setForm] = useState({ roomTypeId: "", number: "", floor: 1, lockType: "physical_key" });
+  const setStatus = async (id: string, s: string) => { await api.updateRoom(id, { status: s }); reload(); };
+  const del = async (id: string) => { if (confirm("Smazat pokoj?")) { await api.deleteRoom(id); reload(); } };
+  const add = async () => { if (!form.roomTypeId || !form.number) return; await api.createRoom({ ...form, floor: Number(form.floor) }); setForm({ roomTypeId: "", number: "", floor: 1, lockType: "physical_key" }); reload(); };
+  return (
+    <>
+      <div className="h1">Pokoje</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar">
+        <select value={form.roomTypeId} onChange={(e) => setForm({ ...form, roomTypeId: e.target.value })}><option value="">Typ pokoje…</option>{(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+        <input placeholder="Číslo" style={{ width: 90 }} value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
+        <input placeholder="Patro" type="number" style={{ width: 80 }} value={form.floor} onChange={(e) => setForm({ ...form, floor: Number(e.target.value) })} />
+        <select value={form.lockType} onChange={(e) => setForm({ ...form, lockType: e.target.value })}><option value="physical_key">Fyzický klíč</option><option value="smart_code">Chytrý zámek</option></select>
+        <button className="btn" onClick={add}>+ Přidat pokoj</button>
+      </div>
+      <div className="panel">
+        <Table cols={["Číslo", "Typ", "Patro", "Zámek", "Stav", ""]} rows={data ?? []} empty="Žádné pokoje"
+          render={(r: Room) => (<tr key={r.id}><td><b>{r.number}</b></td><td>{r.roomType?.name}</td><td>{r.floor}.</td><td className="muted">{r.lockType === "smart_code" ? "🔢 kód" : "🔑 klíč"}</td><td><select value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>{["clean", "dirty", "out_of_service"].map((s) => <option key={s} value={s}>{s}</option>)}</select></td><td className="right"><button className="btn sm danger" onClick={() => del(r.id)}>Smazat</button></td></tr>)} />
+      </div>
+    </>
+  );
+}
+
+// ── Beds (ubytovna) ──────────────────────────────────────────
+function BedsView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<Bed[]>(() => api.beds(), [selId]);
+  const rooms = useAsync<Room[]>(() => api.rooms(), [selId]);
+  const [form, setForm] = useState({ roomId: "", label: "" });
+  const del = async (id: string) => { if (confirm("Smazat lůžko?")) { await api.deleteBed(id); reload(); } };
+  const add = async () => { if (!form.roomId || !form.label) return; await api.createBed(form); setForm({ roomId: "", label: "" }); reload(); };
+  return (
+    <>
+      <div className="h1">Lůžka</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar">
+        <select value={form.roomId} onChange={(e) => setForm({ ...form, roomId: e.target.value })}><option value="">Pokoj…</option>{(rooms.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.number} ({r.roomType?.name})</option>)}</select>
+        <input placeholder="Označení (např. A1-5)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+        <button className="btn" onClick={add}>+ Přidat lůžko</button>
+      </div>
+      <div className="panel">
+        <Table cols={["Lůžko", "Pokoj", "Typ", "Stav", ""]} rows={data ?? []} empty="Žádná lůžka"
+          render={(b: Bed) => (<tr key={b.id}><td><b>{b.label}</b></td><td>{b.room?.number}</td><td>{b.room?.roomType?.name}</td><td><Badge s={b.status} /></td><td className="right"><button className="btn sm danger" onClick={() => del(b.id)}>Smazat</button></td></tr>)} />
+      </div>
+    </>
+  );
+}
+
+// ── Room types & pricing ─────────────────────────────────────
+function TypesView({ selId, prop }: { selId: string; prop: Property }) {
+  const { data, error, reload } = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const [msg, setMsg] = useState("");
+  const [rate, setRate] = useState({ roomTypeId: "", date: todayIso(), price: "" });
+  const [nw, setNw] = useState({ name: "", capacityAdults: 2, basePrice: "", weeklyPrice: "", monthlyPrice: "" });
+
+  const saveBase = async (id: string, v: string) => { const n = parseFloat(v); if (isNaN(n)) return; await api.updateRoomType(id, { basePrice: n }); setMsg("Cena uložena."); reload(); };
+  const saveLong = async (id: string, field: "weeklyPrice" | "monthlyPrice", v: string) => { const n = parseFloat(v); await api.updateRoomType(id, { [field]: isNaN(n) ? 0 : n }); setMsg("Dlouhodobá cena uložena."); reload(); };
+  const saveRate = async () => { if (!rate.roomTypeId || !rate.price) return; await api.setRate({ roomTypeId: rate.roomTypeId, date: rate.date, price: parseFloat(rate.price) }); setMsg(`Cena na ${rate.date} nastavena.`); setRate({ ...rate, price: "" }); };
+  const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
+
+  return (
+    <>
+      <div className="h1">Typy {prop.inventoryUnit === "bed" ? "lůžek" : "pokojů"} & ceny</div>
+      {error && <div className="error">{error}</div>}
+      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+
+      <div className="panel">
+        <h3>Typy</h3>
+        <Table cols={prop.allowLongTerm ? ["Název", "Kapacita", "Cena/noc", "Cena/týden", "Cena/měsíc"] : ["Název", "Kapacita", "Pokojů", "Cena/noc"]} rows={data ?? []} empty="Žádné typy"
+          render={(t: RoomType) => prop.allowLongTerm ? (
+            <tr key={t.id}>
+              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren}</td>
+              <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
+              <td><PriceCell v={t.weeklyPrice} onSave={(v) => saveLong(t.id, "weeklyPrice", v)} /></td>
+              <td><PriceCell v={t.monthlyPrice} onSave={(v) => saveLong(t.id, "monthlyPrice", v)} /></td>
+            </tr>
+          ) : (
+            <tr key={t.id}>
+              <td><b>{t.name}</b><div className="muted">{t.amenities.join(", ")}</div></td>
+              <td>{t.capacityAdults}+{t.capacityChildren}</td><td>{t._count?.rooms ?? "—"}</td>
+              <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
+            </tr>
+          )} />
+      </div>
+
+      <div className="panel">
+        <h3>Nový typ</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <input placeholder="Název" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
+          <label className="row">Kapacita <input type="number" min={1} style={{ width: 70 }} value={nw.capacityAdults} onChange={(e) => setNw({ ...nw, capacityAdults: Number(e.target.value) })} /></label>
+          <input placeholder="Cena/noc" style={{ width: 110 }} value={nw.basePrice} onChange={(e) => setNw({ ...nw, basePrice: e.target.value })} />
+          {prop.allowLongTerm && <input placeholder="Cena/týden" style={{ width: 110 }} value={nw.weeklyPrice} onChange={(e) => setNw({ ...nw, weeklyPrice: e.target.value })} />}
+          {prop.allowLongTerm && <input placeholder="Cena/měsíc" style={{ width: 110 }} value={nw.monthlyPrice} onChange={(e) => setNw({ ...nw, monthlyPrice: e.target.value })} />}
+          <button className="btn" onClick={addType}>+ Přidat</button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>Cena na konkrétní den (sezónní)</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <select value={rate.roomTypeId} onChange={(e) => setRate({ ...rate, roomTypeId: e.target.value })}><option value="">Typ…</option>{(data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+          <input type="date" value={rate.date} onChange={(e) => setRate({ ...rate, date: e.target.value })} />
+          <input placeholder="Cena" style={{ width: 110 }} value={rate.price} onChange={(e) => setRate({ ...rate, price: e.target.value })} />
+          <button className="btn" onClick={saveRate}>Nastavit</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PriceCell({ v, onSave }: { v: string | null; onSave: (v: string) => void }) {
+  const [val, setVal] = useState(v == null ? "" : parseFloat(v).toString());
+  return <div className="row"><input style={{ width: 100 }} value={val} onChange={(e) => setVal(e.target.value)} /><button className="btn sm ghost" onClick={() => onSave(val)}>✓</button></div>;
+}
+
+// ── Registration book ────────────────────────────────────────
+function BookView({ selId }: { selId: string }) {
+  const [from, setFrom] = useState(new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10));
+  const [to, setTo] = useState(new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10));
+  const { data, error, reload } = useAsync<RegistrationEntry[]>(() => api.registrations(from, to), [selId]);
+  const exportCsv = () => {
+    const rows = data ?? [];
+    const head = ["Jméno", "Narození", "Národnost", "Doklad", "Číslo", "Adresa", "Od", "Do"];
+    const lines = rows.map((r) => [r.fullName, d(r.dateOfBirth), r.nationality, r.documentType, r.documentNumber, r.homeAddress, d(r.stayFrom), d(r.stayTo)].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";"));
+    const blob = new Blob(["﻿" + [head.join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `kniha-hostu-${from}_${to}.csv`; a.click();
+  };
+  return (
+    <>
+      <div className="h1">Evidenční kniha</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar">
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <button className="btn ghost" onClick={reload}>Načíst</button>
+        <button className="btn" onClick={exportCsv}>⬇ Export CSV</button>
+      </div>
+      <div className="panel">
+        <Table cols={["Jméno", "Narození", "Národnost", "Doklad", "Adresa", "Pobyt"]} rows={data ?? []} empty="Žádné záznamy"
+          render={(r: RegistrationEntry) => (<tr key={r.id}><td>{r.fullName}</td><td>{d(r.dateOfBirth)}</td><td>{r.nationality}</td><td className="muted">{r.documentType === "passport" ? "pas" : "OP"} {r.documentNumber}</td><td className="muted">{r.homeAddress}</td><td>{d(r.stayFrom)} → {d(r.stayTo)}</td></tr>)} />
+      </div>
+    </>
+  );
+}
+
+// ── CENTRÁLA: Provozovny ─────────────────────────────────────
+type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
+
+function PropertiesView() {
+  const { data, error, reload } = useAsync<Property[]>(() => api.centralProperties(), []);
+  const [nw, setNw] = useState({ identifier: "", name: "", type: "hotel", city: "" });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [ef, setEf] = useState<PropEdit | null>(null);
+  const [msg, setMsg] = useState("");
+
+  const add = async () => { if (!nw.identifier || !nw.name) return; await api.createProperty(nw); setNw({ identifier: "", name: "", type: "hotel", city: "" }); reload(); };
+  const toggle = async (p: Property, field: "cityTaxEnabled" | "allowLongTerm" | "selfCheckin" | "breakfastIncluded" | "active") => { await api.updateProperty(p.id, { [field]: !p[field] }); reload(); };
+  const startEdit = (p: Property) => {
+    setEditId(p.id);
+    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
+  };
+  const saveEdit = async () => {
+    if (!editId || !ef) return;
+    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight) });
+    setMsg("Provozovna uložena."); setEditId(null); setEf(null); reload();
+  };
+
+  return (
+    <>
+      <div className="h1">Provozovny (centrála)</div>
+      {error && <div className="error">{error}</div>}
+      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+
+      <div className="panel">
+        <h3>Nová provozovna</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <input placeholder="Identifikátor (HOTEL-XX-01)" value={nw.identifier} onChange={(e) => setNw({ ...nw, identifier: e.target.value })} />
+          <input placeholder="Název" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
+          <input placeholder="Město" value={nw.city} onChange={(e) => setNw({ ...nw, city: e.target.value })} />
+          <select value={nw.type} onChange={(e) => setNw({ ...nw, type: e.target.value })}><option value="hotel">Hotel</option><option value="penzion">Penzion</option><option value="ubytovna">Ubytovna</option></select>
+          <button className="btn" onClick={add}>+ Založit</button>
+        </div>
+        <div className="muted" style={{ padding: "0 16px 16px" }}>Typ nastaví výchozí chování, které lze u každé provozovny přepnout.</div>
+      </div>
+
+      {editId && ef && (
+        <div className="panel" style={{ padding: 18 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Úprava provozovny</h3>
+          <div className="toolbar">
+            <label className="row">Název <input value={ef.name} onChange={(e) => setEf({ ...ef, name: e.target.value })} /></label>
+            <label className="row">Identifikátor <input value={ef.identifier} onChange={(e) => setEf({ ...ef, identifier: e.target.value })} /></label>
+          </div>
+          <div className="toolbar">
+            <input placeholder="Ulice" value={ef.street} onChange={(e) => setEf({ ...ef, street: e.target.value })} />
+            <input placeholder="Město" value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} />
+            <input placeholder="Telefon" value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} />
+            <input placeholder="E-mail" value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} />
+          </div>
+          <div style={{ padding: "4px 0 10px" }}>
+            <div className="muted" style={{ marginBottom: 6 }}>Informace pro AI asistenta (FAQ — wifi, snídaně, parkování, pravidla, okolí…):</div>
+            <textarea style={{ width: "100%", minHeight: 100, resize: "vertical" }} value={ef.infoText} onChange={(e) => setEf({ ...ef, infoText: e.target.value })} placeholder="Např.: Wi-Fi heslo je 'vitejte'. Snídaně 7–10 v přízemí. Parkování zdarma na dvoře. Check-in od 14:00, check-out do 10:00. Domácí mazlíčci povoleni." />
+          </div>
+          <div className="toolbar">
+            <label className="row">Pobytový poplatek / os. / noc <input style={{ width: 90 }} value={ef.cityTaxPerPersonNight} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} /> Kč</label>
+            <label className="row">Jednotka <select value={ef.inventoryUnit} onChange={(e) => setEf({ ...ef, inventoryUnit: e.target.value })}><option value="room">pokoj</option><option value="bed">lůžko</option></select></label>
+            <button className="btn" onClick={saveEdit}>Uložit</button>
+            <button className="btn ghost" onClick={() => { setEditId(null); setEf(null); }}>Zrušit</button>
+          </div>
+        </div>
+      )}
+
+      <div className="panel">
+        <Table cols={["Identifikátor", "Název", "Typ", "Jednotka", "Poplatek", "Dlouhodobě", "Self check-in", "Aktivní", ""]} rows={data ?? []} empty="Žádné"
+          render={(p: Property) => (
+            <tr key={p.id}>
+              <td className="muted">{p.identifier}</td><td><b>{p.name}</b><div className="muted">{[p.street, p.city].filter(Boolean).join(", ")}</div></td>
+              <td><Badge s={p.type} /></td><td>{p.inventoryUnit === "bed" ? "lůžko" : "pokoj"}</td>
+              <td><Toggle on={p.cityTaxEnabled} onClick={() => toggle(p, "cityTaxEnabled")} /> {p.cityTaxEnabled && <span className="muted">{money(p.cityTaxPerPersonNight)}</span>}</td>
+              <td><Toggle on={p.allowLongTerm} onClick={() => toggle(p, "allowLongTerm")} /></td>
+              <td><Toggle on={p.selfCheckin} onClick={() => toggle(p, "selfCheckin")} /></td>
+              <td><Toggle on={p.active} onClick={() => toggle(p, "active")} /></td>
+              <td className="right"><button className="btn sm ghost" onClick={() => startEdit(p)}>Upravit</button></td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => <button className={`btn sm ${on ? "ok" : "ghost"}`} onClick={onClick}>{on ? "ANO" : "ne"}</button>;
+
+// ── CENTRÁLA: Uživatelé ──────────────────────────────────────
+function UsersView({ currentUserId }: { currentUserId: string }) {
+  const { data, error, reload } = useAsync<User[]>(() => api.users(), []);
+  const props = useAsync<Property[]>(() => api.centralProperties(), []);
+  const [nw, setNw] = useState({ email: "", name: "", password: "", role: "manager", propertyIds: [] as string[] });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [eProps, setEProps] = useState<string[]>([]);
+  const [ePwd, setEPwd] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const add = async () => { if (!nw.email || !nw.name || !nw.password) return; await api.createUser(nw); setNw({ email: "", name: "", password: "", role: "manager", propertyIds: [] }); reload(); };
+  const del = async (u: User) => { if (confirm(`Smazat uživatele ${u.name}?`)) { await api.deleteUser(u.id); reload(); } };
+  const startEdit = (u: User) => { setEditId(u.id); setEProps((u.properties ?? []).map((x) => x.property.id)); setEPwd(""); setMsg(""); };
+  const saveAssign = async () => { if (!editId) return; await api.setUserProperties(editId, eProps); setMsg("Provozovny uloženy."); reload(); };
+  const savePwd = async () => { if (!editId || ePwd.length < 4) { setMsg("Heslo min. 4 znaky."); return; } await api.updateUser(editId, { password: ePwd }); setMsg("Heslo změněno."); setEPwd(""); };
+
+  const editing = (data ?? []).find((u) => u.id === editId);
+
+  return (
+    <>
+      <div className="h1">Uživatelé (centrála)</div>
+      {error && <div className="error">{error}</div>}
+      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+
+      <div className="panel">
+        <h3>Nový uživatel</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <input placeholder="E-mail" value={nw.email} onChange={(e) => setNw({ ...nw, email: e.target.value })} />
+          <input placeholder="Jméno" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
+          <input placeholder="Heslo" type="password" value={nw.password} onChange={(e) => setNw({ ...nw, password: e.target.value })} />
+          <select value={nw.role} onChange={(e) => setNw({ ...nw, role: e.target.value })}><option value="manager">Správce</option><option value="housekeeping">Úklid</option><option value="maintenance">Údržba</option><option value="super_admin">Super-admin</option></select>
+          <button className="btn" onClick={add}>+ Vytvořit</button>
+        </div>
+        {nw.role !== "super_admin" && (
+          <div style={{ padding: "0 16px 16px" }}>
+            <div className="muted" style={{ marginBottom: 6 }}>Přiřazené provozovny:</div>
+            {(props.data ?? []).map((p) => (
+              <label key={p.id} className="chip" style={{ cursor: "pointer" }}>
+                <input type="checkbox" checked={nw.propertyIds.includes(p.id)} onChange={(e) => setNw({ ...nw, propertyIds: e.target.checked ? [...nw.propertyIds, p.id] : nw.propertyIds.filter((x) => x !== p.id) })} /> {p.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className="panel" style={{ padding: 18 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Úprava: {editing.name}</h3>
+          {editing.role !== "super_admin" && (
+            <div style={{ marginBottom: 14 }}>
+              <div className="muted" style={{ marginBottom: 6 }}>Přiřazené provozovny:</div>
+              {(props.data ?? []).map((p) => (
+                <label key={p.id} className="chip" style={{ cursor: "pointer" }}>
+                  <input type="checkbox" checked={eProps.includes(p.id)} onChange={(e) => setEProps(e.target.checked ? [...eProps, p.id] : eProps.filter((x) => x !== p.id))} /> {p.name}
+                </label>
+              ))}
+              <button className="btn sm" style={{ marginLeft: 10 }} onClick={saveAssign}>Uložit provozovny</button>
+            </div>
+          )}
+          <div className="toolbar">
+            <input placeholder="Nové heslo" type="password" value={ePwd} onChange={(e) => setEPwd(e.target.value)} />
+            <button className="btn" onClick={savePwd}>Změnit heslo</button>
+            <button className="btn ghost" onClick={() => setEditId(null)}>Zavřít</button>
+          </div>
+        </div>
+      )}
+
+      <div className="panel">
+        <Table cols={["Jméno", "E-mail", "Role", "Provozovny", ""]} rows={data ?? []} empty="Žádní"
+          render={(u: User) => (
+            <tr key={u.id}>
+              <td><b>{u.name}</b></td><td className="muted">{u.email}</td><td><Badge s={u.role} /></td>
+              <td>{u.role === "super_admin" ? "všechny" : (u.properties ?? []).map((x) => x.property.name).join(", ") || "—"}</td>
+              <td className="right">
+                <button className="btn sm ghost" onClick={() => startEdit(u)}>Upravit</button>{" "}
+                <button className="btn sm danger" disabled={u.id === currentUserId} onClick={() => del(u)}>Smazat</button>
+              </td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+// ── Detail rezervace ─────────────────────────────────────────
+function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Property; onBack: () => void }) {
+  const { data, error, reload } = useAsync<ReservationDetail>(() => api.reservation(id), [id]);
+  const folioA = useAsync<Folio>(() => api.resFolio(id), [id]);
+  const [busy, setBusy] = useState(false);
+  const [actErr, setActErr] = useState("");
+  const [extra, setExtra] = useState({ description: "", amount: "" });
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [guestQr, setGuestQr] = useState(false);
+
+  const refresh = () => { reload(); folioA.reload(); };
+  const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+
+  if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
+  if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  const r = data; const folio = folioA.data;
+  const bal = folio ? parseFloat(folio.balance) : 0;
+  const canCheckIn = ["confirmed", "pending"].includes(r.status);
+  const canCheckOut = r.status === "checked_in";
+  const showInvoice = !!r.billingCompany || prop?.type === "ubytovna";
+
+  return (
+    <>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Rezervace {r.code}</span> <Badge s={r.status} /></div>
+      {actErr && <div className="error">{actErr}</div>}
+
+      <div className="grid2">
+        <div className="panel"><h3>Údaje</h3><div style={{ padding: 16 }}>
+          <div className="kvline"><span className="muted">Host</span><b>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</b></div>
+          <div className="kvline"><span className="muted">Kontakt</span><span>{r.primaryGuest?.email ?? "—"} · {r.primaryGuest?.phone ?? "—"}</span></div>
+          <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
+          <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>
+          {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
+        </div></div>
+        <div className="panel"><h3>Vyúčtování</h3><div style={{ padding: 16 }}>
+          <div className="kvline"><span className="muted">Celkem</span><b>{folio ? money(folio.charges) : "…"}</b></div>
+          <div className="kvline"><span className="muted">Zaplaceno</span><span>{folio ? money(folio.paid) : "…"}</span></div>
+          <div className="kvline"><span className="muted">{bal >= 0 ? "Zbývá doplatit" : "Přeplatek"}</span><b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{folio ? money(Math.abs(bal)) : "…"}</b></div>
+        </div></div>
+      </div>
+
+      <div className="panel" style={{ padding: 16 }}>
+        <h3 style={{ border: "none", padding: 0, marginBottom: 12 }}>Akce</h3>
+        <div className="toolbar">
+          {canCheckIn && <button className="btn ok" disabled={busy} onClick={() => run(() => api.checkin(id))}>Check-in</button>}
+          {canCheckOut && <button className="btn" disabled={busy} onClick={() => run(() => api.checkout(id))}>Check-out</button>}
+          {bal > 0 && <button className="btn" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" }))}>Doplatit {money(bal)} kartou</button>}
+          {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` }))}>Zaplaceno fakturou</button>}
+          {showInvoice && <button className="btn ghost" disabled={busy} onClick={async () => { try { setInvoice(await api.invoice(id)); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } }}>📄 Faktura</button>}
+          <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
+        </div>
+        <div className="toolbar" style={{ marginTop: 10 }}>
+          <input placeholder="Položka (minibar, parkování…)" value={extra.description} onChange={(e) => setExtra({ ...extra, description: e.target.value })} />
+          <input placeholder="Částka" style={{ width: 110 }} value={extra.amount} onChange={(e) => setExtra({ ...extra, amount: e.target.value })} />
+          <button className="btn ghost" disabled={busy || !extra.amount} onClick={() => run(async () => { await api.addPayment(id, { type: "extra", amount: parseFloat(extra.amount), method: "card_terminal", description: extra.description || "Položka" }); setExtra({ description: "", amount: "" }); })}>+ Připsat položku</button>
+        </div>
+      </div>
+
+      <div className="panel"><h3>Historie plateb</h3>
+        <Table cols={["Datum", "Typ", "Popis", "Způsob", "Částka"]} rows={r.payments} empty="Žádné platby"
+          render={(p: Payment) => (<tr key={p.id}><td className="muted">{p.createdAt.slice(0, 10)}</td><td>{p.type}</td><td>{p.description ?? "—"}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td><td className="muted">{p.method}</td><td>{money(p.amount)}</td></tr>)} />
+      </div>
+
+      {r.registrationEntries.length > 0 && (
+        <div className="panel"><h3>Evidenční kniha</h3>
+          <Table cols={["Jméno", "Narození", "Doklad", "Pobyt"]} rows={r.registrationEntries} empty=""
+            render={(e: RegistrationEntry) => (<tr key={e.id}><td>{e.fullName}</td><td>{d(e.dateOfBirth)}</td><td className="muted">{e.documentNumber}</td><td>{d(e.stayFrom)} → {d(e.stayTo)}</td></tr>)} />
+        </div>
+      )}
+
+      {invoice && <InvoiceOverlay inv={invoice} onClose={() => setInvoice(null)} />}
+      {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
+    </>
+  );
+}
+
+function InvoiceOverlay({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div><h2 style={{ margin: 0 }}>Faktura {inv.number}</h2><div className="muted">{inv.property.name}<br />{[inv.property.street, inv.property.city].filter(Boolean).join(", ")}</div></div>
+          <div className="inv-to"><div className="muted">Odběratel</div><b>{inv.billing.company ?? `${inv.guest.firstName} ${inv.guest.lastName}`}</b>{inv.billing.ico && <div>IČO: {inv.billing.ico}</div>}{inv.billing.dic && <div>DIČ: {inv.billing.dic}</div>}</div>
+        </div>
+        <div className="muted" style={{ margin: "6px 0 14px" }}>Pobyt {d(inv.reservation.checkInDate)} → {d(inv.reservation.checkOutDate)} · rezervace {inv.reservation.code}</div>
+        <table><thead><tr><th>Položka</th><th className="right">Částka</th></tr></thead>
+          <tbody>{inv.lines.map((l, i) => (<tr key={i}><td>{l.label}</td><td className="right">{money(l.amount)}</td></tr>))}</tbody></table>
+        <div className="inv-total"><span>Celkem k úhradě</span><b>{money(inv.total)}</b></div>
+        <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(inv.paid)}</span></div>
+        <div className="kvline"><span className="muted">Zbývá</span><b>{money(inv.balance)}</b></div>
+        <div className="inv-actions no-print"><button className="btn" onClick={() => window.print()}>🖨 Tisk</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+      </div>
+    </div>
+  );
+}
+
+type MoveOpt = { value: string; label: string };
+
+// ── Vybavení: provozovna ─────────────────────────────────────
+function EquipmentView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<Equipment[]>(() => api.equipment(), [selId]);
+  const rooms = useAsync<Room[]>(() => api.rooms(), [selId]);
+  const cats = useAsync<EquipCategory[]>(() => api.equipCategories(), [selId]);
+  const [f, setF] = useState({ name: "", categoryId: "", code: "", serialNumber: "", acquiredAt: "", quantity: 1, roomId: "" });
+  const [detail, setDetail] = useState<Equipment | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bulkTarget, setBulkTarget] = useState("");
+  const [labels, setLabels] = useState<Equipment[] | null>(null);
+
+  const items = data ?? [];
+  const refresh = () => { setSel(new Set()); reload(); };
+  const add = async () => {
+    if (!f.name) return;
+    await api.createEquipment({ name: f.name, categoryId: f.categoryId || null, code: f.code || undefined, serialNumber: f.serialNumber || undefined, acquiredAt: f.acquiredAt || undefined, quantity: Number(f.quantity) || 1, roomId: f.roomId || null });
+    setF({ name: "", categoryId: "", code: "", serialNumber: "", acquiredAt: "", quantity: 1, roomId: "" }); refresh();
+  };
+  const moveOptions: MoveOpt[] = [{ value: "", label: "Sklad provozovny" }, ...(rooms.data ?? []).map((r) => ({ value: r.id, label: `Pokoj ${r.number}` }))];
+  const ids = [...sel];
+
+  return (
+    <>
+      <div className="h1">Vybavení (DHIM)</div>
+      {error && <div className="error">{error}</div>}
+      <EquipStats items={items} />
+
+      <div className="panel"><h3>Nový kus</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <input placeholder="Název" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}><option value="">Kategorie…</option>{(cats.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          <input placeholder="Kód (prázdné = auto)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} />
+          <input placeholder="Sériové č." value={f.serialNumber} onChange={(e) => setF({ ...f, serialNumber: e.target.value })} />
+          <select value={f.roomId} onChange={(e) => setF({ ...f, roomId: e.target.value })}><option value="">Sklad provozovny</option>{(rooms.data ?? []).map((r) => <option key={r.id} value={r.id}>Pokoj {r.number}</option>)}</select>
+          <label className="row">Pořízeno <input type="date" value={f.acquiredAt} onChange={(e) => setF({ ...f, acquiredAt: e.target.value })} /></label>
+          <label className="row">Počet <input type="number" min={1} max={500} style={{ width: 70 }} value={f.quantity} onChange={(e) => setF({ ...f, quantity: Number(e.target.value) })} /></label>
+          <button className="btn" onClick={add}>+ Přidat</button>
+        </div>
+      </div>
+
+      {sel.size > 0 && (
+        <div className="panel bulkbar"><div className="toolbar" style={{ padding: 14 }}>
+          <b>{sel.size} vybráno:</b>
+          <select value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value)}>{moveOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <button className="btn sm ok" onClick={async () => { await apiBulk("/admin/equipment/bulk-move", { ids, roomId: bulkTarget || null }); refresh(); }}>Přesunout</button>
+          <button className="btn sm" onClick={async () => { const r = prompt("Důvod vyřazení:") ?? ""; await apiBulk("/admin/equipment/bulk-retire", { ids, retiredReason: r }); refresh(); }}>Vyřadit</button>
+          <button className="btn sm ghost" onClick={() => setLabels(items.filter((e) => sel.has(e.id)))}>🏷 QR štítky</button>
+          <button className="btn sm danger" onClick={async () => { if (confirm(`Smazat ${sel.size} kusů?`)) { await apiBulk("/admin/equipment/bulk-delete", { ids }); refresh(); } }}>Smazat</button>
+          <button className="btn sm ghost" onClick={() => setSel(new Set())}>Zrušit výběr</button>
+        </div></div>
+      )}
+
+      <div className="panel">
+        <div className="toolbar" style={{ padding: "10px 16px", justifyContent: "flex-end" }}><button className="btn sm ghost" onClick={() => setLabels(items)}>🏷 QR štítky všech ({items.length})</button></div>
+        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={(e) => e.room ? `pokoj ${e.room.number}` : "sklad provozovny"} />
+      </div>
+
+      {detail && <EquipmentDetail item={detail} categories={cats.data ?? []} moveOptions={moveOptions} currentMove={detail.roomId ?? ""}
+        onUpdate={(b) => api.updateEquipment(detail.id, b)} onMove={(v, note) => api.moveEquipment(detail.id, { roomId: v || null, note })}
+        onDelete={() => api.deleteEquipment(detail.id)} loadMoves={() => api.equipMoves(detail.id)}
+        onClose={() => setDetail(null)} onChanged={reload} />}
+      {labels && <QrLabels items={labels} onClose={() => setLabels(null)} />}
+    </>
+  );
+}
+
+// ── Vybavení: centrála ───────────────────────────────────────
+function CentralEquipmentView() {
+  const props = useAsync<Property[]>(() => api.centralProperties(), []);
+  const cats = useAsync<EquipCategory[]>(() => api.centralEquipCategories(), []);
+  const [filter, setFilter] = useState("");
+  const { data, error, reload } = useAsync<Equipment[]>(() => api.centralEquipment(filter === "central" ? "?scope=central" : filter ? `?propertyId=${filter}` : ""), [filter]);
+  const [f, setF] = useState({ name: "", categoryId: "", target: "", quantity: 1 });
+  const [newCat, setNewCat] = useState("");
+  const [detail, setDetail] = useState<Equipment | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bulkTarget, setBulkTarget] = useState("");
+  const [labels, setLabels] = useState<Equipment[] | null>(null);
+
+  const items = data ?? [];
+  const refresh = () => { setSel(new Set()); reload(); };
+  const add = async () => { if (!f.name) return; await api.centralCreateEquipment({ name: f.name, categoryId: f.categoryId || null, propertyId: f.target || null, quantity: Number(f.quantity) || 1 }); setF({ name: "", categoryId: "", target: "", quantity: 1 }); refresh(); };
+  const addCat = async () => { if (!newCat.trim()) return; await api.createCategory(newCat.trim()); setNewCat(""); cats.reload(); };
+  const delCat = async (c: EquipCategory) => { if (confirm(`Smazat kategorii „${c.name}"?`)) { await api.deleteCategory(c.id); cats.reload(); } };
+  const loc = (e: Equipment) => e.room ? `${e.property?.name} · pokoj ${e.room.number}` : e.property ? `${e.property.name} · sklad` : "Centrální sklad";
+  const moveOptions: MoveOpt[] = [{ value: "", label: "Centrální sklad" }, ...(props.data ?? []).map((p) => ({ value: p.id, label: `${p.name} · sklad` }))];
+  const ids = [...sel];
+
+  return (
+    <>
+      <div className="h1">Vybavení (centrála)</div>
+      {error && <div className="error">{error}</div>}
+
+      <div className="panel"><h3>Číselník kategorií</h3>
+        <div style={{ padding: 16 }}>
+          {(cats.data ?? []).map((c) => <span key={c.id} className="chip">{c.name} <button className="linkx" onClick={() => delCat(c)}>✕</button></span>)}
+          <div className="toolbar" style={{ marginTop: 10 }}><input placeholder="Nová kategorie" value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCat()} /><button className="btn sm" onClick={addCat}>+ Přidat</button></div>
+        </div>
+      </div>
+
+      <EquipStats items={items} />
+
+      <div className="toolbar"><span className="muted">Filtr:</span>
+        <select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">Vše</option><option value="central">Centrální sklad</option>{(props.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      </div>
+      <div className="panel"><h3>Nový kus</h3>
+        <div className="toolbar" style={{ padding: 16 }}>
+          <input placeholder="Název" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}><option value="">Kategorie…</option>{(cats.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          <select value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })}><option value="">Centrální sklad</option>{(props.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name} · sklad</option>)}</select>
+          <label className="row">Počet <input type="number" min={1} max={500} style={{ width: 70 }} value={f.quantity} onChange={(e) => setF({ ...f, quantity: Number(e.target.value) })} /></label>
+          <button className="btn" onClick={add}>+ Přidat</button>
+        </div>
+      </div>
+
+      {sel.size > 0 && (
+        <div className="panel bulkbar"><div className="toolbar" style={{ padding: 14 }}>
+          <b>{sel.size} vybráno:</b>
+          <select value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value)}>{moveOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <button className="btn sm ok" onClick={async () => { await apiBulk("/central/equipment/bulk-move", { ids, propertyId: bulkTarget || null, roomId: null }); refresh(); }}>Přesunout</button>
+          <button className="btn sm" onClick={async () => { const r = prompt("Důvod vyřazení:") ?? ""; await apiBulk("/central/equipment/bulk-retire", { ids, retiredReason: r }); refresh(); }}>Vyřadit</button>
+          <button className="btn sm ghost" onClick={() => setLabels(items.filter((e) => sel.has(e.id)))}>🏷 QR štítky</button>
+          <button className="btn sm danger" onClick={async () => { if (confirm(`Smazat ${sel.size} kusů?`)) { await apiBulk("/central/equipment/bulk-delete", { ids }); refresh(); } }}>Smazat</button>
+          <button className="btn sm ghost" onClick={() => setSel(new Set())}>Zrušit výběr</button>
+        </div></div>
+      )}
+
+      <div className="panel">
+        <div className="toolbar" style={{ padding: "10px 16px", justifyContent: "flex-end" }}><button className="btn sm ghost" onClick={() => setLabels(items)}>🏷 QR štítky všech ({items.length})</button></div>
+        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={loc} />
+      </div>
+
+      {detail && <EquipmentDetail item={detail} categories={cats.data ?? []} moveOptions={moveOptions} currentMove={detail.room ? "" : (detail.propertyId ?? "")}
+        onUpdate={(b) => api.centralUpdateEquipment(detail.id, b)} onMove={(v, note) => api.centralMoveEquipment(detail.id, { propertyId: v || null, roomId: null, note })}
+        onDelete={() => api.centralDeleteEquipment(detail.id)} loadMoves={() => api.centralEquipMoves(detail.id)}
+        onClose={() => setDetail(null)} onChanged={reload} />}
+      {labels && <QrLabels items={labels} onClose={() => setLabels(null)} />}
+    </>
+  );
+}
+
+// Tabulka vybavení s výběrem (checkboxy).
+function EquipTable({ items, sel, setSel, onDetail, location }: { items: Equipment[]; sel: Set<string>; setSel: (s: Set<string>) => void; onDetail: (e: Equipment) => void; location: (e: Equipment) => string }) {
+  if (!items.length) return <div className="empty">Žádné vybavení</div>;
+  const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
+  const allOn = items.every((e) => sel.has(e.id));
+  return (
+    <table>
+      <thead><tr>
+        <th style={{ width: 36 }}><input type="checkbox" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(items.map((e) => e.id)))} /></th>
+        <th>Kód</th><th>Název</th><th>Kategorie</th><th>Umístění</th><th>Stav</th><th className="right"></th>
+      </tr></thead>
+      <tbody>{items.map((e) => (
+        <tr key={e.id}>
+          <td><input type="checkbox" checked={sel.has(e.id)} onChange={() => toggle(e.id)} /></td>
+          <td className="muted">{e.code}</td>
+          <td><b>{e.name}</b>{e.serialNumber && <div className="muted">SN {e.serialNumber}</div>}</td>
+          <td>{e.category?.name ?? "—"}</td>
+          <td>{location(e)}</td>
+          <td><Badge s={e.condition} /></td>
+          <td className="right"><button className="btn sm" onClick={() => onDetail(e)}>Detail</button></td>
+        </tr>
+      ))}</tbody>
+    </table>
+  );
+}
+
+// Statistika počtů.
+function EquipStats({ items }: { items: Equipment[] }) {
+  const c = (p: (e: Equipment) => boolean) => items.filter(p).length;
+  return (
+    <div className="stats">
+      <div className="stat"><div className="n">{items.length}</div><div className="l">Kusů celkem</div></div>
+      <div className="stat"><div className="n">{c((e) => e.condition === "ok")}</div><div className="l">V pořádku</div></div>
+      <div className="stat warn"><div className="n">{c((e) => e.condition === "damaged")}</div><div className="l">Poškozeno</div></div>
+      <div className="stat"><div className="n">{c((e) => e.condition === "retired")}</div><div className="l">Vyřazeno</div></div>
+      <div className="stat"><div className="n">{c((e) => !!e.roomId)}</div><div className="l">V pokojích</div></div>
+    </div>
+  );
+}
+
+// QR štítky k tisku.
+function QrImg({ text }: { text: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => { QRCode.toDataURL(text, { margin: 1, width: 200 }).then(setSrc).catch(() => {}); }, [text]);
+  return src ? <img src={src} width={120} height={120} alt={text} /> : <div style={{ width: 120, height: 120 }} />;
+}
+// QR kartičky pro hosty — míří na portál hosta s rezervačním kódem.
+function GuestQrLabels({ rows, onClose }: { rows: { code: string; title: string; subtitle?: string }[]; onClose: () => void }) {
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ width: "92vw", maxWidth: 920 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-actions no-print" style={{ justifyContent: "space-between", marginTop: 0 }}>
+          <h2 style={{ margin: 0 }}>QR pro hosty ({rows.length})</h2>
+          <div><button className="btn" onClick={() => window.print()}>🖨 Tisk</button>{" "}<button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+        </div>
+        <div className="labels">
+          {rows.map((r) => (
+            <div key={r.code} className="label gqr">
+              <div className="gqr-head">Vaše požadavky online</div>
+              <QrImg text={guestUrl(r.code)} />
+              <div className="label-code">{r.title}</div>
+              {r.subtitle && <div className="label-name">{r.subtitle}</div>}
+              <div className="gqr-foot">Naskenujte telefonem a zadejte úklid, údržbu, praní…</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QrLabels({ items, onClose }: { items: Equipment[]; onClose: () => void }) {
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ width: "92vw", maxWidth: 920 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-actions no-print" style={{ justifyContent: "space-between", marginTop: 0 }}>
+          <h2 style={{ margin: 0 }}>QR štítky ({items.length})</h2>
+          <div><button className="btn" onClick={() => window.print()}>🖨 Tisk</button>{" "}<button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+        </div>
+        <div className="labels">
+          {items.map((e) => (
+            <div key={e.id} className="label"><QrImg text={e.code ?? e.id} /><div className="label-code">{e.code}</div><div className="label-name">{e.name}</div></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper pro hromadná volání (čistý fetch s tokeny z localStorage).
+async function apiBulk(path: string, body: object) {
+  const r = await fetch("/api" + path, { method: "POST", headers: { "Content-Type": "application/json", "x-admin-token": localStorage.getItem("adminToken") ?? "", "x-property-id": localStorage.getItem("propertyId") ?? "" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error("Hromadná akce selhala (" + r.status + ")");
+  return r.json();
+}
+
+// Detail kusu — úpravy, vyřazení, PŘESUN S POTVRZENÍM, historie.
+function EquipmentDetail({ item, categories, moveOptions, currentMove, onUpdate, onMove, onDelete, loadMoves, onClose, onChanged }: {
+  item: Equipment; categories: EquipCategory[]; moveOptions: MoveOpt[]; currentMove: string;
+  onUpdate: (b: unknown) => Promise<unknown>; onMove: (value: string, note?: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>; loadMoves: () => Promise<EquipMove[]>; onClose: () => void; onChanged: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: item.name, code: item.code ?? "", categoryId: item.categoryId ?? "", serialNumber: item.serialNumber ?? "",
+    acquiredAt: item.acquiredAt?.slice(0, 10) ?? "", manufacturedAt: item.manufacturedAt?.slice(0, 10) ?? "", note: item.note ?? "",
+  });
+  const [target, setTarget] = useState(currentMove);
+  const [moveNote, setMoveNote] = useState("");
+  const [retireReason, setRetireReason] = useState("");
+  const [moves, setMoves] = useState<EquipMove[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => { loadMoves().then(setMoves).catch(() => {}); }, []); // eslint-disable-line
+  const run = async (fn: () => Promise<unknown>, ok: string) => { setBusy(true); setMsg(""); try { await fn(); setMsg(ok); onChanged(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+
+  const save = () => run(() => onUpdate({ name: form.name, code: form.code || undefined, categoryId: form.categoryId || null, serialNumber: form.serialNumber, acquiredAt: form.acquiredAt || null, manufacturedAt: form.manufacturedAt || null, note: form.note }), "Uloženo.");
+  const doMove = () => run(async () => { await onMove(target, moveNote || undefined); setMoveNote(""); setMoves(await loadMoves()); }, "Přesunuto.");
+  const retire = () => run(() => onUpdate({ condition: "retired", retiredAt: new Date().toISOString().slice(0, 10), retiredReason: retireReason || "—" }), "Vyřazeno.");
+  const unretire = () => run(() => onUpdate({ condition: "ok", retiredAt: null, retiredReason: null }), "Vráceno do provozu.");
+  const del = async () => { if (confirm(`Smazat „${item.name}"?`)) { await onDelete(); onChanged(); onClose(); } };
+
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>{item.name} <span className="muted" style={{ fontSize: 14 }}>{item.code}</span></h2>
+        {msg && <div className="error" style={{ background: "#eef2ff", color: "var(--accent)" }}>{msg}</div>}
+
+        <div className="toolbar">
+          <label className="row">Název <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="row">Kód <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></label>
+          <label className="row">Kategorie <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}><option value="">—</option>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+        </div>
+        <div className="toolbar">
+          <label className="row">Sériové č. <input value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} /></label>
+          <label className="row">Pořízeno <input type="date" value={form.acquiredAt} onChange={(e) => setForm({ ...form, acquiredAt: e.target.value })} /></label>
+          <label className="row">Vyrobeno <input type="date" value={form.manufacturedAt} onChange={(e) => setForm({ ...form, manufacturedAt: e.target.value })} /></label>
+        </div>
+        <div className="toolbar"><label className="row" style={{ flex: 1 }}>Pozn. <input style={{ width: "100%" }} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label><button className="btn" disabled={busy} onClick={save}>Uložit</button></div>
+
+        <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "14px 0" }} />
+        <b>Přesun</b>
+        <div className="toolbar" style={{ marginTop: 6 }}>
+          <select value={target} onChange={(e) => setTarget(e.target.value)}>{moveOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <input placeholder="Poznámka (nepovinné)" value={moveNote} onChange={(e) => setMoveNote(e.target.value)} />
+          <button className="btn ok" disabled={busy} onClick={doMove}>Přesunout</button>
+        </div>
+
+        <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "14px 0" }} />
+        <b>Vyřazení</b>
+        {item.condition === "retired" ? (
+          <div className="toolbar" style={{ marginTop: 6 }}><span className="muted">Vyřazeno {item.retiredAt?.slice(0, 10)} · {item.retiredReason}</span><button className="btn ghost" disabled={busy} onClick={unretire}>Vrátit do provozu</button></div>
+        ) : (
+          <div className="toolbar" style={{ marginTop: 6 }}><input placeholder="Důvod vyřazení" value={retireReason} onChange={(e) => setRetireReason(e.target.value)} /><button className="btn danger" disabled={busy} onClick={retire}>Vyřadit</button></div>
+        )}
+
+        <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "14px 0" }} />
+        <b>Historie přesunů</b>
+        {moves.length === 0 ? <div className="muted" style={{ marginTop: 6 }}>Žádné přesuny.</div> : (
+          <table style={{ marginTop: 6 }}><tbody>{moves.map((m) => <tr key={m.id}><td className="muted">{m.createdAt.slice(0, 10)}</td><td>{m.fromLabel} → {m.toLabel}{m.note ? ` · ${m.note}` : ""}</td></tr>)}</tbody></table>
+        )}
+
+        <div className="inv-actions"><button className="btn danger" onClick={del}>Smazat kus</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Požadavky: přehled pro manažera ──────────────────────────
+function RequestsView({ selId }: { selId: string }) {
+  const [status, setStatus] = useState("");
+  const { data, error, reload } = useAsync<ServiceRequest[]>(() => api.adminRequests(status ? `?status=${status}` : ""), [selId, status]);
+  const set = async (id: string, st: string) => { await api.staffSetStatus(id, { status: st }); reload(); };
+  return (
+    <>
+      <div className="h1">Servisní požadavky</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar"><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Všechny stavy</option>{["open", "in_progress", "done", "cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+      <div className="panel">
+        <Table cols={["Typ", "Fronta", "Pokoj", "Host", "Popis", "Stav", ""]} rows={data ?? []} empty="Žádné požadavky"
+          render={(r: ServiceRequest) => (
+            <tr key={r.id}>
+              <td>{SERVICE_ICON[r.type]} {SERVICE_LABEL[r.type]}{r.fromGuest && <span className="chip">host</span>}</td>
+              <td className="muted">{r.domain === "maintenance" ? "údržba" : "úklid"}</td>
+              <td>{r.room?.number ?? "—"}</td>
+              <td>{r.reservation?.primaryGuest ? `${r.reservation.primaryGuest.firstName} ${r.reservation.primaryGuest.lastName}` : "—"}</td>
+              <td>{r.description ?? "—"}</td>
+              <td><Badge s={r.status} /></td>
+              <td className="right">{r.status !== "done" && r.status !== "cancelled" && <button className="btn sm ok" onClick={() => set(r.id, "done")}>Hotovo</button>}</td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+// ── Portál personálu (uklízečka / údržbář) ───────────────────
+function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: () => void }) {
+  const [selId, setSelId] = useState(getProperty() || session.properties[0]?.id || "");
+  useEffect(() => { if (selId) setProperty(selId); }, [selId]);
+  const [status, setStatus] = useState("active");
+  const { data, error, reload } = useAsync<ServiceRequest[]>(() => api.staffRequests(), [selId]);
+  const isHK = session.user.role === "housekeeping";
+  const [showAdd, setShowAdd] = useState(false);
+  const [nd, setNd] = useState("");
+
+  const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reload(); };
+  const addMaint = async () => { if (!nd.trim()) return; await api.staffCreateRequest({ type: "maintenance", description: nd }); setNd(""); setShowAdd(false); reload(); };
+  const items = (data ?? []).filter((r) => status === "active" ? (r.status === "open" || r.status === "in_progress") : status === "done" ? r.status === "done" : true);
+
+  return (
+    <div className="staff">
+      <div className="staff-head">
+        <div><b>{session.user.name}</b> <span className="muted">· {isHK ? "Úklid" : "Údržba"}</span></div>
+        <div className="row">
+          {session.properties.length > 1 && <select value={selId} onChange={(e) => setSelId(e.target.value)}>{session.properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+          <button className="btn ghost sm" onClick={onLogout}>Odhlásit</button>
+        </div>
+      </div>
+      <div className="staff-tabs">
+        {([["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]] as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
+        {isHK && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setShowAdd((s) => !s)}>+ Nahlásit údržbu</button>}
+      </div>
+      {showAdd && <div className="staff-add"><input placeholder="Popis závady…" value={nd} onChange={(e) => setNd(e.target.value)} /><button className="btn" onClick={addMaint}>Odeslat údržbě</button></div>}
+      {error && <div className="error">{error}</div>}
+      <div className="staff-list">
+        {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
+          <div key={r.id} className={`req-card s-${r.status}`}>
+            <div className="req-top"><span className="req-type">{SERVICE_ICON[r.type]} {SERVICE_LABEL[r.type]}</span><Badge s={r.status} /></div>
+            <div className="req-loc">{r.room ? `Pokoj ${r.room.number}` : "—"}{r.fromGuest && r.reservation?.primaryGuest ? ` · ${r.reservation.primaryGuest.firstName} ${r.reservation.primaryGuest.lastName}` : ""}</div>
+            {r.description && <div className="req-desc">{r.description}</div>}
+            {r.status === "done" || r.status === "cancelled" ? (
+              <div className="muted">Hotovo {r.resolvedAt?.slice(0, 16).replace("T", " ")}{r.resolvedBy ? ` · ${r.resolvedBy.name}` : ""}{r.note ? ` · ${r.note}` : ""}</div>
+            ) : (
+              <div className="req-actions">
+                {r.status === "open" && <button className="btn sm" onClick={() => act(r.id, "in_progress")}>Začít</button>}
+                <button className="btn sm ok" onClick={() => act(r.id, "done")}>Hotovo</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CENTRÁLA: WhatsApp propojení ─────────────────────────────
+function WhatsAppView() {
+  const [st, setSt] = useState<{ state: string; qr: string | null; error?: string } | null>(null);
+  const [qrImg, setQrImg] = useState("");
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const s = await api.whatsappStatus();
+        if (stop) return;
+        setSt(s);
+        if (s.qr) QRCode.toDataURL(s.qr, { margin: 1, width: 320 }).then(setQrImg).catch(() => {});
+        else setQrImg("");
+      } catch { /* */ }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
+
+  const state = st?.state ?? "loading";
+  return (
+    <>
+      <div className="h1">WhatsApp propojení</div>
+      <div className="panel" style={{ padding: 24, maxWidth: 560 }}>
+        {state === "ready" && <div style={{ textAlign: "center" }}><div style={{ fontSize: 60 }}>✅</div><h2>Připojeno</h2><p className="muted">Kiosek může posílat zprávy personálu. Spojení se obnoví i po restartu serveru.</p></div>}
+        {state === "qr" && (
+          <div style={{ textAlign: "center" }}>
+            <h2>Propojte zařízení</h2>
+            <p className="muted">V mobilu: <b>WhatsApp → Nastavení → Propojená zařízení → Propojit zařízení</b> a naskenujte:</p>
+            {qrImg ? <img src={qrImg} alt="WhatsApp QR" style={{ width: 320, height: 320 }} /> : <div className="muted">Generuji QR…</div>}
+            <p className="muted">Po propojení se sem session uloží a drží i po restartu.</p>
+          </div>
+        )}
+        {(state === "loading" || state === "authenticated") && <div style={{ textAlign: "center" }}><div className="muted" style={{ fontSize: 18 }}>Spouštím WhatsApp… ({state})</div></div>}
+        {state === "disconnected" && <div className="error">Odpojeno. Restartujte server pro nové propojení.</div>}
+        {state === "error" && <div className="error">Chyba WhatsAppu: {st?.error}</div>}
+        {state === "off" && <div className="muted">WhatsApp je vypnutý (WHATSAPP_ENABLED=false).</div>}
+      </div>
+    </>
+  );
+}
+
+// ── Generic table ────────────────────────────────────────────
+function Table<T>({ cols, rows, render, empty }: { cols: string[]; rows: T[]; render: (row: T) => ReactNode; empty: string }) {
+  if (!rows.length) return <div className="empty">{empty}</div>;
+  return (<table><thead><tr>{cols.map((c, i) => <th key={i} className={i === cols.length - 1 ? "right" : ""}>{c}</th>)}</tr></thead><tbody>{rows.map(render)}</tbody></table>);
+}

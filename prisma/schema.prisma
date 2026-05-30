@@ -1,0 +1,491 @@
+// Multi-tenant rezervační jádro hotelového systému.
+//
+// Centrální systém eviduje N provozoven (Property) tří typů — hotel / penzion
+// / ubytovna — které se chovají různě (jednotka inventáře, pobytový poplatek,
+// dlouhodobé pobyty, self check-in). Vše je scopované přes propertyId.
+// Uživatelé mají role a přiřazení k provozovnám.
+//
+// Provider: PostgreSQL (enumy + pole).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enumy
+// ─────────────────────────────────────────────────────────────
+
+enum PropertyType {
+  hotel
+  penzion
+  ubytovna
+}
+
+/// Jednotka inventáře: celý pokoj (hotel/penzion) vs. lůžko ve sdíleném pokoji (ubytovna).
+enum InventoryUnit {
+  room
+  bed
+}
+
+enum UserRole {
+  super_admin  // vidí a spravuje vše napříč provozovnami
+  manager      // jen přiřazené provozovny
+  housekeeping // uklízečka — fronta úklidu/služeb
+  maintenance  // údržbář — fronta údržby
+}
+
+enum ServiceType {
+  cleaning // úklid
+  maintenance // údržba
+  laundry // praní
+  ironing // žehlení
+  minibar // doplnění minibaru
+  other // jiné
+}
+
+/// Komu požadavek patří do fronty.
+enum ServiceDomain {
+  housekeeping
+  maintenance
+}
+
+enum ServiceStatus {
+  open
+  in_progress
+  done
+  cancelled
+}
+
+enum BillingCycle {
+  per_stay // platba za celý pobyt (hotel/penzion)
+  monthly  // měsíční fakturace (ubytovna, dlouhodobé)
+}
+
+enum RoomStatus {
+  clean
+  dirty
+  out_of_service
+}
+
+enum LockType {
+  physical_key
+  smart_code
+}
+
+enum ReservationStatus {
+  pending
+  hold
+  confirmed
+  checked_in
+  checked_out
+  cancelled
+  no_show
+}
+
+enum ReservationSource {
+  kiosk
+  kiosk_walkin
+  booking_com
+  manual
+}
+
+enum PaymentType {
+  deposit
+  balance
+  city_tax
+  extra
+  deposit_hold
+  refund
+}
+
+enum PaymentMethod {
+  card_terminal
+  prepaid
+  cash
+  invoice // fakturou (firmy, ubytovny)
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+}
+
+enum DocumentType {
+  id_card
+  passport
+}
+
+enum EquipmentCondition {
+  ok
+  damaged
+  retired
+}
+
+// ─────────────────────────────────────────────────────────────
+// Centrální systém: provozovny a uživatelé
+// ─────────────────────────────────────────────────────────────
+
+/// Provozovna (hotel / penzion / ubytovna). Kořen multi-tenance.
+model Property {
+  id         String       @id @default(uuid())
+  identifier String       @unique // např. "HOTEL-PRAHA-01" — pod tímto kódem běží recepce/kiosek
+  name       String
+  type       PropertyType
+
+  street  String?
+  city    String?
+  country String? @default("CZ")
+  phone   String?
+  email   String?
+  active  Boolean @default(true)
+  infoText String? // volný text pro AI asistenta (FAQ, služby, pravidla)
+
+  // Typově závislé chování (výchozí dle typu, ale přepsatelné per provozovna).
+  inventoryUnit         InventoryUnit @default(room)
+  cityTaxEnabled        Boolean       @default(true)  // hotel/penzion ano, ubytovna typicky ne
+  cityTaxPerPersonNight Decimal       @default(50) @db.Decimal(10, 2)
+  allowLongTerm         Boolean       @default(false) // ubytovna: pobyty na týdny/měsíce
+  selfCheckin           Boolean       @default(false) // ubytovna: plně samoobslužné
+  breakfastIncluded     Boolean       @default(false)
+
+  rooms        Room[]
+  beds         Bed[]
+  roomTypes    RoomType[]
+  reservations Reservation[]
+  users        UserProperty[]
+  equipment    EquipmentItem[]
+  serviceRequests ServiceRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Uživatel centrálního systému.
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  name         String
+  passwordHash String
+  role         UserRole       @default(manager)
+  active       Boolean        @default(true)
+  properties   UserProperty[] // přiřazené provozovny (manager/personál); super_admin vidí vše
+
+  resolvedRequests ServiceRequest[] @relation("ResolvedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Přiřazení uživatele (manager) k provozovně (M:N).
+model UserProperty {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  @@unique([userId, propertyId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inventář (scopovaný na provozovnu)
+// ─────────────────────────────────────────────────────────────
+
+/// Typ pokoje / lůžka. Cena se interpretuje za jednotku (pokoj nebo lůžko).
+model RoomType {
+  id         String   @id @default(uuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  name             String
+  description      String?
+  capacityAdults   Int
+  capacityChildren Int      @default(0)
+  basePrice        Decimal  @db.Decimal(10, 2) // za jednotku a noc
+  weeklyPrice      Decimal? @db.Decimal(10, 2) // dlouhodobé (ubytovna)
+  monthlyPrice     Decimal? @db.Decimal(10, 2)
+  amenities        String[]
+  photos           String[]
+
+  rooms        Room[]
+  reservations Reservation[]
+  ratePlans    RatePlan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
+}
+
+/// Fyzický pokoj. U ubytovny je to sdílený pokoj obsahující lůžka (Bed).
+model Room {
+  id         String   @id @default(uuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+  roomTypeId String
+
+  number   String
+  floor    Int
+  status   RoomStatus @default(clean)
+  lockType LockType   @default(physical_key)
+  notes    String?
+
+  beds         Bed[]
+  reservations Reservation[]
+  equipment    EquipmentItem[]
+  serviceRequests ServiceRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([propertyId, number])
+  @@index([propertyId])
+}
+
+/// Lůžko ve sdíleném pokoji (jen ubytovna, inventoryUnit = bed).
+model Bed {
+  id         String   @id @default(uuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId     String
+  label      String // např. "204-A"
+  status     RoomStatus @default(clean)
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([propertyId, label])
+  @@index([roomId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Hosté a rezervace
+// ─────────────────────────────────────────────────────────────
+
+/// Host — globální (může bydlet ve více provozovnách).
+model Guest {
+  id        String  @id @default(uuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  language  String?
+
+  marketingConsent Boolean @default(false)
+
+  reservationsAsPrimary Reservation[]       @relation("PrimaryGuest")
+  reservationGuests     ReservationGuest[]
+  registrationEntries   RegistrationEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Reservation {
+  id   String @id @default(uuid())
+  code String @unique
+
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId String
+
+  primaryGuest   Guest  @relation("PrimaryGuest", fields: [primaryGuestId], references: [id])
+  primaryGuestId String
+
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+  roomTypeId String
+
+  // Přiřazená jednotka: pokoj (hotel/penzion) nebo lůžko (ubytovna).
+  room   Room?   @relation(fields: [roomId], references: [id])
+  roomId String?
+  bed    Bed?    @relation(fields: [bedId], references: [id])
+  bedId  String?
+
+  checkInDate  DateTime @db.Date
+  checkOutDate DateTime @db.Date
+  nights       Int
+  adults       Int      @default(1)
+  children     Int      @default(0)
+
+  status       ReservationStatus @default(pending)
+  source       ReservationSource @default(manual)
+  billingCycle BillingCycle      @default(per_stay)
+
+  totalAmount Decimal @default(0) @db.Decimal(10, 2)
+  cityTax     Decimal @default(0) @db.Decimal(10, 2)
+
+  // Fakturace firmě (ubytovny / služební pobyty).
+  billingCompany String?
+  billingIco     String?
+  billingDic     String?
+
+  holdExpiresAt DateTime?
+
+  reservationGuests   ReservationGuest[]
+  payments            Payment[]
+  registrationEntries RegistrationEntry[]
+  serviceRequests     ServiceRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, checkInDate, checkOutDate])
+  @@index([propertyId, status])
+}
+
+model ReservationGuest {
+  id            String      @id @default(uuid())
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+  guest         Guest       @relation(fields: [guestId], references: [id])
+  guestId       String
+  isPrimary     Boolean     @default(false)
+
+  @@unique([reservationId, guestId])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  reservation   Reservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+  type          PaymentType
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(pending)
+  description   String?
+  invoiceNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
+}
+
+model RegistrationEntry {
+  id            String      @id @default(uuid())
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+  guest         Guest       @relation(fields: [guestId], references: [id])
+  guestId       String
+
+  fullName       String
+  dateOfBirth    DateTime     @db.Date
+  nationality    String
+  documentType   DocumentType
+  documentNumber String
+  homeAddress    String
+  visaNumber     String?
+  purposeOfStay  String?
+  stayFrom       DateTime     @db.Date
+  stayTo         DateTime     @db.Date
+
+  retentionUntil DateTime @db.Date
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
+  @@index([retentionUntil])
+}
+
+model RatePlan {
+  id         String   @id @default(uuid())
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  roomTypeId String
+  date       DateTime @db.Date
+  price      Decimal  @db.Decimal(10, 2)
+
+  @@unique([roomTypeId, date])
+}
+
+/// Číselník kategorií vybavení (spravuje se centrálně).
+model EquipmentCategory {
+  id    String          @id @default(uuid())
+  name  String          @unique
+  items EquipmentItem[]
+}
+
+/// Kus vybavení (evidence DHIM). Umístění:
+///   propertyId=null, roomId=null  → centrální sklad
+///   propertyId=X,    roomId=null  → sklad provozovny X
+///   propertyId=X,    roomId=R     → pokoj R v provozovně X
+model EquipmentItem {
+  id           String             @id @default(uuid())
+  name         String
+  code         String?            @unique // jedinečný kód pro čtečku (čárový/QR)
+  serialNumber String?
+  condition    EquipmentCondition @default(ok)
+  note         String?
+
+  category   EquipmentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId String?
+
+  acquiredAt     DateTime? @db.Date // datum pořízení
+  manufacturedAt DateTime? @db.Date // datum výroby
+  retiredAt      DateTime? @db.Date // datum vyřazení
+  retiredReason  String? // důvod vyřazení
+
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  propertyId String?
+  room       Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId     String?
+
+  moves EquipmentMove[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([roomId])
+  @@index([categoryId])
+}
+
+/// Servisní požadavek (tiket) — od hosta i personálu.
+model ServiceRequest {
+  id         String   @id @default(uuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  reservationId String?
+  room          Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId        String?
+  bedId         String?
+
+  type        ServiceType
+  domain      ServiceDomain
+  status      ServiceStatus @default(open)
+  description String?
+  fromGuest   Boolean       @default(false) // zadal host (vs. personál)
+
+  note         String? // poznámka personálu při řešení
+  resolvedBy   User?     @relation("ResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedById String?
+  resolvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, domain, status])
+  @@index([reservationId])
+}
+
+/// Historie přesunů (evidence). Lokace ukládáme jako čitelný text snapshot,
+/// ať záznam přežije i smazání pokoje/provozovny.
+model EquipmentMove {
+  id        String        @id @default(uuid())
+  item      EquipmentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    String
+  fromLabel String
+  toLabel   String
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([itemId])
+}
