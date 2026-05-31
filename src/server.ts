@@ -16,6 +16,7 @@ import * as admin from "./admin";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
+import { buildHousekeepingPlan, briefHousekeeping } from "./dispatch";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -277,6 +278,15 @@ adminRouter.get("/requests", h((req, res) => {
   return service.listRequests({ propertyId: pid(res), ...(q.status ? { status: q.status } : {}), ...(q.domain ? { domain: q.domain } : {}) });
 }));
 
+// Housekeeping dispečer — prioritizovaný plán úklidu (manažer).
+adminRouter.get("/housekeeping/plan", h((_req, res) => buildHousekeepingPlan(pid(res))));
+// Volitelné AI shrnutí směny (Claude/Haiku) — jen na vyžádání kvůli nákladům.
+adminRouter.post("/housekeeping/brief", h(async (req, res) => {
+  const lang = z.object({ lang: z.string().optional() }).parse(req.body ?? {}).lang || "cs";
+  const plan = await buildHousekeepingPlan(pid(res));
+  return { brief: await briefHousekeeping(plan, lang) };
+}));
+
 // Vybavení (DHIM) — jen v rámci vlastní provozovny (pokoje + sklad provozovny).
 const optDate = dateStr.optional();
 const nullDate = dateStr.nullable().optional();
@@ -357,6 +367,14 @@ staffRouter.post("/requests/:id/status", h(async (req, res) => {
   if (!owned) throw Object.assign(new Error("not_found"), { code: "P2025" });
   const b = z.object({ status: z.nativeEnum(ServiceStatus), note: z.string().optional() }).parse(req.body);
   return service.updateStatus(req.params.id, b.status, b.note, res.locals.user.id);
+}));
+
+// Prioritizovaný plán úklidu pro uklízečku (housekeeping dispečer).
+staffRouter.get("/plan", h((_req, res) => buildHousekeepingPlan(pid(res))));
+staffRouter.post("/plan/brief", h(async (req, res) => {
+  const lang = z.object({ lang: z.string().optional() }).parse(req.body ?? {}).lang || "cs";
+  const plan = await buildHousekeepingPlan(pid(res));
+  return { brief: await briefHousekeeping(plan, lang) };
 }));
 app.use("/staff", staffRouter);
 

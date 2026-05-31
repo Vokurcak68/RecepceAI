@@ -109,6 +109,12 @@ export const api = {
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
 
+  // housekeeping dispečer (prioritizovaný plán úklidu)
+  housekeepingPlan: () => req<HousekeepingPlan>(`/admin/housekeeping/plan`),
+  housekeepingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/housekeeping/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
+  staffPlan: () => req<HousekeepingPlan>(`/staff/plan`),
+  staffBrief: (lang = "cs") => req<{ brief: string }>(`/staff/plan/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
+
   // vybavení — provozovna
   equipCategories: () => req<EquipCategory[]>(`/admin/equipment-categories`),
   equipment: () => req<Equipment[]>(`/admin/equipment`),
@@ -151,6 +157,19 @@ export type ServiceRequest = {
 };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };
 export const SERVICE_ICON: Record<string, string> = { cleaning: "🧹", maintenance: "🔧", laundry: "🧺", ironing: "👔", minibar: "🥤", other: "📌" };
+
+export type Priority = "urgent" | "high" | "normal";
+export type PlanItem = {
+  id: string; type: string; status: string; priority: Priority; reason: string;
+  roomNumber: string | null; bedLabel: string | null; roomTypeName: string | null;
+  guestName: string | null; fromGuest: boolean; description: string | null; ageMinutes: number; createdAt: string;
+};
+export type HousekeepingPlan = {
+  generatedAt: string;
+  counts: { total: number; urgent: number; high: number; normal: number };
+  items: PlanItem[];
+};
+export const PRIORITY_LABEL: Record<Priority, string> = { urgent: "Urgentní", high: "Přednostní", normal: "Běžné" };
 
 export function money(m: Money | number | null): string {
   if (m == null) return "—";

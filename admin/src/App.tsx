@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
+  type HousekeepingPlan, type PlanItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -50,6 +51,7 @@ export function App() {
     { id: "reservations", label: "Rezervace", icon: "📋" },
     { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
     { id: "equipment", label: "Vybavení", icon: "🧰" },
+    { id: "housekeeping", label: "Dispečink úklidu", icon: "🧹" },
     { id: "requests", label: "Požadavky", icon: "🛎️" },
     { id: "types", label: "Typy & ceny", icon: "🏷️" },
     { id: "book", label: "Kniha hostů", icon: "📖" },
@@ -87,6 +89,7 @@ export function App() {
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
+        {prop && tab === "housekeeping" && <HousekeepingView selId={selId} />}
         {prop && tab === "requests" && <RequestsView selId={selId} />}
         {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
         {prop && tab === "book" && <BookView selId={selId} />}
@@ -1020,18 +1023,87 @@ function RequestsView({ selId }: { selId: string }) {
   );
 }
 
+// ── Priorita: štítek + formát stáří ──────────────────────────
+const PrioBadge = ({ p }: { p: PlanItem["priority"] }) => <span className={`prio prio-${p}`}>{PRIORITY_LABEL[p]}</span>;
+const fmtAge = (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`);
+const planLoc = (i: PlanItem) => i.roomNumber ? `Pokoj ${i.roomNumber}` : i.bedLabel ? `Lůžko ${i.bedLabel}` : "—";
+
+// ── Dispečink úklidu: prioritizovaný plán (manažer) ──────────
+function HousekeepingView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<HousekeepingPlan>(() => api.housekeepingPlan(), [selId]);
+  const [brief, setBrief] = useState<string>("");
+  const [briefing, setBriefing] = useState(false);
+  const [briefErr, setBriefErr] = useState("");
+
+  const done = async (id: string) => { await api.staffSetStatus(id, { status: "done" }); reload(); };
+  const start = async (id: string) => { await api.staffSetStatus(id, { status: "in_progress" }); reload(); };
+  const aiBrief = async () => {
+    setBriefing(true); setBriefErr(""); setBrief("");
+    try { const r = await api.housekeepingBrief("cs"); setBrief(r.brief); }
+    catch (e) { setBriefErr(e instanceof Error ? e.message : "Chyba AI shrnutí."); }
+    finally { setBriefing(false); }
+  };
+
+  const c = data?.counts;
+  return (
+    <>
+      <div className="h1">Dispečink úklidu</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
+        {c && <>
+          <span className="prio prio-urgent">{c.urgent} urgentní</span>
+          <span className="prio prio-high">{c.high} přednostní</span>
+          <span className="prio prio-normal">{c.normal} běžné</span>
+          <span className="muted" style={{ alignSelf: "center" }}>celkem {c.total}</span>
+        </>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button>
+          <button className="btn sm" onClick={aiBrief} disabled={briefing || !data?.items.length}>
+            {briefing ? "Generuji…" : "✨ AI shrnutí směny"}
+          </button>
+        </div>
+      </div>
+
+      {briefErr && <div className="error">{briefErr}</div>}
+      {brief && <div className="panel" style={{ padding: 16, marginBottom: 12, background: "#f6f8ff", whiteSpace: "pre-wrap" }}>{brief}</div>}
+
+      <div className="panel">
+        <Table cols={["Priorita", "Úkol", "Místo", "Host", "Důvod", "Stáří", ""]} rows={data?.items ?? []} empty="Fronta úklidu je prázdná 🎉"
+          render={(i: PlanItem) => (
+            <tr key={i.id} className={`row-${i.priority}`}>
+              <td><PrioBadge p={i.priority} /></td>
+              <td>{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}{i.fromGuest && <span className="chip">host</span>}{i.status === "in_progress" && <span className="chip">probíhá</span>}</td>
+              <td>{planLoc(i)}{i.roomTypeName ? <span className="muted"> · {i.roomTypeName}</span> : null}</td>
+              <td>{i.guestName ?? "—"}</td>
+              <td className="muted">{i.reason}</td>
+              <td className="muted">{fmtAge(i.ageMinutes)}</td>
+              <td className="right" style={{ whiteSpace: "nowrap" }}>
+                {i.status === "open" && <button className="btn sm" onClick={() => start(i.id)}>Začít</button>}{" "}
+                <button className="btn sm ok" onClick={() => done(i.id)}>Hotovo</button>
+              </td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
 // ── Portál personálu (uklízečka / údržbář) ───────────────────
 function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: () => void }) {
   const [selId, setSelId] = useState(getProperty() || session.properties[0]?.id || "");
   useEffect(() => { if (selId) setProperty(selId); }, [selId]);
-  const [status, setStatus] = useState("active");
-  const { data, error, reload } = useAsync<ServiceRequest[]>(() => api.staffRequests(), [selId]);
   const isHK = session.user.role === "housekeeping";
+  const [status, setStatus] = useState(isHK ? "plan" : "active");
+  const { data, error, reload } = useAsync<ServiceRequest[]>(() => api.staffRequests(), [selId]);
+  const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve({ generatedAt: "", counts: { total: 0, urgent: 0, high: 0, normal: 0 }, items: [] }), [selId]);
   const [showAdd, setShowAdd] = useState(false);
   const [nd, setNd] = useState("");
+  const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false);
 
-  const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reload(); };
-  const addMaint = async () => { if (!nd.trim()) return; await api.staffCreateRequest({ type: "maintenance", description: nd }); setNd(""); setShowAdd(false); reload(); };
+  const reloadAll = () => { reload(); plan.reload(); };
+  const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
+  const addMaint = async () => { if (!nd.trim()) return; await api.staffCreateRequest({ type: "maintenance", description: nd }); setNd(""); setShowAdd(false); reloadAll(); };
+  const aiBrief = async () => { setBriefing(true); setBrief(""); try { const r = await api.staffBrief("cs"); setBrief(r.brief); } catch (e) { setBrief(e instanceof Error ? e.message : "Chyba AI."); } finally { setBriefing(false); } };
   const items = (data ?? []).filter((r) => status === "active" ? (r.status === "open" || r.status === "in_progress") : status === "done" ? r.status === "done" : true);
 
   return (
@@ -1044,11 +1116,16 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
         </div>
       </div>
       <div className="staff-tabs">
-        {([["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]] as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
+        {(([...(isHK ? [["plan", "🧹 Plán"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
         {isHK && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setShowAdd((s) => !s)}>+ Nahlásit údržbu</button>}
       </div>
       {showAdd && <div className="staff-add"><input placeholder="Popis závady…" value={nd} onChange={(e) => setNd(e.target.value)} /><button className="btn" onClick={addMaint}>Odeslat údržbě</button></div>}
       {error && <div className="error">{error}</div>}
+
+      {status === "plan" ? (
+        <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
+          brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+      ) : (
       <div className="staff-list">
         {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
           <div key={r.id} className={`req-card s-${r.status}`}>
@@ -1066,7 +1143,47 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
           </div>
         ))}
       </div>
+      )}
     </div>
+  );
+}
+
+// Karty prioritizovaného plánu úklidu (sdílené v portálu uklízečky).
+function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }: {
+  plan: HousekeepingPlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
+  brief: string; briefing: boolean; onBrief: () => void; onReload: () => void;
+}) {
+  const c = plan?.counts;
+  return (
+    <>
+      <div className="staff-add" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {c && <>
+            <span className="prio prio-urgent">{c.urgent} urgentní</span>
+            <span className="prio prio-high">{c.high} přednostní</span>
+            <span className="prio prio-normal">{c.normal} běžné</span>
+          </>}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn ghost sm" onClick={onReload}>↻</button>
+          <button className="btn sm" onClick={onBrief} disabled={briefing || !plan?.items.length}>{briefing ? "Generuji…" : "✨ AI shrnutí"}</button>
+        </div>
+      </div>
+      {brief && <div className="staff-add" style={{ background: "#f6f8ff", whiteSpace: "pre-wrap", display: "block" }}>{brief}</div>}
+      <div className="staff-list">
+        {!plan?.items.length ? <div className="empty">Fronta úklidu je prázdná 🎉</div> : plan.items.map((i) => (
+          <div key={i.id} className={`req-card s-${i.status} row-${i.priority}`}>
+            <div className="req-top"><span className="req-type">{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}</span><PrioBadge p={i.priority} /></div>
+            <div className="req-loc">{planLoc(i)}{i.roomTypeName ? ` · ${i.roomTypeName}` : ""}{i.guestName ? ` · ${i.guestName}` : ""}</div>
+            <div className="req-desc">{i.reason}{i.description ? ` — ${i.description}` : ""}</div>
+            <div className="req-actions">
+              {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
+              <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
