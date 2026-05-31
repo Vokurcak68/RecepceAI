@@ -18,6 +18,7 @@ import * as equip from "./equipment";
 import * as service from "./service";
 import { buildHousekeepingPlan, briefHousekeeping } from "./dispatch";
 import { runNightAudit, briefManager } from "./orchestrator";
+import { suggestRates, applyRates } from "./pricing-agent";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -270,6 +271,16 @@ adminRouter.patch("/room-types/:id", h((req) => { const b = z.object({ name: z.s
 
 adminRouter.get("/rate-plans", h((req) => { const q = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr }).parse(req.query); return admin.listRatePlans(q.roomTypeId, new Date(q.from), new Date(q.to)); }));
 adminRouter.post("/rate-plans", h((req) => { const b = z.object({ roomTypeId: z.string().uuid(), date: dateStr, price: z.number().nonnegative() }).parse(req.body); return admin.upsertRatePlan(b.roomTypeId, new Date(b.date), b.price); }));
+
+// Revenue / pricing agent — návrh dynamických cen + jejich schválení (zápis do RatePlan).
+adminRouter.get("/pricing/suggestions", h((req, res) => {
+  const q = z.object({ roomTypeId: z.string().uuid(), horizon: z.coerce.number().int().positive().max(60).optional() }).parse(req.query);
+  return suggestRates(pid(res), q.roomTypeId, q.horizon ?? 14);
+}));
+adminRouter.post("/pricing/apply", h((req, res) => {
+  const b = z.object({ roomTypeId: z.string().uuid(), items: z.array(z.object({ date: dateStr, price: z.number().nonnegative() })).min(1) }).parse(req.body);
+  return applyRates(pid(res), b.roomTypeId, b.items);
+}));
 
 adminRouter.get("/registrations", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return admin.listRegistrations(pid(res), new Date(q.from), new Date(q.to)); }));
 

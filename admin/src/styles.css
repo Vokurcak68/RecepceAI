@@ -77,6 +77,12 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .briefing-flags li { font-size: 14px; }
 .briefing-flags.ok li { color: var(--ok); }
 
+/* Návrh cen (revenue agent) */
+.price-up { color: var(--ok); }
+.price-down { color: var(--danger); }
+tr.row-price-up { box-shadow: inset 3px 0 0 var(--ok); }
+tr.row-price-down { box-shadow: inset 3px 0 0 var(--danger); }
+
 /* Priorita úklidu (dispečer) */
 .prio { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .prio-urgent { background: #fdeceb; color: var(--danger); }

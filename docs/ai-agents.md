@@ -4,8 +4,8 @@ Návrhový dokument pro postupné nasazení AI asistentů, kteří řídí provo
 napříč provozovnami ReceptionAI. Slouží jako vodítko pro další vývoj — co je hotové,
 co následuje a podle jakých principů to stavět.
 
-> Stav: **Fáze 1 (housekeeping dispečer) a fáze 2 (orchestrátor + ranní briefing)
-> hotové.** Fáze 3–4 navržené, neimplementované.
+> Stav: **Fáze 1 (housekeeping dispečer), fáze 2 (orchestrátor + ranní briefing)
+> a fáze 3 (revenue/pricing agent) hotové.** Fáze 4 navržená, neimplementovaná.
 
 ---
 
@@ -60,8 +60,8 @@ Datový model: `prisma/schema.prisma`. Klíčové entity scopované na `Property
 | **Recepční** *(hotové)* | `Reservation`, `Guest`, availability | host na kiosku | dostupnost, rezervace, vyhledání; mluví 11 jazyky |
 | **Housekeeping dispečer** *(hotové)* | `Room.status`, `ServiceRequest(housekeeping)` | checkout → pokoj `dirty` | priorizuje frontu úklidu dle dnešních příjezdů |
 | **Orchestrátor / briefing** *(hotové)* | napříč (audit) | cron 1×/den + na vyžádání | noční audit + ranní briefing manažerovi |
+| **Revenue / pricing** *(hotové)* | `RatePlan`, occupancy z `Reservation` | na vyžádání (i cron) | navrhuje ceny dle obsazenosti, lead-time, víkendu |
 | **Údržba triage** | `ServiceRequest(maintenance)`, `EquipmentItem` | host/personál nahlásí závadu | klasifikuje urgenci, spojí s vybavením, eskaluje |
-| **Revenue / pricing** | `RatePlan`, occupancy z `Reservation` | denně (cron) | dynamické ceny dle obsazenosti a lead-time |
 | **Compliance / ubyhost** | `RegistrationEntry` | check-in, denně | hlídá chybějící doklady cizinců, skartace |
 | **Billing / pohledávky** | `Payment`, `holdExpiresAt`, `BillingCycle` | denně | upomínky, expirující holdy, měsíční fakturace |
 | **Concierge / komunikace** | `Property.infoText`, `Guest` | před/po pobytu | předpříjezdové info, upsell, recenze, FAQ |
@@ -179,22 +179,50 @@ provozovnami), proto je nevoláme z per-property auditu.
 
 ---
 
-## 5. Fáze 3 — Revenue / pricing agent (navrženo)
+## 5. Fáze 3 — Revenue / pricing agent ✅ HOTOVO
 
-**Cíl:** dynamické ceny do `RatePlan` bez ručního klikání.
+**Cíl:** návrh dynamických cen do `RatePlan` bez ručního klikání — vždy ke schválení.
 
-- **`src/pricing-agent.ts`**: `suggestRates(propertyId, roomTypeId, horizonDays)`:
-  - vstup: `basePrice` typu, obsazenost na N dní dopředu (volné jednotky vs.
-    rezervace), lead-time, den v týdnu, sezóna.
-  - rule-based model: obsazenost > 80 % → +X %, < 30 % a blízko termínu → −Y %,
-    víkend → příplatek. (Žádné LLM nutné — je to čistá matematika.)
-  - výstup: návrh `RatePlan` na každý den horizontu **k odsouhlasení**, ne automaticky.
-- **Endpointy:** `GET /admin/pricing/suggestions`, `POST /admin/pricing/apply`
-  (zapíše přes existující `upsertRatePlan`). Aplikace = explicitní akce manažera.
-- **UI:** v záložce „Typy & ceny" tlačítko „Návrh cen" → tabulka starých vs. nových
-  cen s hromadným potvrzením.
+### Co je implementováno
 
-**Pozor:** ceny jsou citlivé — agent vždy jen navrhuje, nikdy nepřepisuje sám.
+- **`src/pricing-agent.ts`** (rule-based, bez LLM)
+  - `suggestRates(propertyId, roomTypeId, horizonDays=14)`:
+    - pro každý den horizontu spočítá obsazenost typu (blokující rezervace typu
+      překrývající noc / celkový počet jednotek typu) — překryvy se počítají
+      v paměti z jednoho dotazu,
+    - faktor z `basePrice` dle pravidel (viz níže), zaokrouhlený na desetikoruny,
+    - vrací per-den `currentPrice` (RatePlan nebo basePrice) vs `suggestedPrice`,
+      `occupancyPct`, `reason`, `direction` (up/down/same), `changed`.
+  - `applyRates(propertyId, roomTypeId, items[])` — zapíše schválené ceny přes
+    existující `upsertRatePlan`. **Explicitní akce manažera, nikdy ne automaticky.**
+- **Endpointy** (`src/server.ts`)
+  - `GET  /admin/pricing/suggestions?roomTypeId=…&horizon=…`
+  - `POST /admin/pricing/apply` `{ roomTypeId, items: [{date, price}] }`
+- **Admin UI** (`admin/src/App.tsx`) — panel **„✨ Návrh cen (revenue agent)"**
+  v záložce „Typy & ceny": výběr typu + horizont → tabulka současná vs. navržená
+  cena (barevně ▲/▼), obsazenost, důvod; předvybrané jen změny; tlačítko
+  „Schválit vybrané (N)" → zápis do ceníku.
+
+### Cenová pravidla (`priceRule`, faktor z `basePrice`)
+
+| Podmínka | Úprava |
+|----------|--------|
+| obsazenost ≥ 80 % | +20 % |
+| obsazenost 60–79 % | +10 % |
+| obsazenost ≤ 15 % | −10 % |
+| obsazenost ≤ 30 % **a** lead-time ≤ 7 dní | −15 % (last-minute doprodej) |
+| noc z pátku/soboty | +10 % (víkend) |
+
+Faktor je clampovaný na **0,7–1,6×** basePrice, výsledek zaokrouhlen na 10 Kč.
+Pravidla se sčítají (např. nízká obsazenost + víkend). Důvod se skládá ze slovních
+částí pro transparentnost.
+
+### TODO pro fázi 3
+
+- **Cron auto-návrh** (volitelně): 1×/den přegenerovat návrhy a poslat manažerovi
+  (zápis ale vždy nechat na potvrzení).
+- **Sezónnost / svátky** jako další faktor (teď jen obsazenost + víkend + lead-time).
+- **Dlouhodobé sazby** (`weeklyPrice`/`monthlyPrice`) agent neřeší — jen nočné `RatePlan`.
 
 ---
 
@@ -225,7 +253,7 @@ provozovnami), proto je nevoláme z per-property auditu.
 | Schéma | `prisma/schema.prisma` | enumy, modely |
 | Admin UI | `admin/src/App.tsx`, `api.ts`, `styles.css` | záložky, klient |
 | Orchestrátor / briefing | `src/orchestrator.ts` | **fáze 2** |
-| Pricing agent | `src/pricing-agent.ts` | **fáze 3 (TODO)** |
+| Pricing agent | `src/pricing-agent.ts` | **fáze 3** |
 
 ---
 
@@ -233,7 +261,7 @@ provozovnami), proto je nevoláme z per-property auditu.
 
 1. ✅ Housekeeping dispečer.
 2. ✅ Orchestrátor + ranní briefing.
-3. Revenue pricing (měřitelný dopad na tržby; bez LLM).
+3. ✅ Revenue pricing.
 4. Compliance → billing → concierge → inventář.
 
 Viz též `README.md` (přehled projektu) a `kiosk/DEPLOYMENT.md` (nasazení).

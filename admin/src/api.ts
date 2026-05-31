@@ -113,6 +113,10 @@ export const api = {
   briefing: () => req<NightAudit>(`/admin/briefing`),
   briefingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/briefing/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
 
+  // revenue / pricing agent
+  pricingSuggestions: (roomTypeId: string, horizon = 14) => req<PricingSuggestion>(`/admin/pricing/suggestions?roomTypeId=${roomTypeId}&horizon=${horizon}`),
+  pricingApply: (roomTypeId: string, items: { date: string; price: number }[]) => req<{ applied: number }>(`/admin/pricing/apply`, { method: "POST", body: JSON.stringify({ roomTypeId, items }) }),
+
   // housekeeping dispečer (prioritizovaný plán úklidu)
   housekeepingPlan: () => req<HousekeepingPlan>(`/admin/housekeeping/plan`),
   housekeepingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/housekeeping/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
@@ -187,6 +191,17 @@ export type NightAudit = {
   holds: { active: number; expiring: number };
   registrationsToPurge: number;
   flags: string[];
+};
+
+export type DaySuggestion = {
+  date: string; weekday: string; weekend: boolean; leadDays: number;
+  totalUnits: number; bookedUnits: number; freeUnits: number; occupancyPct: number;
+  basePrice: string; currentPrice: string; suggestedPrice: string;
+  factor: number; reason: string; changed: boolean; direction: "up" | "down" | "same";
+};
+export type PricingSuggestion = {
+  roomTypeId: string; roomTypeName: string; unit: "room" | "bed"; basePrice: string;
+  horizonDays: number; days: DaySuggestion[]; counts: { changed: number; up: number; down: number };
 };
 
 export function money(m: Money | number | null): string {

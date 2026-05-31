@@ -4,7 +4,7 @@ import {
   api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
-  type HousekeepingPlan, type PlanItem, type NightAudit,
+  type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -404,6 +404,8 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         </div>
       </div>
 
+      <PricingPanel types={data ?? []} onApplied={(n) => { setMsg(`Zapsáno ${n} cen do ceníku.`); }} />
+
       <div className="panel">
         <h3>Cena na konkrétní den (sezónní)</h3>
         <div className="toolbar" style={{ padding: 16 }}>
@@ -420,6 +422,67 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
 function PriceCell({ v, onSave }: { v: string | null; onSave: (v: string) => void }) {
   const [val, setVal] = useState(v == null ? "" : parseFloat(v).toString());
   return <div className="row"><input style={{ width: 100 }} value={val} onChange={(e) => setVal(e.target.value)} /><button className="btn sm ghost" onClick={() => onSave(val)}>✓</button></div>;
+}
+
+// Revenue / pricing agent — návrh dynamických cen ke schválení.
+function PricingPanel({ types, onApplied }: { types: RoomType[]; onApplied: (n: number) => void }) {
+  const [roomTypeId, setRoomTypeId] = useState("");
+  const [horizon, setHorizon] = useState(14);
+  const [sug, setSug] = useState<PricingSuggestion | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
+
+  const load = async () => {
+    if (!roomTypeId) return;
+    setBusy(true); setErr(""); setSug(null);
+    try {
+      const s = await api.pricingSuggestions(roomTypeId, horizon);
+      setSug(s);
+      setSel(new Set(s.days.filter((d) => d.changed).map((d) => d.date))); // předvyber jen změny
+    } catch (e) { setErr(e instanceof Error ? e.message : "Chyba návrhu cen."); }
+    finally { setBusy(false); }
+  };
+  const toggle = (date: string) => { const n = new Set(sel); n.has(date) ? n.delete(date) : n.add(date); setSel(n); };
+  const apply = async () => {
+    if (!sug || !sel.size) return;
+    const items = sug.days.filter((d) => sel.has(d.date)).map((d) => ({ date: d.date, price: parseFloat(d.suggestedPrice) }));
+    setBusy(true); setErr("");
+    try { const r = await api.pricingApply(sug.roomTypeId, items); onApplied(r.applied); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Chyba zápisu cen."); }
+    finally { setBusy(false); }
+  };
+
+  const arrow = (d: DaySuggestion) => d.direction === "up" ? "▲" : d.direction === "down" ? "▼" : "=";
+  return (
+    <div className="panel">
+      <h3>✨ Návrh cen (revenue agent)</h3>
+      <div className="toolbar" style={{ padding: 16 }}>
+        <select value={roomTypeId} onChange={(e) => setRoomTypeId(e.target.value)}><option value="">Typ…</option>{types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+        <label className="row">Horizont <select value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>{[7, 14, 30].map((n) => <option key={n} value={n}>{n} dní</option>)}</select></label>
+        <button className="btn" onClick={load} disabled={!roomTypeId || busy}>{busy ? "Počítám…" : "Navrhnout ceny"}</button>
+      </div>
+      {err && <div className="error">{err}</div>}
+      {sug && (
+        <>
+          <div className="toolbar" style={{ padding: "0 16px 12px" }}>
+            <span className="muted">Základní cena {money(sug.basePrice)} · návrhů změn {sug.counts.changed} ({sug.counts.up}× nahoru, {sug.counts.down}× dolů) · vybráno {sel.size}</span>
+            <button className="btn ok" style={{ marginLeft: "auto" }} onClick={apply} disabled={!sel.size || busy}>Schválit vybrané ({sel.size})</button>
+          </div>
+          <Table cols={["", "Datum", "Obsazenost", "Současná", "Návrh", "Důvod"]} rows={sug.days} empty="—"
+            render={(dd: DaySuggestion) => (
+              <tr key={dd.date} className={dd.changed ? `row-price-${dd.direction}` : ""}>
+                <td><input type="checkbox" checked={sel.has(dd.date)} disabled={!dd.changed} onChange={() => toggle(dd.date)} /></td>
+                <td>{d(dd.date)} <span className="muted">{dd.weekday}{dd.weekend ? " ·víkend" : ""}</span></td>
+                <td className="muted">{dd.occupancyPct}% ({dd.bookedUnits}/{dd.totalUnits})</td>
+                <td>{money(dd.currentPrice)}</td>
+                <td className={`price-${dd.direction}`}>{dd.changed ? <b>{arrow(dd)} {money(dd.suggestedPrice)}</b> : <span className="muted">{money(dd.suggestedPrice)}</span>}</td>
+                <td className="muted">{dd.reason}</td>
+              </tr>
+            )} />
+        </>
+      )}
+    </div>
+  );
 }
 
 // ── Registration book ────────────────────────────────────────
