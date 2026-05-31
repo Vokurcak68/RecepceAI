@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
   api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
-  type MaintenancePlan, type MaintItem,
+  type MaintenancePlan, type MaintItem, type PendingCall,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -64,7 +64,7 @@ export function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="logo">🛎️ Recepce</div>
+        <div className="logo"><span>🛎️ Recepce</span>{(session.user.role === "manager" || isSuper) && <CallBell />}</div>
 
         <select className="prop-switch" value={selId} onChange={(e) => { setProperty(e.target.value); setSelId(e.target.value); }}>
           {session.properties.map((p) => <option key={p.id} value={p.id}>{p.name} · {TYPE_LABEL[p.type]}</option>)}
@@ -141,6 +141,94 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const reload = () => { setError(""); fn().then(setData).catch((e) => setError(e.message)); };
   useEffect(reload, deps); // eslint-disable-line
   return { data, error, reload };
+}
+
+// ── Zvoneček: přivolání člověka z kiosku (manažeři napříč hotely) ──
+let _audioCtx: AudioContext | null = null;
+function ringBell() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    _audioCtx = _audioCtx || new Ctx();
+    const ctx = _audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const ping = (freq: number, at: number) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type = "sine"; o.frequency.value = freq;
+      const t = ctx.currentTime + at;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      o.start(t); o.stop(t + 0.5);
+    };
+    ping(988, 0); ping(1319, 0.18); // dvojté „cink-cink"
+  } catch { /* zvuk je bonus, bez něj to nevadí */ }
+}
+
+const agoCs = (ms: number) => {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `před ${s} s`;
+  const m = Math.floor(s / 60);
+  return `před ${m} min`;
+};
+
+function CallBell() {
+  const [calls, setCalls] = useState<PendingCall[]>([]);
+  const [open, setOpen] = useState(false);
+  const seen = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const list = await api.callsPending();
+        if (stop) return;
+        const fresh = list.filter((c) => !seen.current.has(c.id));
+        seen.current = new Set(list.map((c) => c.id));
+        setCalls(list);
+        if (fresh.length) { ringBell(); setOpen(true); }
+      } catch { /* nepřihlášený / bez práv → ignoruj */ }
+    };
+    tick();
+    const iv = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(iv); };
+  }, []);
+
+  const claim = async (c: PendingCall) => {
+    window.open(c.joinUrl, "_blank", "noopener");
+    try { await api.claimCall(c.id); } catch { /* */ }
+    seen.current.delete(c.id);
+    setCalls((cs) => cs.filter((x) => x.id !== c.id));
+  };
+  const dismiss = async (c: PendingCall) => {
+    try { await api.claimCall(c.id); } catch { /* */ }
+    setCalls((cs) => cs.filter((x) => x.id !== c.id));
+  };
+
+  const n = calls.length;
+  return (
+    <div className="callbell-wrap">
+      <button className={`callbell${n ? " ring" : ""}`} onClick={() => setOpen((o) => !o)} title="Přivolání člověka z kiosku">
+        🔔{n > 0 && <span className="callbell-badge">{n}</span>}
+      </button>
+      {open && (
+        <div className="call-panel">
+          <div className="call-panel-head">Přivolání z kiosku {n > 0 && <span className="muted">· {n}</span>}<button className="linkx" onClick={() => setOpen(false)}>zavřít</button></div>
+          {n === 0 ? <div className="call-empty">Žádný čekající hovor.</div> : calls.map((c) => (
+            <div key={c.id} className="call-item">
+              <div className="call-info">
+                <div className="call-place">🛎️ {c.propertyName}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{agoCs(c.createdAt)}</div>
+              </div>
+              <div className="call-actions">
+                <button className="btn sm ok" onClick={() => claim(c)}>Připojit se</button>
+                <button className="btn sm ghost" onClick={() => dismiss(c)}>Odbavil jiný</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── AI agenti: velín — co každý agent dělá + jeho živý stav ───

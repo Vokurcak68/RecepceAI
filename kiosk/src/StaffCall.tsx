@@ -42,7 +42,9 @@ export function StaffCall({ room, propertyName, onClose }: {
     }
   };
 
-  useEffect(() => { askPermission(); ring(); }, []); // eslint-disable-line
+  // Pojistka proti dvojímu spuštění (React StrictMode v devu pustí effect 2×).
+  const started = useRef(false);
+  useEffect(() => { if (started.current) return; started.current = true; askPermission(); ring(); }, []); // eslint-disable-line
 
   // Jitsi spustíme až po povolení.
   useEffect(() => {

@@ -58,6 +58,11 @@ export type Dashboard = {
 };
 export type LoginResult = { token: string; user: User; properties: Property[] };
 
+export type PendingCall = {
+  id: string; propertyId: string | null; propertyName: string; joinUrl: string;
+  createdAt: number; claimedBy: string | null; claimedByName: string | null;
+};
+
 export const api = {
   // auth
   login: (email: string, password: string) => req<LoginResult>(`/auth/login`, { method: "POST", body: JSON.stringify({ email, password }) }),
@@ -108,6 +113,10 @@ export const api = {
   staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests${status ? `?status=${status}` : ""}`),
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
+
+  // přivolání člověka z kiosku — zvoneček pro manažery
+  callsPending: () => req<PendingCall[]>(`/calls/pending`),
+  claimCall: (id: string) => req<{ ok: boolean; alreadyClaimedBy?: string | null }>(`/calls/${id}/claim`, { method: "POST" }),
 
   // kontrolní agent (fáze 4) — compliance / billing / inventář
   checks: () => req<ChecksResult>(`/admin/checks`),

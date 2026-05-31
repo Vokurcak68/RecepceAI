@@ -21,6 +21,7 @@ import { runNightAudit, briefManager } from "./orchestrator";
 import { suggestRates, applyRates } from "./pricing-agent";
 import { runChecks } from "./checks";
 import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
+import * as callsStore from "./calls";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -113,12 +114,29 @@ app.post("/reservations/:id/payments", h(async (req) => { const b = paymentBody.
 app.post("/maintenance/release-holds", h(async () => ({ released: await releaseExpiredHolds() })));
 app.post("/maintenance/purge-registrations", h(async () => ({ purged: await purgeExpiredRegistrations() })));
 
-// ── Přivolání člověka: pošli personálu WhatsApp s odkazem na hovor (kiosek) ──
+// ── Přivolání člověka: WhatsApp personálu + zvoneček manažerům (kiosek) ──
 app.post("/call/notify", h(async (req) => {
   const b = z.object({ joinUrl: z.string().url(), propertyName: z.string().optional() }).parse(req.body);
+  const propName = b.propertyName || "recepce";
+
+  // Provozovnu zkus dohledat z hlavičky, ať má zvoneček odkaz na hotel.
+  let propertyId: string | null = null;
+  const raw = req.header("x-property-id");
+  if (raw) {
+    const p = await prisma.property.findFirst({ where: { OR: [{ id: raw }, { identifier: raw }] }, select: { id: true } });
+    propertyId = p?.id ?? null;
+  }
+
+  // Zvoneček pro manažery (vznikne vždy, i kdyby WhatsApp selhal).
+  const call = callsStore.addCall({ propertyId, propertyName: propName, joinUrl: b.joinUrl });
+
+  // WhatsApp je best-effort — když není připojený, zvoneček stačí.
   const staff = process.env.STAFF_WHATSAPP || "420724239572";
-  await sendWhatsApp(staff, `🛎️ Host volá z recepce${b.propertyName ? " " + b.propertyName : ""}. Připojte se k videohovoru: ${b.joinUrl}`);
-  return { sent: true };
+  let sent = false;
+  try { await sendWhatsApp(staff, `🛎️ Host volá z recepce ${propName}. Připojte se k videohovoru: ${b.joinUrl}`); sent = true; }
+  catch { /* zvoneček v adminu funguje i bez WhatsAppu */ }
+
+  return { sent, callId: call.id };
 }));
 
 // ── AI recepční (kiosek, scopováno na provozovnu) ────────────
@@ -357,6 +375,18 @@ adminRouter.delete("/equipment/:id", h(async (req, res) => { await equip.assertI
 adminRouter.get("/equipment/:id/moves", h(async (req, res) => { await equip.assertInProperty(pid(res), req.params.id); return equip.listMoves(req.params.id); }));
 
 app.use("/admin", adminRouter);
+
+// ── Přivolání člověka: zvoneček pro manažery (napříč hotely, bez scope na provozovnu) ──
+const callsRouter = express.Router();
+callsRouter.use(requireAuth);
+const requireManagerial = (_req: Request, res: Response, next: NextFunction) => {
+  const r = res.locals.user.role;
+  if (r !== UserRole.manager && r !== UserRole.super_admin) return res.status(403).json({ error: "forbidden" });
+  next();
+};
+callsRouter.get("/pending", requireManagerial, h(async () => callsStore.listPending()));
+callsRouter.post("/:id/claim", requireManagerial, h(async (req, res) => callsStore.claimCall(req.params.id, res.locals.user.id, res.locals.user.name)));
+app.use("/calls", callsRouter);
 
 // ── Host (portál podle rezervačního kódu, bez přihlášení) ────
 app.get("/guest/:code", h(async (req) => {
