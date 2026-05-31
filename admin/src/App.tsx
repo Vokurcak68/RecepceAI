@@ -5,6 +5,7 @@ import {
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
+  type MaintenancePlan, type MaintItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -52,6 +53,7 @@ export function App() {
     { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
     { id: "equipment", label: "Vybavení", icon: "🧰" },
     { id: "housekeeping", label: "Dispečink úklidu", icon: "🧹" },
+    { id: "maintenance", label: "Dispečink údržby", icon: "🔧" },
     { id: "checks", label: "Kontroly", icon: "✅" },
     { id: "requests", label: "Požadavky", icon: "🛎️" },
     { id: "types", label: "Typy & ceny", icon: "🏷️" },
@@ -91,6 +93,7 @@ export function App() {
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
         {prop && tab === "housekeeping" && <HousekeepingView selId={selId} />}
+        {prop && tab === "maintenance" && <MaintenanceView selId={selId} />}
         {prop && tab === "checks" && <ChecksView selId={selId} />}
         {prop && tab === "requests" && <RequestsView selId={selId} />}
         {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
@@ -1225,22 +1228,78 @@ function HousekeepingView({ selId }: { selId: string }) {
   );
 }
 
+// ── Dispečink údržby: prioritizovaná fronta (manažer) ────────
+function MaintenanceView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<MaintenancePlan>(() => api.maintenancePlan(), [selId]);
+  const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false); const [briefErr, setBriefErr] = useState("");
+
+  const done = async (id: string) => { await api.staffSetStatus(id, { status: "done" }); reload(); };
+  const start = async (id: string) => { await api.staffSetStatus(id, { status: "in_progress" }); reload(); };
+  const aiBrief = async () => {
+    setBriefing(true); setBriefErr(""); setBrief("");
+    try { const r = await api.maintenanceBrief("cs"); setBrief(r.brief); }
+    catch (e) { setBriefErr(e instanceof Error ? e.message : "Chyba AI shrnutí."); }
+    finally { setBriefing(false); }
+  };
+  const c = data?.counts;
+  return (
+    <>
+      <div className="h1">Dispečink údržby</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
+        {c && <>
+          <span className="prio prio-urgent">{c.urgent} urgentní</span>
+          <span className="prio prio-high">{c.high} přednostní</span>
+          <span className="prio prio-normal">{c.normal} běžné</span>
+          <span className="muted" style={{ alignSelf: "center" }}>celkem {c.total}</span>
+        </>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button>
+          <button className="btn sm" onClick={aiBrief} disabled={briefing || !data?.items.length}>{briefing ? "Generuji…" : "✨ AI shrnutí směny"}</button>
+        </div>
+      </div>
+      {briefErr && <div className="error">{briefErr}</div>}
+      {brief && <div className="panel" style={{ padding: 16, marginBottom: 12, background: "#f6f8ff", whiteSpace: "pre-wrap" }}>{brief}</div>}
+      <div className="panel">
+        <Table cols={["Priorita", "Kategorie", "Místo", "Popis", "Stáří", ""]} rows={data?.items ?? []} empty="Fronta údržby je prázdná 🎉"
+          render={(i: MaintItem) => (
+            <tr key={i.id} className={`row-${i.priority}`}>
+              <td><PrioBadge p={i.priority} /></td>
+              <td>🔧 {i.category}{i.fromGuest && <span className="chip">host</span>}{i.status === "in_progress" && <span className="chip">probíhá</span>}</td>
+              <td>{i.roomNumber ? `Pokoj ${i.roomNumber}` : "—"}{i.occupied && <span className="chip">obsazeno</span>}{i.damagedEquipment > 0 && <span className="chip">{i.damagedEquipment}× poškoz.</span>}</td>
+              <td className="muted">{i.description ?? i.reason}</td>
+              <td className="muted">{fmtAge(i.ageMinutes)}</td>
+              <td className="right" style={{ whiteSpace: "nowrap" }}>
+                {i.status === "open" && <button className="btn sm" onClick={() => start(i.id)}>Začít</button>}{" "}
+                <button className="btn sm ok" onClick={() => done(i.id)}>Hotovo</button>
+              </td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
 // ── Portál personálu (uklízečka / údržbář) ───────────────────
 function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: () => void }) {
   const [selId, setSelId] = useState(getProperty() || session.properties[0]?.id || "");
   useEffect(() => { if (selId) setProperty(selId); }, [selId]);
   const isHK = session.user.role === "housekeeping";
-  const [status, setStatus] = useState(isHK ? "plan" : "active");
+  const isMaint = session.user.role === "maintenance";
+  const hasPlan = isHK || isMaint;
+  const [status, setStatus] = useState(hasPlan ? "plan" : "active");
   const { data, error, reload } = useAsync<ServiceRequest[]>(() => api.staffRequests(), [selId]);
-  const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve({ generatedAt: "", counts: { total: 0, urgent: 0, high: 0, normal: 0 }, items: [] }), [selId]);
+  const emptyHK: HousekeepingPlan = { generatedAt: "", counts: { total: 0, urgent: 0, high: 0, normal: 0 }, items: [] };
+  const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve(emptyHK), [selId]);
+  const mplan = useAsync<MaintenancePlan>(() => isMaint ? api.staffMaintPlan() : Promise.resolve(emptyHK as unknown as MaintenancePlan), [selId]);
   const [showAdd, setShowAdd] = useState(false);
   const [nd, setNd] = useState("");
   const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false);
 
-  const reloadAll = () => { reload(); plan.reload(); };
+  const reloadAll = () => { reload(); plan.reload(); mplan.reload(); };
   const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
   const addMaint = async () => { if (!nd.trim()) return; await api.staffCreateRequest({ type: "maintenance", description: nd }); setNd(""); setShowAdd(false); reloadAll(); };
-  const aiBrief = async () => { setBriefing(true); setBrief(""); try { const r = await api.staffBrief("cs"); setBrief(r.brief); } catch (e) { setBrief(e instanceof Error ? e.message : "Chyba AI."); } finally { setBriefing(false); } };
+  const aiBrief = async () => { setBriefing(true); setBrief(""); try { const r = isMaint ? await api.staffMaintBrief("cs") : await api.staffBrief("cs"); setBrief(r.brief); } catch (e) { setBrief(e instanceof Error ? e.message : "Chyba AI."); } finally { setBriefing(false); } };
   const items = (data ?? []).filter((r) => status === "active" ? (r.status === "open" || r.status === "in_progress") : status === "done" ? r.status === "done" : true);
 
   return (
@@ -1253,15 +1312,20 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
         </div>
       </div>
       <div className="staff-tabs">
-        {(([...(isHK ? [["plan", "🧹 Plán"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
+        {(([...(hasPlan ? [["plan", isHK ? "🧹 Plán" : "🔧 Plán"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
         {isHK && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setShowAdd((s) => !s)}>+ Nahlásit údržbu</button>}
       </div>
       {showAdd && <div className="staff-add"><input placeholder="Popis závady…" value={nd} onChange={(e) => setNd(e.target.value)} /><button className="btn" onClick={addMaint}>Odeslat údržbě</button></div>}
       {error && <div className="error">{error}</div>}
 
       {status === "plan" ? (
-        <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
-          brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+        isMaint ? (
+          <MaintCards plan={mplan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+        ) : (
+          <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+        )
       ) : (
       <div className="staff-list">
         {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
@@ -1313,6 +1377,45 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }
             <div className="req-top"><span className="req-type">{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}</span><PrioBadge p={i.priority} /></div>
             <div className="req-loc">{planLoc(i)}{i.roomTypeName ? ` · ${i.roomTypeName}` : ""}{i.guestName ? ` · ${i.guestName}` : ""}</div>
             <div className="req-desc">{i.reason}{i.description ? ` — ${i.description}` : ""}</div>
+            <div className="req-actions">
+              {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
+              <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// Karty prioritizované fronty údržby (portál údržbáře).
+function MaintCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }: {
+  plan: MaintenancePlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
+  brief: string; briefing: boolean; onBrief: () => void; onReload: () => void;
+}) {
+  const c = plan?.counts;
+  return (
+    <>
+      <div className="staff-add" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {c && <>
+            <span className="prio prio-urgent">{c.urgent} urgentní</span>
+            <span className="prio prio-high">{c.high} přednostní</span>
+            <span className="prio prio-normal">{c.normal} běžné</span>
+          </>}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn ghost sm" onClick={onReload}>↻</button>
+          <button className="btn sm" onClick={onBrief} disabled={briefing || !plan?.items.length}>{briefing ? "Generuji…" : "✨ AI shrnutí"}</button>
+        </div>
+      </div>
+      {brief && <div className="staff-add" style={{ background: "#f6f8ff", whiteSpace: "pre-wrap", display: "block" }}>{brief}</div>}
+      <div className="staff-list">
+        {!plan?.items.length ? <div className="empty">Fronta údržby je prázdná 🎉</div> : plan.items.map((i) => (
+          <div key={i.id} className={`req-card s-${i.status} row-${i.priority}`}>
+            <div className="req-top"><span className="req-type">🔧 {i.category}</span><PrioBadge p={i.priority} /></div>
+            <div className="req-loc">{i.roomNumber ? `Pokoj ${i.roomNumber}` : "—"}{i.occupied ? " · obsazeno" : ""}{i.damagedEquipment > 0 ? ` · ${i.damagedEquipment}× poškoz. vybavení` : ""}</div>
+            <div className="req-desc">{i.description ?? i.reason}</div>
             <div className="req-actions">
               {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
               <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>

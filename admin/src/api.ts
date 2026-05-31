@@ -126,6 +126,12 @@ export const api = {
   staffPlan: () => req<HousekeepingPlan>(`/staff/plan`),
   staffBrief: (lang = "cs") => req<{ brief: string }>(`/staff/plan/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
 
+  // údržba triage (prioritizovaná fronta údržby)
+  maintenancePlan: () => req<MaintenancePlan>(`/admin/maintenance/plan`),
+  maintenanceBrief: (lang = "cs") => req<{ brief: string }>(`/admin/maintenance/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
+  staffMaintPlan: () => req<MaintenancePlan>(`/staff/maintenance/plan`),
+  staffMaintBrief: (lang = "cs") => req<{ brief: string }>(`/staff/maintenance/plan/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
+
   // vybavení — provozovna
   equipCategories: () => req<EquipCategory[]>(`/admin/equipment-categories`),
   equipment: () => req<Equipment[]>(`/admin/equipment`),
@@ -181,6 +187,18 @@ export type HousekeepingPlan = {
   items: PlanItem[];
 };
 export const PRIORITY_LABEL: Record<Priority, string> = { urgent: "Urgentní", high: "Přednostní", normal: "Běžné" };
+
+export type MaintItem = {
+  id: string; status: string; priority: Priority; category: string; reason: string;
+  roomNumber: string | null; roomTypeName: string | null; guestName: string | null;
+  fromGuest: boolean; occupied: boolean; damagedEquipment: number;
+  description: string | null; ageMinutes: number; createdAt: string;
+};
+export type MaintenancePlan = {
+  generatedAt: string;
+  counts: { total: number; urgent: number; high: number; normal: number };
+  items: MaintItem[];
+};
 
 export type OccDay = { date: string; total: number; occupied: number; free: number; pct: number };
 export type NightAudit = {

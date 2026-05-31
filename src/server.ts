@@ -20,6 +20,7 @@ import { buildHousekeepingPlan, briefHousekeeping } from "./dispatch";
 import { runNightAudit, briefManager } from "./orchestrator";
 import { suggestRates, applyRates } from "./pricing-agent";
 import { runChecks } from "./checks";
+import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -311,6 +312,14 @@ adminRouter.post("/housekeeping/brief", h(async (req, res) => {
   return { brief: await briefHousekeeping(plan, lang) };
 }));
 
+// Údržba triage — prioritizovaná fronta údržby (manažer).
+adminRouter.get("/maintenance/plan", h((_req, res) => buildMaintenancePlan(pid(res))));
+adminRouter.post("/maintenance/brief", h(async (req, res) => {
+  const lang = z.object({ lang: z.string().optional() }).parse(req.body ?? {}).lang || "cs";
+  const plan = await buildMaintenancePlan(pid(res));
+  return { brief: await briefMaintenance(plan, lang) };
+}));
+
 // Vybavení (DHIM) — jen v rámci vlastní provozovny (pokoje + sklad provozovny).
 const optDate = dateStr.optional();
 const nullDate = dateStr.nullable().optional();
@@ -399,6 +408,14 @@ staffRouter.post("/plan/brief", h(async (req, res) => {
   const lang = z.object({ lang: z.string().optional() }).parse(req.body ?? {}).lang || "cs";
   const plan = await buildHousekeepingPlan(pid(res));
   return { brief: await briefHousekeeping(plan, lang) };
+}));
+
+// Prioritizovaná fronta údržby pro údržbáře (údržba triage).
+staffRouter.get("/maintenance/plan", h((_req, res) => buildMaintenancePlan(pid(res))));
+staffRouter.post("/maintenance/plan/brief", h(async (req, res) => {
+  const lang = z.object({ lang: z.string().optional() }).parse(req.body ?? {}).lang || "cs";
+  const plan = await buildMaintenancePlan(pid(res));
+  return { brief: await briefMaintenance(plan, lang) };
 }));
 app.use("/staff", staffRouter);
 
