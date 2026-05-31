@@ -23,11 +23,15 @@ export function StaffCall({ room, propertyName, onClose }: {
   const [notify, setNotify] = useState<"sending" | "sent" | "error">("sending");
 
   const secure = typeof window !== "undefined" && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
-  const joinUrl = `https://${DOMAIN}/${APP_ID ? `${APP_ID}/${room}` : room}`;
+  const baseUrl = `https://${DOMAIN}/${APP_ID ? `${APP_ID}/${room}` : room}`;
+  const [token, setToken] = useState<string | null>(JWT || null);
+  const [tokenReady, setTokenReady] = useState(!APP_ID); // bez App ID (veřejný server) token neřešíme
+  // U JaaS nese token i odkaz personálu — jinak by se host nepřipojil k autentizované místnosti.
+  const joinUrl = token ? `${baseUrl}?jwt=${token}` : baseUrl;
 
   useEffect(() => { QRCode.toDataURL(joinUrl, { margin: 1, width: 220 }).then(setQr).catch(() => {}); }, [joinUrl]);
 
-  const ring = () => { setNotify("sending"); api.notifyStaff(joinUrl, propertyName).then(() => setNotify("sent")).catch(() => setNotify("error")); };
+  const ring = (url = joinUrl) => { setNotify("sending"); api.notifyStaff(url, propertyName).then(() => setNotify("sent")).catch(() => setNotify("error")); };
 
   // Povolení kamery/mikrofonu — s hlášením přesné chyby.
   const askPermission = async () => {
@@ -44,18 +48,27 @@ export function StaffCall({ room, propertyName, onClose }: {
 
   // Pojistka proti dvojímu spuštění (React StrictMode v devu pustí effect 2×).
   const started = useRef(false);
-  useEffect(() => { if (started.current) return; started.current = true; askPermission(); ring(); }, []); // eslint-disable-line
+  useEffect(() => {
+    if (started.current) return; started.current = true;
+    (async () => {
+      let jwt: string | null = JWT || null;
+      if (!jwt && APP_ID) { try { jwt = (await api.callToken()).jwt; } catch { /* fallback bez tokenu */ } }
+      setToken(jwt); setTokenReady(true);
+      askPermission();
+      ring(jwt ? `${baseUrl}?jwt=${jwt}` : baseUrl);
+    })();
+  }, []); // eslint-disable-line
 
   // Jitsi spustíme až po povolení.
   useEffect(() => {
-    if (!granted) return;
+    if (!granted || !tokenReady) return; // u JaaS počkej na token, ať se nepřipojíš bez něj
     let disposed = false;
     const start = () => {
       const w = window as unknown as { JitsiMeetExternalAPI?: AnyApi };
       if (disposed || !ref.current || !w.JitsiMeetExternalAPI) return;
       const japi = new w.JitsiMeetExternalAPI(DOMAIN, {
         roomName: APP_ID ? `${APP_ID}/${room}` : room,
-        ...(JWT ? { jwt: JWT } : {}),
+        ...(token ? { jwt: token } : {}),
         parentNode: ref.current, width: "100%", height: "100%",
         userInfo: { displayName: "Recepce" },
         configOverwrite: { prejoinPageEnabled: false, prejoinConfig: { enabled: false }, disableDeepLinking: true, startWithAudioMuted: false, startWithVideoMuted: false, toolbarButtons: [], disableInviteFunctions: true, filmstrip: { disabled: true } },
@@ -66,11 +79,13 @@ export function StaffCall({ room, propertyName, onClose }: {
       japi.addEventListener("participantLeft", () => { try { if ((japi.getNumberOfParticipants?.() ?? 1) <= 1) setConnected(false); } catch { /* */ } });
       japi.addEventListener("readyToClose", onClose);
     };
+    // U JaaS je external_api.js pod App ID: https://8x8.vc/<appId>/external_api.js
+    const scriptUrl = APP_ID ? `https://${DOMAIN}/${APP_ID}/external_api.js` : `https://${DOMAIN}/external_api.js`;
     const w = window as unknown as { JitsiMeetExternalAPI?: AnyApi };
     if (w.JitsiMeetExternalAPI) start();
-    else { const s = document.createElement("script"); s.src = `https://${DOMAIN}/external_api.js`; s.async = true; s.onload = start; document.body.appendChild(s); }
+    else { const s = document.createElement("script"); s.src = scriptUrl; s.async = true; s.onload = start; document.body.appendChild(s); }
     return () => { disposed = true; try { apiRef.current?.dispose(); } catch { /* */ } };
-  }, [granted, room]); // eslint-disable-line
+  }, [granted, room, token, tokenReady]); // eslint-disable-line
 
   const hangup = () => { try { apiRef.current?.executeCommand("hangup"); apiRef.current?.dispose(); } catch { /* */ } onClose(); };
 
@@ -117,7 +132,7 @@ export function StaffCall({ room, propertyName, onClose }: {
                 </p>
                 {qr && <img className="call-qr" src={qr} alt="QR pro připojení" />}
                 <div className="call-actions">
-                  <button className="btn ok" onClick={ring}>📲 Zazvonit znovu</button>
+                  <button className="btn ok" onClick={() => ring()}>📲 Zazvonit znovu</button>
                   <button className="btn ghost" onClick={hangup}>Zrušit</button>
                 </div>
               </>

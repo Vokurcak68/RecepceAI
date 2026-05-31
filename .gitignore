@@ -23,6 +23,14 @@ pat.txt
 # TLS certifikáty (privátní klíč)
 kiosk/certs/*.pem
 
+# JaaS / 8x8 privátní klíč pro podpis JWT
+jaas-key.pem
+jaas*.pem
+*.pem
+*.pk
+jaas/
+jaas.txt
+
 # Claude lokální konfigurace
 .claude/
 

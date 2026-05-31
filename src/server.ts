@@ -22,6 +22,7 @@ import { suggestRates, applyRates } from "./pricing-agent";
 import { runChecks } from "./checks";
 import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
 import * as callsStore from "./calls";
+import { isJaasConfigured, mintJaasToken } from "./jaas";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -138,6 +139,10 @@ app.post("/call/notify", h(async (req) => {
 
   return { sent, callId: call.id };
 }));
+
+// ── Jitsi/JaaS token pro videohovor (kiosek) — odstraní 5min limit i hlášku ──
+// Když JaaS není nakonfigurováno, vrátí jwt:null a kiosek jede na veřejném meet.jit.si.
+app.get("/call/token", h(async () => (isJaasConfigured() ? { jwt: mintJaasToken() } : { jwt: null })));
 
 // ── AI recepční (kiosek, scopováno na provozovnu) ────────────
 app.post("/ai/chat", h(async (req) => {

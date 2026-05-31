@@ -99,6 +99,7 @@ export type ChatMsg = { role: "user" | "assistant"; content: string };
 export const api = {
   notifyStaff: (joinUrl: string, propertyName: string) =>
     req<{ sent: boolean }>(`/call/notify`, { method: "POST", body: JSON.stringify({ joinUrl, propertyName }) }),
+  callToken: () => req<{ jwt: string | null }>(`/call/token`),
   aiChat: (messages: ChatMsg[], lang: string) =>
     req<{ reply: string }>(`/ai/chat`, { method: "POST", body: JSON.stringify({ messages, lang }) }),
   availability: (from: string, to: string, guests: number) =>
