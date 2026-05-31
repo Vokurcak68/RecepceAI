@@ -4,8 +4,9 @@ Návrhový dokument pro postupné nasazení AI asistentů, kteří řídí provo
 napříč provozovnami ReceptionAI. Slouží jako vodítko pro další vývoj — co je hotové,
 co následuje a podle jakých principů to stavět.
 
-> Stav: **Fáze 1 (housekeeping dispečer), fáze 2 (orchestrátor + ranní briefing)
-> a fáze 3 (revenue/pricing agent) hotové.** Fáze 4 navržená, neimplementovaná.
+> Stav: **Fáze 1–4 hotové** (housekeeping dispečer, orchestrátor + ranní briefing,
+> revenue/pricing agent, kontrolní agent compliance/billing/inventář).
+> Concierge (odchozí komunikace s hostem) záměrně odložen — viz fáze 4.
 
 ---
 
@@ -61,11 +62,11 @@ Datový model: `prisma/schema.prisma`. Klíčové entity scopované na `Property
 | **Housekeeping dispečer** *(hotové)* | `Room.status`, `ServiceRequest(housekeeping)` | checkout → pokoj `dirty` | priorizuje frontu úklidu dle dnešních příjezdů |
 | **Orchestrátor / briefing** *(hotové)* | napříč (audit) | cron 1×/den + na vyžádání | noční audit + ranní briefing manažerovi |
 | **Revenue / pricing** *(hotové)* | `RatePlan`, occupancy z `Reservation` | na vyžádání (i cron) | navrhuje ceny dle obsazenosti, lead-time, víkendu |
+| **Compliance / ubyhost** *(hotové)* | `RegistrationEntry` | na vyžádání (i denně) | hlídá ubytované bez evidence, skartace po lhůtě |
+| **Billing / pohledávky** *(hotové)* | `Payment`, `holdExpiresAt`, `BillingCycle` | na vyžádání (i denně) | nevyrovnané účty, expirující holdy, měsíční fakturace |
+| **Inventář / DHIM** *(hotové)* | `EquipmentItem` | na vyžádání | poškozené/vyřazené vybavení v pokojích |
 | **Údržba triage** | `ServiceRequest(maintenance)`, `EquipmentItem` | host/personál nahlásí závadu | klasifikuje urgenci, spojí s vybavením, eskaluje |
-| **Compliance / ubyhost** | `RegistrationEntry` | check-in, denně | hlídá chybějící doklady cizinců, skartace |
-| **Billing / pohledávky** | `Payment`, `holdExpiresAt`, `BillingCycle` | denně | upomínky, expirující holdy, měsíční fakturace |
-| **Concierge / komunikace** | `Property.infoText`, `Guest` | před/po pobytu | předpříjezdové info, upsell, recenze, FAQ |
-| **Inventář / DHIM** | `EquipmentItem`, `EquipmentMove` | změna stavu | audit přesunů, upozornění na poškozené/vyřazené |
+| **Concierge / komunikace** *(odloženo)* | `Property.infoText`, `Guest` | před/po pobytu | předpříjezdové info, upsell, recenze, FAQ |
 
 ### Tři režimy spouštění
 
@@ -226,17 +227,47 @@ Pravidla se sčítají (např. nízká obsazenost + víkend). Důvod se skládá
 
 ---
 
-## 6. Fáze 4 — Compliance, billing, concierge, inventář (navrženo)
+## 6. Fáze 4 — Kontrolní agent (compliance / billing / inventář) ✅ HOTOVO
 
-- **Compliance / ubyhost** — denní kontrola úplnosti `RegistrationEntry` (cizinci bez
-  dokladu/víza), příprava hlášení cizinecké policii, skartace dle `retentionUntil`.
-- **Billing / pohledávky** — upomínky nedoplatků (`computeFolio`), expirující
-  `deposit_hold`, automatická příprava měsíční faktury u `BillingCycle=monthly`
-  (ubytovny) přes existující `buildInvoice`.
-- **Concierge / komunikace** — předpříjezdové info a post-stay recenze; čerpá z
-  `Property.infoText`. Odchozí kanál = pozor na náklady a souhlas hosta.
-- **Inventář / DHIM** — audit `EquipmentMove`, upozornění na `damaged`/`retired`,
-  návrh doobjednání. Rule-based, bez LLM.
+**Cíl:** akční drill-down k ranímu briefingu. Briefing dává počty, kontrolní agent
+konkrétní položky (kdo / co / kde) napříč třemi doménami. Rule-based, READ-ONLY,
+bez LLM a bez odchozí komunikace.
+
+### Co je implementováno
+
+- **`src/checks.ts`**
+  - `complianceFindings(propertyId)` — ubytovaní (`checked_in`) bez záznamu v
+    `RegistrationEntry` (high, ohlašovací povinnost); počet záznamů po lhůtě
+    uchování ke skartaci (low).
+  - `billingFindings(propertyId)` — nevyrovnané účty ubytovaných přes `computeFolio`
+    (high, s dlužnou částkou); rezervace v držbě po expiraci (medium); počet
+    dlouhodobých pobytů s měsíční fakturací ke kontrole (low).
+  - `inventoryFindings(propertyId)` — poškozené vybavení s umístěním (medium);
+    vyřazené kusy stále v pokoji (low).
+  - `runChecks(propertyId)` — agreguje, řadí dle závažnosti, vrací počty + nálezy
+    po kategoriích. Strop `MAX_PER_KIND` proti zahlcení UI.
+- **Endpoint** (`src/server.ts`): `GET /admin/checks`
+- **Admin UI** (`admin/src/App.tsx`): záložka **„✅ Kontroly"** (`ChecksView`) —
+  souhrn počtů dle závažnosti + panely po kategoriích s barevnými štítky
+  (vysoká/střední/nízká) a odkazem (kód rezervace / kus).
+
+### Záměrně odložené: Concierge (odchozí komunikace s hostem)
+
+Předpříjezdové zprávy, upsell a žádosti o recenzi **nebudují** se v této fázi:
+- **Náklady** — generování textů přes LLM a hromadné odesílání jde proti hlídání
+  API nákladů (`ANTHROPIC_API_KEY` jen recepční + dispečer/audit shrnutí).
+- **Souhlas a kanál** — odchozí marketing vyžaduje `marketingConsent` a doručovací
+  kanál; WhatsApp je dle pravidla **jen pro personál** (Jitsi), ne pro hosty.
+
+Až bude poptávka, lze udělat **read-only návrh** „kterým hostům se ozvat" + draft
+textu ke schválení (bez auto-odeslání), nikdy ne automatické rozesílání.
+
+### TODO pro fázi 4
+
+- **Údržba triage** (zbývající agent z mapy) — klasifikace urgence maintenance
+  tiketů + napojení na poškozené `EquipmentItem`. Logicky rozšíření kontrolního
+  agenta / dispečera.
+- **Cron** — `GET /admin/checks` 1×/den do briefingu / notifikace.
 
 ---
 
@@ -254,6 +285,7 @@ Pravidla se sčítají (např. nízká obsazenost + víkend). Důvod se skládá
 | Admin UI | `admin/src/App.tsx`, `api.ts`, `styles.css` | záložky, klient |
 | Orchestrátor / briefing | `src/orchestrator.ts` | **fáze 2** |
 | Pricing agent | `src/pricing-agent.ts` | **fáze 3** |
+| Kontrolní agent | `src/checks.ts` | **fáze 4** |
 
 ---
 
@@ -262,6 +294,9 @@ Pravidla se sčítají (např. nízká obsazenost + víkend). Důvod se skládá
 1. ✅ Housekeeping dispečer.
 2. ✅ Orchestrátor + ranní briefing.
 3. ✅ Revenue pricing.
-4. Compliance → billing → concierge → inventář.
+4. ✅ Kontrolní agent (compliance + billing + inventář). Concierge odložen.
+
+**Další možné kroky:** Údržba triage (klasifikace maintenance tiketů), cron
+spouštění briefingu/kontrol, doručení mimo admin (WhatsApp personálu / e-mail).
 
 Viz též `README.md` (přehled projektu) a `kiosk/DEPLOYMENT.md` (nasazení).

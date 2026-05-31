@@ -109,6 +109,9 @@ export const api = {
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
 
+  // kontrolní agent (fáze 4) — compliance / billing / inventář
+  checks: () => req<ChecksResult>(`/admin/checks`),
+
   // orchestrátor — ranní briefing
   briefing: () => req<NightAudit>(`/admin/briefing`),
   briefingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/briefing/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
@@ -203,6 +206,16 @@ export type PricingSuggestion = {
   roomTypeId: string; roomTypeName: string; unit: "room" | "bed"; basePrice: string;
   horizonDays: number; days: DaySuggestion[]; counts: { changed: number; up: number; down: number };
 };
+
+export type Severity = "high" | "medium" | "low";
+export type Finding = { severity: Severity; category: "compliance" | "billing" | "inventory"; title: string; detail: string; ref: string | null };
+export type ChecksResult = {
+  generatedAt: string;
+  counts: { high: number; medium: number; low: number; total: number };
+  byCategory: { compliance: Finding[]; billing: Finding[]; inventory: Finding[] };
+};
+export const SEVERITY_LABEL: Record<Severity, string> = { high: "Vysoká", medium: "Střední", low: "Nízká" };
+export const CHECK_CAT_LABEL: Record<string, string> = { compliance: "🛂 Compliance / ubyhost", billing: "💳 Pohledávky", inventory: "🧰 Inventář" };
 
 export function money(m: Money | number | null): string {
   if (m == null) return "—";

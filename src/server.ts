@@ -19,6 +19,7 @@ import * as service from "./service";
 import { buildHousekeepingPlan, briefHousekeeping } from "./dispatch";
 import { runNightAudit, briefManager } from "./orchestrator";
 import { suggestRates, applyRates } from "./pricing-agent";
+import { runChecks } from "./checks";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -289,6 +290,9 @@ adminRouter.get("/requests", h((req, res) => {
   const q = z.object({ status: z.nativeEnum(ServiceStatus).optional(), domain: z.nativeEnum(ServiceDomain).optional() }).parse(req.query);
   return service.listRequests({ propertyId: pid(res), ...(q.status ? { status: q.status } : {}), ...(q.domain ? { domain: q.domain } : {}) });
 }));
+
+// Kontrolní agent — akční nálezy (compliance / billing / inventář), READ-ONLY.
+adminRouter.get("/checks", h((_req, res) => runChecks(pid(res))));
 
 // Orchestrátor — ranní briefing (noční audit provozovny, READ-ONLY).
 adminRouter.get("/briefing", h((_req, res) => runNightAudit(pid(res))));

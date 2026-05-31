@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
-  type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion,
+  type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -52,6 +52,7 @@ export function App() {
     { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
     { id: "equipment", label: "Vybavení", icon: "🧰" },
     { id: "housekeeping", label: "Dispečink úklidu", icon: "🧹" },
+    { id: "checks", label: "Kontroly", icon: "✅" },
     { id: "requests", label: "Požadavky", icon: "🛎️" },
     { id: "types", label: "Typy & ceny", icon: "🏷️" },
     { id: "book", label: "Kniha hostů", icon: "📖" },
@@ -90,6 +91,7 @@ export function App() {
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
         {prop && tab === "housekeeping" && <HousekeepingView selId={selId} />}
+        {prop && tab === "checks" && <ChecksView selId={selId} />}
         {prop && tab === "requests" && <RequestsView selId={selId} />}
         {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
         {prop && tab === "book" && <BookView selId={selId} />}
@@ -1115,6 +1117,45 @@ function RequestsView({ selId }: { selId: string }) {
             </tr>
           )} />
       </div>
+    </>
+  );
+}
+
+// ── Kontrolní agent (fáze 4): compliance / billing / inventář ─
+const SevBadge = ({ s }: { s: Finding["severity"] }) => <span className={`sev sev-${s}`}>{SEVERITY_LABEL[s]}</span>;
+
+function ChecksView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<ChecksResult>(() => api.checks(), [selId]);
+  const c = data?.counts;
+  const cats: Finding["category"][] = ["compliance", "billing", "inventory"];
+  return (
+    <>
+      <div className="h1">Kontroly <span className="muted" style={{ fontSize: 14 }}>akční nálezy napříč provozem</span></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
+        {c && <>
+          <span className="sev sev-high">{c.high} vysoká</span>
+          <span className="sev sev-medium">{c.medium} střední</span>
+          <span className="sev sev-low">{c.low} nízká</span>
+          <span className="muted" style={{ alignSelf: "center" }}>celkem {c.total}</span>
+        </>}
+        <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={reload}>↻ Obnovit</button>
+      </div>
+      {data && data.counts.total === 0 && <div className="panel" style={{ padding: 24, textAlign: "center" }}>✅ Žádné nálezy — vše v pořádku.</div>}
+      {data && cats.map((cat) => data.byCategory[cat].length > 0 && (
+        <div className="panel" key={cat}>
+          <h3>{CHECK_CAT_LABEL[cat]} <span className="muted" style={{ fontSize: 14 }}>({data.byCategory[cat].length})</span></h3>
+          <Table cols={["Závažnost", "Nález", "Detail", "Odkaz"]} rows={data.byCategory[cat]} empty="—"
+            render={(f: Finding) => (
+              <tr key={f.title + f.ref + f.detail} className={`row-sev-${f.severity}`}>
+                <td><SevBadge s={f.severity} /></td>
+                <td><b>{f.title}</b></td>
+                <td className="muted">{f.detail}</td>
+                <td className="muted">{f.ref ?? "—"}</td>
+              </tr>
+            )} />
+        </div>
+      ))}
     </>
   );
 }
