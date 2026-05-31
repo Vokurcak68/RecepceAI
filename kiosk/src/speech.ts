@@ -13,7 +13,9 @@ export const recognitionSupported = () => !!getSR();
 
 export type Intent = "walkin" | "reservation" | "checkout" | "human" | null;
 
-const KEYWORDS: Record<Lang, Record<Exclude<Intent, null>, string[]>> = {
+// Klíčová slova jen pro rychlou volbu na úvodu (cs/en). Ostatní jazyky se
+// vyhodnotí přes AI asistenta (matchIntent vrátí null → předá se AI).
+const KEYWORDS: Partial<Record<Lang, Record<Exclude<Intent, null>, string[]>>> = {
   cs: {
     checkout: ["odjíždím", "odjizd", "odjezd", "odhlás", "odhlas", "check out", "check-out", "platím a", "konec pobytu", "odcházím", "odchazim"],
     reservation: ["rezervac", "objedn", "mám rezerv", "mam rezerv", "potvrzen", "check in", "check-in", "přihlás", "prihlas"],
@@ -31,6 +33,7 @@ const KEYWORDS: Record<Lang, Record<Exclude<Intent, null>, string[]>> = {
 export function matchIntent(text: string, lang: Lang): Intent {
   const t = (text || "").toLowerCase();
   const k = KEYWORDS[lang];
+  if (!k) return null; // jazyk bez klíčových slov → vyhodnotí AI asistent
   if (k.checkout.some((w) => t.includes(w))) return "checkout";
   if (k.reservation.some((w) => t.includes(w))) return "reservation";
   if (k.walkin.some((w) => t.includes(w))) return "walkin";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, money, loadProperty, type Reservation, type Available, type Folio, type PropertyInfo, type ChatMsg } from "./api";
-import { makeT, type Lang } from "./i18n";
+import { makeT, LANGS, type Lang } from "./i18n";
 import { Avatar, useSpeech, stripMarkdown, AVATAR_VARIANTS, type AvatarVariant } from "./Avatar";
 import { StaffCall } from "./StaffCall";
 import { useRecognition, matchIntent, recognitionSupported } from "./speech";
@@ -95,6 +95,11 @@ export function App() {
     }
     if (screen !== "home" && listening) stopListen();
   }, [screen, speaking]); // eslint-disable-line
+
+  // Změna jazyka na úvodu → pozdrav znovu v novém jazyce (potvrdí i hlas).
+  useEffect(() => {
+    if (screen === "home") { setLine(t("welcome")); speak(t("welcome")); }
+  }, [lang]); // eslint-disable-line
 
   useEffect(() => { chatBoxRef.current?.scrollTo({ top: chatBoxRef.current.scrollHeight }); }, [chatMessages, chatBusy]);
 
@@ -282,9 +287,9 @@ export function App() {
           <div className="topbar">
             <div className="brand">🛎️ {property.name}</div>
             <div className="lang-switch">
-              {(["cs", "en"] as Lang[]).map((l) => (
-                <button key={l} className={lang === l ? "active" : ""} onClick={() => setLang(l)}>
-                  {l === "cs" ? "🇨🇿 CZ" : "🇬🇧 EN"}
+              {LANGS.map((l) => (
+                <button key={l.code} className={lang === l.code ? "active" : ""} onClick={() => setLang(l.code)} title={l.label} aria-label={l.label}>
+                  <span className={`fi fi-${l.cc}`} />
                 </button>
               ))}
             </div>

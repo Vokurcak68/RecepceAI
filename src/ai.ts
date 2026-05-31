@@ -13,6 +13,21 @@ export type ChatMsg = { role: "user" | "assistant"; content: string };
 const money = (d: { toFixed: (n: number) => string }) => `${d.toFixed(0)} Kč`;
 const TYPE_CS: Record<string, string> = { hotel: "hotel", penzion: "penzion", ubytovna: "ubytovna" };
 
+// Instrukce „odpovídej v jazyce X" pro každý podporovaný jazyk kiosku.
+const REPLY_LANG: Record<string, string> = {
+  cs: "Odpovídej vždy česky.",
+  en: "Always reply in English.",
+  de: "Antworte immer auf Deutsch.",
+  ru: "Всегда отвечай на русском языке.",
+  uk: "Завжди відповідай українською мовою.",
+  pl: "Zawsze odpowiadaj po polsku.",
+  sk: "Vždy odpovedaj po slovensky.",
+  it: "Rispondi sempre in italiano.",
+  fr: "Réponds toujours en français.",
+  es: "Responde siempre en español.",
+  zh: "始终用中文回答。",
+};
+
 // ── Systémový prompt + znalostní báze provozovny ─────────────
 function buildSystem(p: Awaited<ReturnType<typeof prisma.property.findUniqueOrThrow>>, lang: string) {
   const today = new Date().toISOString().slice(0, 10);
@@ -26,7 +41,7 @@ function buildSystem(p: Awaited<ReturnType<typeof prisma.property.findUniqueOrTh
     p.infoText ? `Další informace:\n${p.infoText}` : "",
   ].filter(Boolean).join("\n");
 
-  const langLine = lang === "en" ? "Always reply in English." : "Odpovídej vždy česky.";
+  const langLine = REPLY_LANG[lang] ?? REPLY_LANG.en;
 
   const text = `Jsi AI recepční provozovny „${p.name}". Pomáháš hostům s ubytováním.
 

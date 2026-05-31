@@ -49,9 +49,37 @@ function cleanForSpeech(s: string): string {
 }
 
 // ── Hlas ─────────────────────────────────────────────────────
+// Hlasy se v prohlížeči načítají asynchronně — držíme si je a obnovujeme.
+function useVoices(): SpeechSynthesisVoice[] {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+  return voices;
+}
+
+/** Nejlepší hlas pro BCP-47 kód: přesná shoda → shoda jazyka → nic (fallback na prohlížeč). */
+function pickVoice(voices: SpeechSynthesisVoice[], bcp47: string): SpeechSynthesisVoice | null {
+  if (!voices.length) return null;
+  const code = bcp47.toLowerCase();
+  const base = code.split("-")[0];
+  return (
+    voices.find((v) => v.lang.toLowerCase() === code) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith(base + "-")) ||
+    voices.find((v) => v.lang.toLowerCase() === base) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith(base)) ||
+    null
+  );
+}
+
 export function useSpeech(lang: Lang) {
   const [speaking, setSpeaking] = useState(false);
   const enabled = useRef(true);
+  const voices = useVoices();
 
   const speak = (text: string) => {
     if (!enabled.current || !("speechSynthesis" in window)) return;
@@ -59,7 +87,10 @@ export function useSpeech(lang: Lang) {
     if (!clean) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(clean);
-    u.lang = SPEECH_LANG[lang];
+    const bcp47 = SPEECH_LANG[lang];
+    u.lang = bcp47;
+    const voice = pickVoice(voices, bcp47);
+    if (voice) u.voice = voice; // když pro jazyk hlas není, nech volbu na prohlížeči
     u.rate = 1;
     u.pitch = 1.05;
     u.onstart = () => setSpeaking(true);
