@@ -31,7 +31,21 @@ export function StaffCall({ room, propertyName, onClose }: {
 
   useEffect(() => { QRCode.toDataURL(joinUrl, { margin: 1, width: 220 }).then(setQr).catch(() => {}); }, [joinUrl]);
 
-  const ring = (url = joinUrl) => { setNotify("sending"); api.notifyStaff(url, propertyName).then(() => setNotify("sent")).catch(() => setNotify("error")); };
+  // Zhasnutí zvonečku v adminu — když se někdo připojí nebo se okno zavře.
+  const callIdRef = useRef<string | null>(null);
+  const resolvedRef = useRef(false);
+  const resolveBell = () => {
+    if (resolvedRef.current || !callIdRef.current) return;
+    resolvedRef.current = true;
+    api.resolveCall(callIdRef.current).catch(() => {});
+  };
+
+  const ring = (url = joinUrl) => {
+    setNotify("sending");
+    api.notifyStaff(url, propertyName)
+      .then((r) => { setNotify("sent"); if (r.callId) callIdRef.current = r.callId; })
+      .catch(() => setNotify("error"));
+  };
 
   // Povolení kamery/mikrofonu — s hlášením přesné chyby.
   const askPermission = async () => {
@@ -59,6 +73,9 @@ export function StaffCall({ room, propertyName, onClose }: {
     })();
   }, []); // eslint-disable-line
 
+  // Při zavření okna hovoru (zavěšení / zrušení / konec) zhasni zvoneček v adminu.
+  useEffect(() => () => { resolveBell(); }, []); // eslint-disable-line
+
   // Jitsi spustíme až po povolení.
   useEffect(() => {
     if (!granted || !tokenReady) return; // u JaaS počkej na token, ať se nepřipojíš bez něj
@@ -75,7 +92,7 @@ export function StaffCall({ room, propertyName, onClose }: {
         interfaceConfigOverwrite: { TOOLBAR_BUTTONS: [], MOBILE_APP_PROMO: false, DISABLE_JOIN_LEAVE_NOTIFICATIONS: true },
       });
       apiRef.current = japi;
-      japi.addEventListener("participantJoined", () => setConnected(true));
+      japi.addEventListener("participantJoined", () => { setConnected(true); resolveBell(); });
       japi.addEventListener("participantLeft", () => { try { if ((japi.getNumberOfParticipants?.() ?? 1) <= 1) setConnected(false); } catch { /* */ } });
       japi.addEventListener("readyToClose", onClose);
     };

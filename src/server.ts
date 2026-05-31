@@ -144,6 +144,12 @@ app.post("/call/notify", h(async (req) => {
 // Když JaaS není nakonfigurováno, vrátí jwt:null a kiosek jede na veřejném meet.jit.si.
 app.get("/call/token", h(async () => (isJaasConfigured() ? { jwt: mintJaasToken() } : { jwt: null })));
 
+// ── Vyřešení hovoru z kiosku (někdo se připojil / hovor skončil) → zhasne zvoneček ──
+app.post("/call/resolve", h(async (req) => {
+  const b = z.object({ callId: z.string().min(1) }).parse(req.body);
+  return { resolved: callsStore.resolveCall(b.callId) };
+}));
+
 // ── AI recepční (kiosek, scopováno na provozovnu) ────────────
 app.post("/ai/chat", h(async (req) => {
   const propertyId = await resolvePropertyId(req);

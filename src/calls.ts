@@ -62,3 +62,12 @@ export function claimCall(id: string, userId: string, userName: string): { ok: b
   c.claimedByName = userName;
   return { ok: true };
 }
+
+/** Vyřešení hovoru z kiosku (někdo se připojil / hovor skončil) → zvoneček zhasne. */
+export function resolveCall(id: string): boolean {
+  prune();
+  const c = calls.find((x) => x.id === id);
+  if (!c) return false;
+  if (!c.claimedBy) { c.claimedBy = "kiosk"; c.claimedByName = "(vyřízeno z kiosku)"; }
+  return true;
+}
