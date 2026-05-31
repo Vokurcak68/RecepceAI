@@ -11,7 +11,7 @@ export const BLOCKING_STATUSES: ReservationStatus[] = [
   ReservationStatus.checked_in,
 ];
 
-function overlapWhere(from: Date, to: Date) {
+export function overlapWhere(from: Date, to: Date) {
   return {
     status: { in: BLOCKING_STATUSES },
     checkInDate: { lt: toDateOnly(to) },

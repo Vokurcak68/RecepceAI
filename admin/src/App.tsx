@@ -4,7 +4,7 @@ import {
   api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
-  type HousekeepingPlan, type PlanItem,
+  type HousekeepingPlan, type PlanItem, type NightAudit,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -137,6 +137,38 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
 }
 
 // ── Dashboard ────────────────────────────────────────────────
+// Ranní briefing (orchestrátor — noční audit + volitelné AI shrnutí).
+function BriefingCard({ selId }: { selId: string }) {
+  const { data, error } = useAsync<NightAudit>(() => api.briefing(), [selId]);
+  const [brief, setBrief] = useState(""); const [busy, setBusy] = useState(false);
+  const aiBrief = async () => {
+    setBusy(true); setBrief("");
+    try { const r = await api.briefingBrief("cs"); setBrief(r.brief); }
+    catch (e) { setBrief(e instanceof Error ? e.message : "Chyba AI."); }
+    finally { setBusy(false); }
+  };
+  if (error) return <div className="error">{error}</div>;
+  if (!data) return null;
+  const ok = data.flags.length === 1 && data.flags[0].startsWith("Vše v pořádku");
+  return (
+    <div className="panel briefing">
+      <div className="briefing-head">
+        <h3>☀️ Ranní briefing</h3>
+        <div className="briefing-occ">
+          <span>Dnes <b>{data.occupancy.today.pct} %</b> <span className="muted">({data.occupancy.today.occupied}/{data.occupancy.today.total})</span></span>
+          <span>Zítra <b>{data.occupancy.tomorrow.pct} %</b></span>
+          <span className="muted">Příjezdy {data.arrivals.total} · Odjezdy {data.departures}</span>
+          <button className="btn sm" onClick={aiBrief} disabled={busy}>{busy ? "Generuji…" : "✨ AI shrnutí"}</button>
+        </div>
+      </div>
+      {brief && <div className="briefing-ai">{brief}</div>}
+      <ul className={`briefing-flags${ok ? " ok" : ""}`}>
+        {data.flags.map((f, i) => <li key={i}>{ok ? "✅" : "⚠️"} {f}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function DashboardView({ selId }: { selId: string }) {
   const today = todayIso();
   const { data, error, reload } = useAsync<Dashboard>(() => api.dashboard(today), [selId]);
@@ -146,6 +178,7 @@ function DashboardView({ selId }: { selId: string }) {
     <>
       <div className="h1">Přehled <span className="muted" style={{ fontSize: 15 }}>{today}</span></div>
       {error && <div className="error">{error}</div>}
+      <BriefingCard selId={selId} />
       {data && (
         <>
           <div className="stats">

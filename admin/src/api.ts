@@ -109,6 +109,10 @@ export const api = {
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
 
+  // orchestrátor — ranní briefing
+  briefing: () => req<NightAudit>(`/admin/briefing`),
+  briefingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/briefing/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
+
   // housekeeping dispečer (prioritizovaný plán úklidu)
   housekeepingPlan: () => req<HousekeepingPlan>(`/admin/housekeeping/plan`),
   housekeepingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/housekeeping/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
@@ -170,6 +174,20 @@ export type HousekeepingPlan = {
   items: PlanItem[];
 };
 export const PRIORITY_LABEL: Record<Priority, string> = { urgent: "Urgentní", high: "Přednostní", normal: "Běžné" };
+
+export type OccDay = { date: string; total: number; occupied: number; free: number; pct: number };
+export type NightAudit = {
+  propertyId: string; propertyName: string; date: string;
+  occupancy: { today: OccDay; tomorrow: OccDay };
+  arrivals: { total: number; unassigned: number };
+  departures: number;
+  housekeeping: { urgent: number; total: number };
+  unsettled: { count: number; totalBalance: string; items: { code: string; guest: string; balance: string }[] };
+  registrationMissing: { count: number; codes: string[] };
+  holds: { active: number; expiring: number };
+  registrationsToPurge: number;
+  flags: string[];
+};
 
 export function money(m: Money | number | null): string {
   if (m == null) return "—";

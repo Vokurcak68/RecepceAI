@@ -4,7 +4,8 @@ Návrhový dokument pro postupné nasazení AI asistentů, kteří řídí provo
 napříč provozovnami ReceptionAI. Slouží jako vodítko pro další vývoj — co je hotové,
 co následuje a podle jakých principů to stavět.
 
-> Stav: **Fáze 1 (housekeeping dispečer) hotová.** Fáze 2–4 navržené, neimplementované.
+> Stav: **Fáze 1 (housekeeping dispečer) a fáze 2 (orchestrátor + ranní briefing)
+> hotové.** Fáze 3–4 navržené, neimplementované.
 
 ---
 
@@ -58,6 +59,7 @@ Datový model: `prisma/schema.prisma`. Klíčové entity scopované na `Property
 |-------|----------------|----------|---------|
 | **Recepční** *(hotové)* | `Reservation`, `Guest`, availability | host na kiosku | dostupnost, rezervace, vyhledání; mluví 11 jazyky |
 | **Housekeeping dispečer** *(hotové)* | `Room.status`, `ServiceRequest(housekeeping)` | checkout → pokoj `dirty` | priorizuje frontu úklidu dle dnešních příjezdů |
+| **Orchestrátor / briefing** *(hotové)* | napříč (audit) | cron 1×/den + na vyžádání | noční audit + ranní briefing manažerovi |
 | **Údržba triage** | `ServiceRequest(maintenance)`, `EquipmentItem` | host/personál nahlásí závadu | klasifikuje urgenci, spojí s vybavením, eskaluje |
 | **Revenue / pricing** | `RatePlan`, occupancy z `Reservation` | denně (cron) | dynamické ceny dle obsazenosti a lead-time |
 | **Compliance / ubyhost** | `RegistrationEntry` | check-in, denně | hlídá chybějící doklady cizinců, skartace |
@@ -132,25 +134,48 @@ Invoke-RestMethod -Uri http://localhost:4000/admin/housekeeping/plan -Headers $h
 
 ---
 
-## 4. Fáze 2 — Orchestrátor + ranní briefing (navrženo)
+## 4. Fáze 2 — Orchestrátor + ranní briefing ✅ HOTOVO
 
-**Cíl:** 1× denně (cron) projít data a dát manažerovi přehled + spustit rutiny.
+**Cíl:** 1× denně projít data a dát manažerovi přehled + upozornit na úkoly.
 
-- **Nový soubor `src/orchestrator.ts`**: `runNightAudit(propertyId)`:
-  - obsazenost dnes/zítra, dnešní příjezdy bez přiřazeného pokoje,
-  - `dirtyRooms` blokující dnešní příjezdy (volá `buildHousekeepingPlan`),
-  - expirující holdy → `releaseExpiredHolds()` *(už existuje)*,
-  - nevyrovnané účty (`computeFolio` nad in-house), expirující `deposit_hold`,
-  - chybějící `RegistrationEntry` u cizinců (ubyhost),
-  - skartace `purgeExpiredRegistrations()` *(už existuje)*.
-- **AI vrstva:** `briefManager(audit, lang)` (Haiku) → mluvené shrnutí
-  („Dnes sedm příjezdů, tři pokoje ještě špinavé, dva nedoplatky…").
-- **Endpoint:** `GET /admin/briefing` (manažer) — vrátí audit + (na klik) AI shrnutí.
-- **Spouštění:** denní cron (OS scheduler / `node-cron`) volající interní endpoint;
-  výsledek uložit nebo poslat (e-mail/WhatsApp personálu — pozor na guardrail nákladů).
-- **UI:** karta „Ranní briefing" na dashboardu (`DashboardView`).
+### Co je implementováno
 
-**Náklady:** 1 LLM volání/den/provozovna. Zanedbatelné.
+- **`src/orchestrator.ts`**
+  - `runNightAudit(propertyId): Promise<NightAudit>` — **READ-ONLY** audit:
+    - obsazenost dnes/zítra (jednotky obsazené blokujícími rezervacemi / celkem),
+    - dnešní příjezdy a kolik z nich je bez přiřazené jednotky,
+    - dnešní odjezdy,
+    - fronta úklidu (urgentní/celkem) přes `buildHousekeepingPlan`,
+    - nevyrovnané účty ubytovaných (`computeFolio` nad `checked_in`) + celková částka,
+    - ubytovaní bez evidence (`RegistrationEntry` = 0 → ohlašovací povinnost),
+    - holdy aktivní / po expiraci, evidence po lhůtě uchování (ke skartaci),
+    - `flags[]` — krátká provozní upozornění (to nejdůležitější nahoře).
+  - `briefManager(audit, lang)` — volitelné mluvené AI shrnutí (Haiku), jen na klik.
+- **Endpointy** (`src/server.ts`)
+  - `GET  /admin/briefing` — noční audit (manažer)
+  - `POST /admin/briefing/brief` — AI ranní briefing
+- **Admin UI** (`admin/src/App.tsx`) — karta **`BriefingCard`** nahoře na dashboardu:
+  obsazenost dnes/zítra, příjezdy/odjezdy, seznam `flags` (✅/⚠️), tlačítko
+  „✨ AI shrnutí".
+
+### Záměrné rozhodnutí: audit je READ-ONLY
+
+Audit **nic nemaže ani nemění** — jen čte a počítá. Úklidové/maintenance akce
+(uvolnění expirovaných holdů, skartace) zůstávají na samostatných, již existujících
+endpointech `POST /maintenance/release-holds` a `POST /maintenance/purge-registrations`.
+Briefing je tedy bezpečné kdykoli otevřít/refreshnout; jen **reportuje počty** „k
+uvolnění / ke skartaci". Pozn.: tyto dvě maintenance funkce jsou **globální** (napříč
+provozovnami), proto je nevoláme z per-property auditu.
+
+### TODO pro fázi 2
+
+- **Cron spouštění** (zatím nenasazeno — jako autostart kiosku, je to deployment krok):
+  denní úloha (OS scheduler / `node-cron`) zavolá `GET /admin/briefing` +
+  `POST /maintenance/release-holds` + `…/purge-registrations` a výsledek pošle
+  (WhatsApp personálu / e-mail). Pozor na guardrail nákladů u AI shrnutí.
+- **Doručení briefingu** mimo admin (push/WhatsApp/e-mail).
+
+**Náklady:** AI shrnutí = 1 LLM volání na klik (nebo 1×/den z cronu). Audit sám zdarma.
 
 ---
 
@@ -199,7 +224,7 @@ Invoke-RestMethod -Uri http://localhost:4000/admin/housekeeping/plan -Headers $h
 | HTTP vrstva | `src/server.ts` | routy `/admin/*`, `/staff/*`, `/ai/*` |
 | Schéma | `prisma/schema.prisma` | enumy, modely |
 | Admin UI | `admin/src/App.tsx`, `api.ts`, `styles.css` | záložky, klient |
-| Orchestrátor | `src/orchestrator.ts` | **fáze 2 (TODO)** |
+| Orchestrátor / briefing | `src/orchestrator.ts` | **fáze 2** |
 | Pricing agent | `src/pricing-agent.ts` | **fáze 3 (TODO)** |
 
 ---
@@ -207,7 +232,7 @@ Invoke-RestMethod -Uri http://localhost:4000/admin/housekeeping/plan -Headers $h
 ## 8. Doporučené pořadí prací
 
 1. ✅ Housekeeping dispečer.
-2. Orchestrátor + ranní briefing (zhodnotí data, co už máš; 1 LLM volání/den).
+2. ✅ Orchestrátor + ranní briefing.
 3. Revenue pricing (měřitelný dopad na tržby; bez LLM).
 4. Compliance → billing → concierge → inventář.
 
