@@ -49,6 +49,7 @@ export function App() {
 
   const propTabs = [
     { id: "dashboard", label: "Přehled", icon: "📊" },
+    { id: "agents", label: "AI agenti", icon: "🤖" },
     { id: "reservations", label: "Rezervace", icon: "📋" },
     { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
     { id: "equipment", label: "Vybavení", icon: "🧰" },
@@ -88,6 +89,7 @@ export function App() {
 
       <main className="main">
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
+        {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
@@ -139,6 +141,93 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const reload = () => { setError(""); fn().then(setData).catch((e) => setError(e.message)); };
   useEffect(reload, deps); // eslint-disable-line
   return { data, error, reload };
+}
+
+// ── AI agenti: velín — co každý agent dělá + jeho živý stav ───
+type AgentTone = "ok" | "warn" | "danger" | "idle";
+type AgentStatus = { label: string; tone: AgentTone };
+
+function AgentsView({ selId, onOpen }: { selId: string; onOpen: (tab: string) => void }) {
+  const hk = useAsync<HousekeepingPlan>(() => api.housekeepingPlan(), [selId]);
+  const mt = useAsync<MaintenancePlan>(() => api.maintenancePlan(), [selId]);
+  const ck = useAsync<ChecksResult>(() => api.checks(), [selId]);
+  const bf = useAsync<NightAudit>(() => api.briefing(), [selId]);
+
+  // Z dat agenta odvodí jeho aktuální stav (barva + text). plural = české skloňování.
+  const loading: AgentStatus = { label: "Načítám…", tone: "idle" };
+  const plural = (n: number, one: string, few: string, many: string) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
+  const planStatus = (p: HousekeepingPlan | MaintenancePlan | null | undefined, u: [string, string, string], f: [string, string, string], okLabel: string): AgentStatus =>
+    !p ? loading : p.counts.urgent > 0 ? { label: plural(p.counts.urgent, ...u), tone: "danger" }
+      : p.counts.total > 0 ? { label: plural(p.counts.total, ...f), tone: "warn" }
+      : { label: okLabel, tone: "ok" };
+
+  const agents: { icon: string; name: string; tagline: string; how: string; tab: string | null; status: AgentStatus }[] = [
+    {
+      icon: "🛎️", name: "AI recepční", tab: null,
+      tagline: "Na kiosku odbaví hosta sama — najde volný pokoj, řekne cenu, založí rezervaci i check-in.",
+      how: "Mluví a rozumí v jedenácti jazycích a drží se výhradně témat ubytování. Ceny a dostupnost si vždy ověří, nic si nevymýšlí.",
+      status: { label: "Aktivní na kiosku", tone: "ok" },
+    },
+    {
+      icon: "☀️", name: "Ranní briefing", tab: "dashboard",
+      tagline: "Každé ráno projde celý provoz a shrne, co dnes čeká.",
+      how: "Obsazenost, příjezdy a odjezdy, nevyrovnané účty, hosté bez evidence i pokoje k úklidu — z dat udělá jeden přehled a upozorní na to, co nepočká.",
+      status: !bf.data ? loading : (bf.data.flags.length === 1 && bf.data.flags[0].startsWith("Vše v pořádku"))
+        ? { label: "Vše v pořádku", tone: "ok" } : { label: plural(bf.data.flags.length, "bod k řešení", "body k řešení", "bodů k řešení"), tone: "warn" },
+    },
+    {
+      icon: "🧹", name: "Housekeeping dispečer", tab: "housekeeping",
+      tagline: "Řadí frontu úklidu podle provozu — pokoj, kam dnes někdo přijíždí, jde nahoru.",
+      how: "Když je daného typu pokoje na dnešní příjezdy nedostatek, označí úklid jako urgentní, ať je co nabídnout. Host-nahlášené požadavky a staré tikety povýší.",
+      status: planStatus(hk.data, ["urgentní úklid", "urgentní úklidy", "urgentních úklidů"], ["pokoj k úklidu", "pokoje k úklidu", "pokojů k úklidu"], "Vše uklizeno"),
+    },
+    {
+      icon: "🔧", name: "Údržba triage", tab: "maintenance",
+      tagline: "Z popisu závady pozná, o co jde, a podle toho určí naléhavost.",
+      how: "Bezpečnostní věci (plyn, elektřina, zámek) a závady v obsazených pokojích řeší první. Napojí i poškozené vybavení v pokoji.",
+      status: planStatus(mt.data, ["urgentní oprava", "urgentní opravy", "urgentních oprav"], ["oprava ve frontě", "opravy ve frontě", "oprav ve frontě"], "Nic k opravě"),
+    },
+    {
+      icon: "✨", name: "Revenue / ceny", tab: "types",
+      tagline: "Navrhne ceny na dny dopředu podle obsazenosti, blízkosti termínu a víkendů.",
+      how: "Plné termíny zdraží, slabé doprodá. Ceny vždy jen navrhuje — poslední slovo máš ty, zapisují se až po schválení.",
+      status: { label: "Na vyžádání", tone: "idle" },
+    },
+    {
+      icon: "✅", name: "Kontrolní agent", tab: "checks",
+      tagline: "Hlídá evidenci hostů, pohledávky a inventář najednou.",
+      how: "Vypíše konkrétní věci k vyřízení seřazené podle závažnosti — od hostů bez evidence a nedoplatků po poškozené vybavení.",
+      status: !ck.data ? loading : ck.data.counts.high > 0 ? { label: plural(ck.data.counts.high, "nález vysoké priority", "nálezy vysoké priority", "nálezů vysoké priority"), tone: "danger" }
+        : ck.data.counts.total > 0 ? { label: plural(ck.data.counts.total, "nález", "nálezy", "nálezů"), tone: "warn" } : { label: "Bez nálezů", tone: "ok" },
+    },
+  ];
+
+  return (
+    <>
+      <div className="h1">AI agenti <span className="muted" style={{ fontSize: 14 }}>tým, který hlídá provoz za tebe</span></div>
+      <p className="muted" style={{ marginTop: -6, marginBottom: 16, maxWidth: 760 }}>
+        Každý agent má na starosti jednu oblast. Rozhoduje se podle jasných pravidel z reálných dat provozovny, počítá průběžně a zdarma — umělou inteligenci (Claude) volá jen na vyžádání u shrnutí. Nevratné kroky (ceny, mazání) vždy jen navrhne ke schválení.
+      </p>
+      <div className="agent-grid">
+        {agents.map((a) => (
+          <div key={a.name} className="agent-card">
+            <div className="agent-top">
+              <span className="agent-icon">{a.icon}</span>
+              <span className={`dot dot-${a.status.tone}`} title={a.status.label} />
+            </div>
+            <div className="agent-name">{a.name}</div>
+            <div className="agent-tag">{a.tagline}</div>
+            <div className="agent-how">{a.how}</div>
+            <div className="agent-foot">
+              <span className={`agent-status st-${a.status.tone}`}>{a.status.label}</span>
+              {a.tab ? <button className="btn sm ghost" onClick={() => onOpen(a.tab!)}>Otevřít →</button>
+                : <span className="muted" style={{ fontSize: 13 }}>běží na kiosku</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 // ── Dashboard ────────────────────────────────────────────────

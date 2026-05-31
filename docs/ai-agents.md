@@ -74,6 +74,15 @@ Datový model: `prisma/schema.prisma`. Klíčové entity scopované na `Property
 2. **Událostní** — operace v systému spustí agenta (checkout → úklidový tiket).
 3. **Plánovaný (cron)** — orchestrátor 1×/den udělá noční audit a ranní briefing.
 
+### Velín „AI agenti" (admin)
+
+Záložka **„🤖 AI agenti"** v adminu (`AgentsView` v `admin/src/App.tsx`) je přehled
+celého týmu: každý agent má kartu s popisem (co dělá + jak se rozhoduje) a **živým
+stavem** taženým z jeho dat (barevná tečka + text, např. „1 urgentní oprava",
+„Bez nálezů") a proklikem do jeho sekce. Stav se skládá z reálných počtů
+(`housekeepingPlan`, `maintenancePlan`, `checks`, `briefing`); skloňování řeší
+helper `plural()`.
+
 ---
 
 ## 3. Fáze 1 — Housekeeping dispečer ✅ HOTOVO

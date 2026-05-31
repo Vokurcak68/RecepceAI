@@ -67,6 +67,20 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .b-dirty { background: #fff5e6; color: var(--warn); }
 .b-out_of_service { background: #fdeceb; color: var(--danger); }
 
+/* AI agenti — velín */
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.agent-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+.agent-top { display: flex; justify-content: space-between; align-items: center; }
+.agent-icon { font-size: 30px; line-height: 1; }
+.agent-name { font-weight: 700; font-size: 17px; }
+.agent-tag { font-size: 14px; color: var(--text); }
+.agent-how { font-size: 13px; color: var(--muted); line-height: 1.5; flex: 1; }
+.agent-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.agent-status { font-size: 13px; font-weight: 600; }
+.st-ok { color: var(--ok); } .st-warn { color: var(--warn); } .st-danger { color: var(--danger); } .st-idle { color: var(--muted); }
+.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.dot-ok { background: var(--ok); } .dot-warn { background: var(--warn); } .dot-danger { background: var(--danger); } .dot-idle { background: #cbd2dc; }
+
 /* Ranní briefing (orchestrátor) */
 .briefing { margin-bottom: 18px; padding: 16px 18px; border-left: 4px solid var(--accent); }
 .briefing-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
