@@ -1545,7 +1545,8 @@ function EquipmentView({ selId }: { selId: string }) {
 
       <div className="panel">
         <div className="toolbar" style={{ padding: "10px 16px", justifyContent: "flex-end" }}><button className="btn sm ghost" onClick={() => setLabels(items)}>🏷 QR štítky všech ({items.length})</button></div>
-        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={(e) => e.room ? `pokoj ${e.room.number}` : (e.propertyId ? "sklad provozovny" : "Centrální sklad")} />
+        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={(e) => e.room ? `pokoj ${e.room.number}` : (e.propertyId ? "sklad provozovny" : "Centrální sklad")}
+          onTake={async (e) => { await api.moveEquipment(e.id, { central: false, roomId: null, note: "převzato z centrálního skladu" }); refresh(); }} />
       </div>
 
       {detail && <EquipmentDetail item={detail} categories={cats.data ?? []} moveOptions={moveOptions} currentMove={detail.room ? (detail.roomId ?? "") : (detail.propertyId ? "" : "central")}
@@ -1633,7 +1634,7 @@ function CentralEquipmentView() {
 }
 
 // Tabulka vybavení s výběrem (checkboxy).
-function EquipTable({ items, sel, setSel, onDetail, location }: { items: Equipment[]; sel: Set<string>; setSel: (s: Set<string>) => void; onDetail: (e: Equipment) => void; location: (e: Equipment) => string }) {
+function EquipTable({ items, sel, setSel, onDetail, location, onTake }: { items: Equipment[]; sel: Set<string>; setSel: (s: Set<string>) => void; onDetail: (e: Equipment) => void; location: (e: Equipment) => string; onTake?: (e: Equipment) => void }) {
   if (!items.length) return <div className="empty">Žádné vybavení</div>;
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
   const allOn = items.every((e) => sel.has(e.id));
@@ -1643,17 +1644,23 @@ function EquipTable({ items, sel, setSel, onDetail, location }: { items: Equipme
         <th style={{ width: 36 }}><input type="checkbox" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(items.map((e) => e.id)))} /></th>
         <th>Kód</th><th>Název</th><th>Kategorie</th><th>Umístění</th><th>Stav</th><th className="right"></th>
       </tr></thead>
-      <tbody>{items.map((e) => (
-        <tr key={e.id}>
+      <tbody>{items.map((e) => {
+        const central = !e.propertyId && !e.roomId;
+        return (
+        <tr key={e.id} className={central && onTake ? "row-central" : ""}>
           <td><input type="checkbox" checked={sel.has(e.id)} onChange={() => toggle(e.id)} /></td>
           <td className="muted">{e.code}</td>
           <td><b>{e.name}</b>{e.serialNumber && <div className="muted">SN {e.serialNumber}</div>}</td>
           <td>{e.category?.name ?? "—"}</td>
-          <td>{location(e)}</td>
+          <td>{location(e)}{central && onTake && <span className="chip-central">sdílené</span>}</td>
           <td><Badge s={e.condition} /></td>
-          <td className="right"><button className="btn sm" onClick={() => onDetail(e)}>Detail</button></td>
+          <td className="right">
+            {central && onTake && <button className="btn sm ok" onClick={() => onTake(e)}>Převzít</button>}{" "}
+            <button className="btn sm" onClick={() => onDetail(e)}>Detail</button>
+          </td>
         </tr>
-      ))}</tbody>
+        );
+      })}</tbody>
     </table>
   );
 }
