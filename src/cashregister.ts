@@ -1,10 +1,21 @@
 // Pokladna — pokladní směny, příjmy/výdaje hotovosti, denní uzávěrka.
 // Karty/převody do šuplíku nepatří (vyúčtuje banka) — pokladna sleduje HOTOVOST.
 // Hotovostní platby se do otevřené směny zapisují automaticky (recordCashPayment).
-import { Prisma, CashMovementKind } from "@prisma/client";
+import { Prisma, CashMovementKind, PaymentMethod, PaymentStatus } from "@prisma/client";
 import { prisma } from "./prisma";
 
 const dec = (v: Prisma.Decimal | number) => new Prisma.Decimal(v);
+
+/** Tržby kartou (a jiné bezhotovostní) za směny — nejdou do šuplíku, ale do uzávěrky patří. */
+async function cardTotals(sessionIds: string[]): Promise<Map<string, string>> {
+  if (!sessionIds.length) return new Map();
+  const rows = await prisma.payment.groupBy({
+    by: ["cashSessionId"],
+    where: { cashSessionId: { in: sessionIds }, method: PaymentMethod.card_terminal, status: PaymentStatus.succeeded },
+    _sum: { amount: true },
+  });
+  return new Map(rows.map((r) => [r.cashSessionId as string, (r._sum.amount ?? new Prisma.Decimal(0)).toFixed(2)]));
+}
 
 /** Každá provozovna má jednu výchozí pokladnu (vytvoří se při prvním použití). */
 async function getOrCreateRegister(propertyId: string) {
@@ -35,6 +46,7 @@ function summarize(s: RawSession) {
       expected: expected.toFixed(2),
       counted: counted != null ? counted.toFixed(2) : null,
       difference: counted != null ? counted.sub(expected).toFixed(2) : null,
+      card: "0.00", // tržby kartou — doplní se asynchronně (cardTotals)
     },
   };
 }
@@ -48,7 +60,9 @@ export async function getState(propertyId: string) {
     orderBy: { openedAt: "desc" },
   });
   if (!open) return { register: { id: register.id, name: register.name }, session: null };
-  const [named] = await withNames([summarize(open)]);
+  const s = summarize(open);
+  s.summary.card = (await cardTotals([open.id])).get(open.id) ?? "0.00";
+  const [named] = await withNames([s]);
   return { register: { id: register.id, name: register.name }, session: named };
 }
 
@@ -84,15 +98,24 @@ export async function listSessions(propertyId: string) {
     where: { registerId: register.id, closedAt: { not: null } },
     include: { movements: true }, orderBy: { openedAt: "desc" }, take: 60,
   });
-  return withNames(sessions.map(summarize));
+  const summarized = sessions.map(summarize);
+  const cards = await cardTotals(summarized.map((s) => s.id));
+  summarized.forEach((s) => { s.summary.card = cards.get(s.id) ?? "0.00"; });
+  return withNames(summarized);
 }
 
-/** Zapíše hotovostní platbu jako příjem do otevřené směny (pokud běží). */
-export async function recordCashPayment(propertyId: string, input: { paymentId: string; amount: Prisma.Decimal | number; documentId?: string | null; note?: string | null }) {
+/**
+ * Naváže platbu na otevřenou směnu. Hotovost navíc zapíše jako příjem do šuplíku
+ * (CashMovement); karta/převod jdou jen do směny (tržby kartou, ne do šuplíku).
+ */
+export async function recordPayment(propertyId: string, input: { paymentId: string; amount: Prisma.Decimal | number; method: PaymentMethod; documentId?: string | null; note?: string | null }) {
   const register = await getOrCreateRegister(propertyId);
   const open = await prisma.cashRegisterSession.findFirst({ where: { registerId: register.id, closedAt: null } });
-  if (!open) return; // bez otevřené směny hotovost neevidujeme do pokladny
-  await prisma.cashMovement.create({
-    data: { sessionId: open.id, kind: CashMovementKind.income, amount: dec(input.amount), paymentId: input.paymentId, documentId: input.documentId ?? null, note: input.note ?? "Platba v hotovosti" },
-  });
+  if (!open) return; // bez otevřené směny do pokladny nezapisujeme
+  await prisma.payment.update({ where: { id: input.paymentId }, data: { cashSessionId: open.id } });
+  if (input.method === PaymentMethod.cash) {
+    await prisma.cashMovement.create({
+      data: { sessionId: open.id, kind: CashMovementKind.income, amount: dec(input.amount), paymentId: input.paymentId, documentId: input.documentId ?? null, note: input.note ?? "Platba v hotovosti" },
+    });
+  }
 }

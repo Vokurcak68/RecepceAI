@@ -284,7 +284,7 @@ adminRouter.post("/reservations/:id/checkout", h((req, res) => admin.adminCheckO
 adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
   const b = z.object({ type: z.nativeEnum(PaymentType), amount: z.number(), method: z.nativeEnum(PaymentMethod).optional(), description: z.string().optional(), invoiceNumber: z.string().optional() }).parse(req.body);
   const payment = await admin.adminAddPayment(pid(res), req.params.id, b);
-  if (b.method === PaymentMethod.cash) await cash.recordCashPayment(pid(res), { paymentId: payment.id, amount: payment.amount, note: payment.description }); // hotovost → do otevřené směny
+  await cash.recordPayment(pid(res), { paymentId: payment.id, amount: payment.amount, method: payment.method, note: payment.description ?? undefined }); // naváže na směnu (hotovost i karta)
   return payment;
 }));
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));

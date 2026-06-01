@@ -182,10 +182,8 @@ export async function payDocument(propertyId: string, documentId: string, method
   const payment = await prisma.payment.create({
     data: { reservationId, documentId: doc.id, type: PaymentType.balance, amount: remaining, method, status: PaymentStatus.succeeded, description: `Úhrada ${doc.number}` },
   });
-  // Hotovost → do otevřené pokladní směny, navázané na doklad + zákazníka.
-  if (method === PaymentMethod.cash) {
-    await cash.recordCashPayment(propertyId, { paymentId: payment.id, amount: remaining, documentId: doc.id, note: `${doc.number} — ${doc.customerName}` });
-  }
+  // Naváže platbu na otevřenou směnu (hotovost i do šuplíku, karta jako tržba kartou).
+  await cash.recordPayment(propertyId, { paymentId: payment.id, amount: remaining, method, documentId: doc.id, note: `${doc.number} — ${doc.customerName}` });
   // paidTotal dle folia rezervace (po přidání platby), stav podle úhrady.
   const folio = await computeFolio(reservationId);
   return prisma.document.update({

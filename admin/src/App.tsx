@@ -1227,9 +1227,10 @@ function CashRegisterView({ selId }: { selId: string }) {
               <button className="btn" disabled={busy} onClick={close}>🔒 Uzávěrka</button>
             </div>
             <div className="stats" style={{ marginTop: 14 }}>
-              <div className="stat"><div className="n">{money(s.summary.income)}</div><div className="l">Příjem</div></div>
+              <div className="stat"><div className="n">{money(s.summary.income)}</div><div className="l">Příjem hotově</div></div>
               <div className="stat"><div className="n">{money(s.summary.expense)}</div><div className="l">Výdej</div></div>
               <div className="stat"><div className="n">{money(s.summary.expected)}</div><div className="l">Očekávaná hotovost</div></div>
+              <div className="stat"><div className="n">{money(s.summary.card)}</div><div className="l">💳 Tržby kartou</div></div>
             </div>
           </div>
 
@@ -1262,7 +1263,7 @@ function CashRegisterView({ selId }: { selId: string }) {
 
       <div className="panel">
         <h3>Uzávěrky</h3>
-        <Table cols={["Otevřeno", "Zavřeno", "Kdo", "Počáteční", "Příjem", "Výdej", "Očekáváno", "Spočítáno", "Rozdíl"]} rows={hist.data ?? []} empty="Žádné uzávěrky"
+        <Table cols={["Otevřeno", "Zavřeno", "Kdo", "Počáteční", "Příjem hot.", "Výdej", "Očekáváno", "Spočítáno", "Rozdíl", "💳 Kartou"]} rows={hist.data ?? []} empty="Žádné uzávěrky"
           render={(x: CashSession) => {
             const diff = x.summary.difference ? parseFloat(x.summary.difference) : 0;
             return (
@@ -1276,6 +1277,7 @@ function CashRegisterView({ selId }: { selId: string }) {
                 <td>{money(x.summary.expected)}</td>
                 <td>{x.summary.counted ? money(x.summary.counted) : "—"}</td>
                 <td className={diff < 0 ? "price-down" : diff > 0 ? "price-up" : "muted"}>{x.summary.difference ? money(x.summary.difference) : "—"}</td>
+                <td className="muted">{money(x.summary.card)}</td>
               </tr>
             );
           }} />

@@ -68,7 +68,7 @@ export const DOC_TYPE_LABEL: Record<string, string> = { proforma: "Zálohová fa
 export const DOC_STATUS_LABEL: Record<string, string> = { draft: "Koncept", issued: "Vystaveno", paid: "Zaplaceno", cancelled: "Storno" };
 
 export type CashMovement = { id: string; kind: "income" | "expense"; amount: Money; note: string | null; paymentId: string | null; createdAt: string };
-export type CashSummary = { openingFloat: Money; income: Money; expense: Money; expected: Money; counted: Money | null; difference: Money | null };
+export type CashSummary = { openingFloat: Money; income: Money; expense: Money; expected: Money; counted: Money | null; difference: Money | null; card: Money };
 export type CashSession = {
   id: string; openedAt: string; openedByName: string; openingFloat: Money;
   closedAt: string | null; closedByName: string | null; countedCash: Money | null; note: string | null;
