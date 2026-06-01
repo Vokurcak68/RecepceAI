@@ -46,9 +46,9 @@ tr:last-child td { border-bottom: none; }
 .empty { padding: 26px; color: var(--muted); text-align: center; }
 
 /* Inputs / buttons */
-input, select { font: inherit; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--text); }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
-.btn { font: inherit; padding: 9px 16px; border: none; border-radius: 9px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+input, select, textarea { font: inherit; font-size: 14px; line-height: 1.3; padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--text); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.btn { font: inherit; font-size: 14px; line-height: 1.3; padding: 8px 15px; border: none; border-radius: 9px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
 .btn:hover { filter: brightness(1.05); }
 .btn.sm { padding: 6px 11px; font-size: 13px; }
 .btn.ghost { background: #eef2ff; color: var(--accent); }
