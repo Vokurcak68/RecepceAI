@@ -160,6 +160,7 @@ export const api = {
   issueDocument: (resId: string, type: "invoice" | "receipt") => req<Doc>(`/admin/reservations/${resId}/documents`, { method: "POST", body: JSON.stringify({ type }) }),
   issueProforma: (resId: string, amount: number, dueInDays?: number) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays }) }),
   cancelDocument: (id: string) => req(`/admin/documents/${id}/cancel`, { method: "POST" }),
+  payDocument: (id: string, method: "cash" | "card_terminal") => req<Doc>(`/admin/documents/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),

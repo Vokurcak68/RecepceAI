@@ -1,10 +1,11 @@
 // Doklady (faktury, zálohy, účtenky) — tvorba s číselnými řadami a DPH dle
 // plátcovství provozovny. Dodavatel i odběratel se ukládají jako SNÍMEK na doklad,
 // aby byl neměnný. Karty se jen evidují (žádná integrace terminálu).
-import { Prisma, BillingDocType, DocumentStatus, PaymentStatus, PaymentType } from "@prisma/client";
+import { Prisma, BillingDocType, DocumentStatus, PaymentStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import { prisma } from "./prisma";
 import { toDateOnly, addDays } from "./dates";
 import { computeFolio } from "./reservations";
+import * as cash from "./cashregister";
 
 // Sazby DPH v ČR: ubytování 12 %, pobytový poplatek mimo DPH (0), ostatní 21 %.
 export const VAT_ACCOMMODATION = 12;
@@ -163,6 +164,35 @@ export async function getDocument(propertyId: string, id: string) {
   const doc = await prisma.document.findFirst({ where: { id, propertyId }, include: DOC_INCLUDE });
   if (!doc) throw NOT_FOUND();
   return doc;
+}
+
+/**
+ * Úhrada dokladu zákazníkem (hotově / kartou). Platba se naváže na DOKLAD i rezervaci,
+ * u hotovosti spadne do otevřené pokladní směny s odkazem na číslo dokladu a zákazníka.
+ */
+export async function payDocument(propertyId: string, documentId: string, method: PaymentMethod) {
+  const doc = await prisma.document.findFirst({ where: { id: documentId, propertyId }, include: { reservations: true } });
+  if (!doc) throw NOT_FOUND();
+  if (doc.status === DocumentStatus.cancelled) throw new Error("Doklad je stornovaný.");
+  const remaining = doc.total.sub(doc.paidTotal);
+  if (remaining.lessThanOrEqualTo(0.005)) throw new Error("Doklad je již uhrazen.");
+  const reservationId = doc.reservations[0]?.reservationId;
+  if (!reservationId) throw new Error("Doklad není navázán na rezervaci.");
+
+  const payment = await prisma.payment.create({
+    data: { reservationId, documentId: doc.id, type: PaymentType.balance, amount: remaining, method, status: PaymentStatus.succeeded, description: `Úhrada ${doc.number}` },
+  });
+  // Hotovost → do otevřené pokladní směny, navázané na doklad + zákazníka.
+  if (method === PaymentMethod.cash) {
+    await cash.recordCashPayment(propertyId, { paymentId: payment.id, amount: remaining, documentId: doc.id, note: `${doc.number} — ${doc.customerName}` });
+  }
+  // paidTotal dle folia rezervace (po přidání platby), stav podle úhrady.
+  const folio = await computeFolio(reservationId);
+  return prisma.document.update({
+    where: { id: doc.id },
+    data: { paidTotal: folio.paid, status: folio.paid.greaterThanOrEqualTo(doc.total) ? DocumentStatus.paid : DocumentStatus.issued },
+    include: DOC_INCLUDE,
+  });
 }
 
 /** Storno dokladu (opravný doklad se řeší zvlášť). */

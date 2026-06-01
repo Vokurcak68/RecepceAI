@@ -284,7 +284,7 @@ adminRouter.post("/reservations/:id/checkout", h((req, res) => admin.adminCheckO
 adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
   const b = z.object({ type: z.nativeEnum(PaymentType), amount: z.number(), method: z.nativeEnum(PaymentMethod).optional(), description: z.string().optional(), invoiceNumber: z.string().optional() }).parse(req.body);
   const payment = await admin.adminAddPayment(pid(res), req.params.id, b);
-  if (b.method === PaymentMethod.cash) await cash.recordCashPayment(pid(res), payment); // hotovost → do otevřené směny
+  if (b.method === PaymentMethod.cash) await cash.recordCashPayment(pid(res), { paymentId: payment.id, amount: payment.amount, note: payment.description }); // hotovost → do otevřené směny
   return payment;
 }));
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
@@ -334,6 +334,10 @@ adminRouter.get("/documents", h((req, res) => {
 }));
 adminRouter.get("/documents/:id", h((req, res) => billing.getDocument(pid(res), req.params.id)));
 adminRouter.post("/documents/:id/cancel", h((req, res) => billing.cancelDocument(pid(res), req.params.id)));
+adminRouter.post("/documents/:id/pay", h((req, res) => {
+  const b = z.object({ method: z.enum(["cash", "card_terminal", "prepaid", "invoice"]) }).parse(req.body);
+  return billing.payDocument(pid(res), req.params.id, b.method as PaymentMethod);
+}));
 adminRouter.post("/reservations/:id/documents", h((req, res) => {
   const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});
   return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType);

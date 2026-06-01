@@ -1114,53 +1114,70 @@ function DocumentsView({ selId }: { selId: string }) {
             </tr>
           )} />
       </div>
-      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
+      {doc && <DocumentOverlay doc={doc} onClose={() => { setDoc(null); reload(); }} />}
     </>
   );
 }
 
 function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
-  const due = parseFloat(doc.total) - parseFloat(doc.paidTotal);
+  const [cur, setCur] = useState<Doc>(doc);
+  const [busy, setBusy] = useState(false);
+  const [perr, setPerr] = useState("");
+  const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
+  const pay = async (method: "cash" | "card_terminal") => {
+    setBusy(true); setPerr("");
+    try { setCur(await api.payDocument(cur.id, method)); }
+    catch (e) { setPerr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="inv-backdrop" onClick={onClose}>
       <div className="invoice" onClick={(e) => e.stopPropagation()}>
         <div className="inv-head">
           <div>
-            <h2 style={{ margin: 0 }}>{DOC_TYPE_LABEL[doc.type] ?? "Doklad"}</h2>
-            <div className="muted" style={{ marginTop: 2 }}>č. {doc.number}{doc.status === "cancelled" ? " · STORNO" : ""}</div>
+            <h2 style={{ margin: 0 }}>{DOC_TYPE_LABEL[cur.type] ?? "Doklad"}</h2>
+            <div className="muted" style={{ marginTop: 2 }}>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</div>
             <div className="muted" style={{ marginTop: 8 }}>
-              <b>{doc.supplierName}</b><br />
-              {doc.supplierAddress}
-              {(doc.supplierIco || doc.supplierDic) && <><br />{doc.supplierIco ? `IČO: ${doc.supplierIco}` : ""}{doc.supplierIco && doc.supplierDic ? " · " : ""}{doc.supplierDic ? `DIČ: ${doc.supplierDic}` : ""}</>}
-              {!doc.vatPayer && <><br />Neplátce DPH</>}
+              <b>{cur.supplierName}</b><br />
+              {cur.supplierAddress}
+              {(cur.supplierIco || cur.supplierDic) && <><br />{cur.supplierIco ? `IČO: ${cur.supplierIco}` : ""}{cur.supplierIco && cur.supplierDic ? " · " : ""}{cur.supplierDic ? `DIČ: ${cur.supplierDic}` : ""}</>}
+              {!cur.vatPayer && <><br />Neplátce DPH</>}
             </div>
           </div>
           <div className="inv-to">
             <div className="muted">Odběratel</div>
-            <b>{doc.customerName}</b>
-            {doc.customerAddress && <div>{doc.customerAddress}</div>}
-            {doc.customerIco && <div>IČO: {doc.customerIco}</div>}
-            {doc.customerDic && <div>DIČ: {doc.customerDic}</div>}
+            <b>{cur.customerName}</b>
+            {cur.customerAddress && <div>{cur.customerAddress}</div>}
+            {cur.customerIco && <div>IČO: {cur.customerIco}</div>}
+            {cur.customerDic && <div>DIČ: {cur.customerDic}</div>}
           </div>
         </div>
         <div className="muted" style={{ margin: "6px 0 14px" }}>
-          Vystaveno {d(doc.issuedAt)}{doc.taxDate ? ` · DUZP ${d(doc.taxDate)}` : ""}{doc.dueDate ? ` · splatnost ${d(doc.dueDate)}` : ""}
-          {doc.reservations?.length ? ` · rezervace ${doc.reservations.map((x) => x.reservation.code).join(", ")}` : ""}
+          Vystaveno {d(cur.issuedAt)}{cur.taxDate ? ` · DUZP ${d(cur.taxDate)}` : ""}{cur.dueDate ? ` · splatnost ${d(cur.dueDate)}` : ""}
+          {cur.reservations?.length ? ` · rezervace ${cur.reservations.map((x) => x.reservation.code).join(", ")}` : ""}
         </div>
         <table>
-          <thead><tr><th>Položka</th><th className="right">Množ.</th><th className="right">Cena</th>{doc.vatPayer && <th className="right">DPH</th>}<th className="right">Celkem</th></tr></thead>
-          <tbody>{(doc.lines ?? []).map((l: DocLine) => (
-            <tr key={l.id}><td>{l.label}</td><td className="right">{parseFloat(l.qty)}</td><td className="right">{money(l.unitPrice)}</td>{doc.vatPayer && <td className="right muted">{parseFloat(l.vatRate)} %</td>}<td className="right">{money(l.lineTotal)}</td></tr>
+          <thead><tr><th>Položka</th><th className="right">Množ.</th><th className="right">Cena</th>{cur.vatPayer && <th className="right">DPH</th>}<th className="right">Celkem</th></tr></thead>
+          <tbody>{(cur.lines ?? []).map((l: DocLine) => (
+            <tr key={l.id}><td>{l.label}</td><td className="right">{parseFloat(l.qty)}</td><td className="right">{money(l.unitPrice)}</td>{cur.vatPayer && <td className="right muted">{parseFloat(l.vatRate)} %</td>}<td className="right">{money(l.lineTotal)}</td></tr>
           ))}</tbody>
         </table>
-        {doc.vatPayer && (<>
-          <div className="kvline"><span className="muted">Základ</span><span>{money(doc.subtotal)}</span></div>
-          <div className="kvline"><span className="muted">DPH</span><span>{money(doc.vatTotal)}</span></div>
+        {cur.vatPayer && (<>
+          <div className="kvline"><span className="muted">Základ</span><span>{money(cur.subtotal)}</span></div>
+          <div className="kvline"><span className="muted">DPH</span><span>{money(cur.vatTotal)}</span></div>
         </>)}
-        <div className="inv-total"><span>Celkem{doc.vatPayer ? " vč. DPH" : ""}</span><b>{money(doc.total)}</b></div>
-        <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(doc.paidTotal)}</span></div>
+        <div className="inv-total"><span>Celkem{cur.vatPayer ? " vč. DPH" : ""}</span><b>{money(cur.total)}</b></div>
+        <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(cur.paidTotal)}</span></div>
         {due > 0.005 && <div className="kvline"><span className="muted">Zbývá uhradit</span><b>{money(due.toFixed(2))}</b></div>}
-        <div className="inv-actions no-print"><button className="btn" onClick={() => window.print()}>🖨 Tisk</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+        {perr && <div className="error" style={{ marginTop: 10 }}>{perr}</div>}
+        <div className="inv-actions no-print">
+          {due > 0.005 && cur.status !== "cancelled" && <>
+            <button className="btn ok" disabled={busy} onClick={() => pay("cash")}>💵 Zaplatit hotově</button>
+            <button className="btn" disabled={busy} onClick={() => pay("card_terminal")}>💳 Zaplatit kartou</button>
+          </>}
+          <button className="btn ghost" onClick={() => window.print()}>🖨 Tisk</button>
+          <button className="btn ghost" onClick={onClose}>Zavřít</button>
+        </div>
       </div>
     </div>
   );

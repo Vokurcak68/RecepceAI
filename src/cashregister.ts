@@ -88,11 +88,11 @@ export async function listSessions(propertyId: string) {
 }
 
 /** Zapíše hotovostní platbu jako příjem do otevřené směny (pokud běží). */
-export async function recordCashPayment(propertyId: string, payment: { id: string; amount: Prisma.Decimal | number; description?: string | null }) {
+export async function recordCashPayment(propertyId: string, input: { paymentId: string; amount: Prisma.Decimal | number; documentId?: string | null; note?: string | null }) {
   const register = await getOrCreateRegister(propertyId);
   const open = await prisma.cashRegisterSession.findFirst({ where: { registerId: register.id, closedAt: null } });
   if (!open) return; // bez otevřené směny hotovost neevidujeme do pokladny
   await prisma.cashMovement.create({
-    data: { sessionId: open.id, kind: CashMovementKind.income, amount: dec(payment.amount), paymentId: payment.id, note: payment.description ?? "Platba v hotovosti" },
+    data: { sessionId: open.id, kind: CashMovementKind.income, amount: dec(input.amount), paymentId: input.paymentId, documentId: input.documentId ?? null, note: input.note ?? "Platba v hotovosti" },
   });
 }
