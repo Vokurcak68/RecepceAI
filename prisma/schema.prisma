@@ -361,6 +361,8 @@ model Reservation {
   source       ReservationSource @default(manual)
   billingCycle BillingCycle      @default(per_stay)
 
+  note String? // poznámka recepce — přání a požadavky hosta
+
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
   cityTax     Decimal @default(0) @db.Decimal(10, 2)
 

@@ -428,7 +428,7 @@ function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
           render={(o: OccupancyRow) => (
             <tr key={o.id}>
               <td><b>{o.unit}</b>{o.roomType ? <span className="muted"> · {o.roomType}</span> : null}</td>
-              <td>{o.guestName}</td>
+              <td>{o.guestName}{o.note ? <span title={o.note} style={{ cursor: "help" }}> 📝</span> : null}</td>
               <td className="muted">{o.guests}</td>
               <td>{d(o.checkInDate)} → {d(o.checkOutDate)}</td>
               <td className="muted">{o.charges > 0 ? `${o.charges}×` : "—"}</td>
@@ -959,6 +959,9 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
   const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
   const [gEdit, setGEdit] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteDirty, setNoteDirty] = useState(false);
+  useEffect(() => { if (data) { setNoteText(data.note ?? ""); setNoteDirty(false); } }, [data?.id]); // eslint-disable-line
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
@@ -975,6 +978,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
     run(async () => { if (gEdit) await api.updateResGuest(gEdit, body); else await api.addResGuest(id, body); resetGf(); });
   };
   const editGuest = (g: ResGuest) => { setGEdit(g.id); setGf({ firstName: g.guest.firstName, lastName: g.guest.lastName, address: g.guest.address ?? "", documentType: g.guest.documentType ?? "", documentNumber: g.guest.documentNumber ?? "" }); };
+  const saveNote = () => run(async () => { await api.saveReservationNote(id, noteText); });
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
 
@@ -1019,6 +1023,11 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
         </div>
+      </div>
+
+      <div className="panel"><h3>Poznámka <span className="muted" style={{ fontSize: 14 }}>přání a požadavky hosta</span></h3>
+        <textarea style={{ width: "100%", minHeight: 80, resize: "vertical" }} value={noteText} onChange={(e) => { setNoteText(e.target.value); setNoteDirty(true); }} placeholder="Např.: pozdní check-in po 22:00, alergie na ořechy, manželská postel místo dvou, dětská postýlka, parkování pro 2 auta, výhled do dvora…" />
+        {noteDirty && <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={saveNote}>Uložit poznámku</button> <button className="btn ghost" onClick={() => { setNoteText(data.note ?? ""); setNoteDirty(false); }}>Zrušit</button></div>}
       </div>
 
       <div className="panel"><h3>Hosté na pokoji</h3>

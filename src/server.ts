@@ -303,6 +303,7 @@ adminRouter.post("/reservations", h((req, res) => {
   return admin.createReservation({ propertyId: pid(res), ...b, from: new Date(b.from), to: new Date(b.to) });
 }));
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
+adminRouter.patch("/reservations/:id", h((req, res) => admin.updateReservationNote(pid(res), req.params.id, z.object({ note: z.string() }).parse(req.body).note)));
 adminRouter.get("/reservations/:id/folio", h((req, res) => admin.adminFolio(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkin", h((req, res) => admin.adminCheckIn(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkout", h(async (req, res) => {

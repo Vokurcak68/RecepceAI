@@ -135,6 +135,7 @@ export async function occupancy(propertyId: string) {
       guests: r._count.reservationGuests || 1,
       checkInDate: r.checkInDate, checkOutDate: r.checkOutDate,
       charges: r._count.charges, balance: folio.balance.toFixed(2),
+      note: r.note,
     });
   }
   return rows;
@@ -197,6 +198,11 @@ export async function buildInvoice(propertyId: string, id: string) {
     billing: { company: r.billingCompany, ico: r.billingIco, dic: r.billingDic },
     lines, total: folio.charges, paid: folio.paid, balance: folio.balance,
   };
+}
+
+export async function updateReservationNote(propertyId: string, id: string, note: string) {
+  await assertInProperty(propertyId, id);
+  return prisma.reservation.update({ where: { id }, data: { note: note || null } });
 }
 
 export async function cancelReservation(propertyId: string, id: string) {

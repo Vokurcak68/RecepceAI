@@ -42,7 +42,7 @@ export type Reservation = {
 export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string; stayFrom: string; stayTo: string };
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };
 export type Charge = { id: string; category: string; description: string | null; quantity: Money; unitPrice: Money; amount: Money; vatRate: Money; createdAt: string };
-export type OccupancyRow = { id: string; code: string; unit: string; roomType: string | null; guestName: string; guests: number; checkInDate: string; checkOutDate: string; charges: number; balance: Money };
+export type OccupancyRow = { id: string; code: string; unit: string; roomType: string | null; guestName: string; guests: number; checkInDate: string; checkOutDate: string; charges: number; balance: Money; note: string | null };
 export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null } };
 export type ServiceItem = { id: string; name: string; category: string; price: Money; vatRate: Money; active: boolean };
 export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
@@ -83,7 +83,7 @@ export type CashSession = {
 export type CashState = { register: { id: string; name: string }; session: CashSession | null };
 export type Folio = { charges: Money; paid: Money; balance: Money };
 export type ReservationDetail = Reservation & {
-  billingCompany: string | null; billingIco: string | null; billingDic: string | null;
+  billingCompany: string | null; billingIco: string | null; billingDic: string | null; note: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
 };
 export type Invoice = {
@@ -125,6 +125,7 @@ export const api = {
   createReservation: (b: unknown) => req<Reservation>(`/admin/reservations`, { method: "POST", body: JSON.stringify(b) }),
   cancel: (id: string) => req(`/admin/reservations/${id}/cancel`, { method: "POST" }),
   reservation: (id: string) => req<ReservationDetail>(`/admin/reservations/${id}`),
+  saveReservationNote: (id: string, note: string) => req(`/admin/reservations/${id}`, { method: "PATCH", body: JSON.stringify({ note }) }),
   resFolio: (id: string) => req<Folio>(`/admin/reservations/${id}/folio`),
   checkin: (id: string) => req(`/admin/reservations/${id}/checkin`, { method: "POST" }),
   checkout: (id: string) => req<{ document: Doc | null }>(`/admin/reservations/${id}/checkout`, { method: "POST" }),
