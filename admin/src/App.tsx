@@ -1516,7 +1516,7 @@ function EquipmentView({ selId }: { selId: string }) {
     <>
       <div className="h1">Vybavení (DHIM)</div>
       {error && <div className="error">{error}</div>}
-      <EquipStats items={items} />
+      <EquipStats items={items} centralSeparate />
 
       <div className="panel"><h3>Nový kus</h3>
         <div className="toolbar" style={{ padding: 16 }}>
@@ -1665,16 +1665,21 @@ function EquipTable({ items, sel, setSel, onDetail, location, onTake }: { items:
   );
 }
 
-// Statistika počtů.
-function EquipStats({ items }: { items: Equipment[] }) {
-  const c = (p: (e: Equipment) => boolean) => items.filter(p).length;
+// Statistika počtů. Při `centralSeparate` se kusy na centrálním skladu
+// nezapočítají do počtů provozovny a dostanou vlastní kolonku.
+function EquipStats({ items, centralSeparate }: { items: Equipment[]; centralSeparate?: boolean }) {
+  const isCentral = (e: Equipment) => !e.propertyId && !e.roomId;
+  const own = centralSeparate ? items.filter((e) => !isCentral(e)) : items;
+  const centralCount = items.filter(isCentral).length;
+  const c = (p: (e: Equipment) => boolean) => own.filter(p).length;
   return (
     <div className="stats">
-      <div className="stat"><div className="n">{items.length}</div><div className="l">Kusů celkem</div></div>
+      <div className="stat"><div className="n">{own.length}</div><div className="l">Kusů celkem</div></div>
       <div className="stat"><div className="n">{c((e) => e.condition === "ok")}</div><div className="l">V pořádku</div></div>
       <div className="stat warn"><div className="n">{c((e) => e.condition === "damaged")}</div><div className="l">Poškozeno</div></div>
       <div className="stat"><div className="n">{c((e) => e.condition === "retired")}</div><div className="l">Vyřazeno</div></div>
       <div className="stat"><div className="n">{c((e) => !!e.roomId)}</div><div className="l">V pokojích</div></div>
+      {centralSeparate && <div className="stat"><div className="n">{centralCount}</div><div className="l">Centrální sklad</div></div>}
     </div>
   );
 }
