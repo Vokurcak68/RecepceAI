@@ -278,13 +278,24 @@ adminRouter.use(propertyScope);
 adminRouter.get("/dashboard", h((req, res) => admin.dashboard(pid(res), req.query.date ? new Date(String(req.query.date)) : new Date())));
 adminRouter.get("/occupancy", h((_req, res) => admin.occupancy(pid(res))));
 
-// Hosté na pokoji (spolubydlící)
+// Hosté na pokoji (spolubydlící) — vč. adresy a dokladu, editace
+const guestBody = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), documentType: z.nativeEnum(DocumentType).nullable().optional(), documentNumber: z.string().optional() });
 adminRouter.get("/reservations/:id/guests", h((req, res) => admin.listReservationGuests(pid(res), req.params.id)));
-adminRouter.post("/reservations/:id/guests", h((req, res) => {
-  const b = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional() }).parse(req.body);
-  return admin.addReservationGuest(pid(res), req.params.id, b);
-}));
+adminRouter.post("/reservations/:id/guests", h((req, res) => admin.addReservationGuest(pid(res), req.params.id, guestBody.parse(req.body))));
+adminRouter.patch("/reservation-guests/:id", h((req, res) => admin.updateReservationGuest(pid(res), req.params.id, guestBody.partial().parse(req.body))));
 adminRouter.delete("/reservation-guests/:id", h((req, res) => admin.removeReservationGuest(pid(res), req.params.id)));
+
+// Ceník služeb (číselník)
+adminRouter.get("/service-items", h((_req, res) => admin.listServiceItems(pid(res))));
+adminRouter.post("/service-items", h((req, res) => {
+  const b = z.object({ name: z.string().min(1), category: z.nativeEnum(ChargeCategory), price: z.number().nonnegative(), vatRate: z.number().nonnegative().optional() }).parse(req.body);
+  return admin.createServiceItem(pid(res), b);
+}));
+adminRouter.patch("/service-items/:id", h((req, res) => {
+  const b = z.object({ name: z.string().optional(), category: z.nativeEnum(ChargeCategory).optional(), price: z.number().nonnegative().optional(), vatRate: z.number().nonnegative().optional() }).parse(req.body);
+  return admin.updateServiceItem(pid(res), req.params.id, b);
+}));
+adminRouter.delete("/service-items/:id", h((req, res) => admin.deleteServiceItem(pid(res), req.params.id)));
 
 adminRouter.get("/reservations", h((req, res) => admin.listReservations(pid(res), { status: req.query.status as string | undefined, q: req.query.q as string | undefined })));
 adminRouter.post("/reservations", h((req, res) => {

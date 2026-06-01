@@ -187,7 +187,8 @@ tr.row-high { box-shadow: inset 3px 0 0 var(--warn); }
 
 @media print {
   body * { visibility: hidden; }
+  .inv-backdrop { position: static; background: none; display: block; }
   .invoice, .invoice * { visibility: visible; }
-  .invoice { position: absolute; inset: 0; margin: 0; width: 100%; max-width: none; box-shadow: none; border-radius: 0; }
-  .no-print { display: none; }
+  .invoice { position: static; margin: 0; width: 100%; max-width: none; max-height: none; overflow: visible; box-shadow: none; border-radius: 0; padding: 0; }
+  .no-print { display: none !important; }
 }

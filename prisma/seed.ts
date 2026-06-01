@@ -114,6 +114,17 @@ async function main() {
   const room201 = await prisma.room.findFirstOrThrow({ where: { propertyId: hotel.id, number: "201" } });
   await prisma.ratePlan.create({ data: { roomTypeId: hDouble.id, date: day(2), price: D(1700) } });
 
+  // Ceník služeb (číselník) — nabídne se cena při připsání na účet.
+  await prisma.serviceItem.createMany({ data: [
+    { propertyId: hotel.id, name: "Cola 0,33", category: "minibar", price: D(45), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Voda 0,5", category: "minibar", price: D(35), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Pivo 0,5", category: "minibar", price: D(55), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Masáž 60 min", category: "wellness", price: D(800), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Vstup do sauny", category: "wellness", price: D(250), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Parkování / noc", category: "parking", price: D(200), vatRate: D(21) },
+    { propertyId: hotel.id, name: "Snídaně", category: "restaurant", price: D(180), vatRate: D(12) },
+  ] });
+
   // Číselník kategorií vybavení.
   const catNames = ["Elektro", "Nábytek", "Ložní prádlo", "Vybavení koupelny", "Kuchyňské spotřebiče"];
   const cats: Record<string, string> = {};

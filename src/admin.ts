@@ -4,7 +4,7 @@ import { prisma } from "./prisma";
 import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
-import { ChargeCategory } from "@prisma/client";
+import { ChargeCategory, DocumentType } from "@prisma/client";
 
 // ── Dashboard ────────────────────────────────────────────────
 export async function dashboard(propertyId: string, date: Date) {
@@ -145,16 +145,38 @@ export async function listReservationGuests(propertyId: string, id: string) {
   await assertInProperty(propertyId, id);
   return prisma.reservationGuest.findMany({ where: { reservationId: id }, include: { guest: true }, orderBy: { isPrimary: "desc" } });
 }
-export async function addReservationGuest(propertyId: string, id: string, g: { firstName: string; lastName: string; email?: string; phone?: string }) {
+type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; address?: string; documentType?: DocumentType | null; documentNumber?: string };
+
+export async function addReservationGuest(propertyId: string, id: string, g: GuestInput) {
   await assertInProperty(propertyId, id);
-  const guest = await prisma.guest.create({ data: { firstName: g.firstName, lastName: g.lastName, email: g.email, phone: g.phone } });
+  const guest = await prisma.guest.create({ data: { firstName: g.firstName, lastName: g.lastName, email: g.email, phone: g.phone, address: g.address, documentType: g.documentType ?? undefined, documentNumber: g.documentNumber } });
   return prisma.reservationGuest.create({ data: { reservationId: id, guestId: guest.id, isPrimary: false }, include: { guest: true } });
+}
+export async function updateReservationGuest(propertyId: string, rgId: string, data: Partial<GuestInput>) {
+  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { guestId: true } });
+  if (!rg) throw NOT_FOUND();
+  await prisma.guest.update({ where: { id: rg.guestId }, data: { firstName: data.firstName, lastName: data.lastName, email: data.email, phone: data.phone, address: data.address, documentType: data.documentType ?? undefined, documentNumber: data.documentNumber } });
+  return prisma.reservationGuest.findFirst({ where: { id: rgId }, include: { guest: true } });
 }
 export async function removeReservationGuest(propertyId: string, rgId: string) {
   const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { id: true, isPrimary: true } });
   if (!rg) throw NOT_FOUND();
   if (rg.isPrimary) throw new Error("Hlavního hosta nelze odebrat.");
   await prisma.reservationGuest.delete({ where: { id: rgId } });
+  return { ok: true };
+}
+
+// ── Ceník služeb (číselník) ──────────────────────────────────
+export const listServiceItems = (propertyId: string) => prisma.serviceItem.findMany({ where: { propertyId }, orderBy: [{ category: "asc" }, { name: "asc" }] });
+export const createServiceItem = (propertyId: string, data: { name: string; category: ChargeCategory; price: number; vatRate?: number }) =>
+  prisma.serviceItem.create({ data: { propertyId, name: data.name, category: data.category, price: new Prisma.Decimal(data.price), vatRate: new Prisma.Decimal(data.vatRate ?? 21) } });
+export async function updateServiceItem(propertyId: string, id: string, data: Partial<{ name: string; category: ChargeCategory; price: number; vatRate: number }>) {
+  const s = await prisma.serviceItem.findFirst({ where: { id, propertyId }, select: { id: true } });
+  if (!s) throw NOT_FOUND();
+  return prisma.serviceItem.update({ where: { id }, data: { name: data.name, category: data.category, price: data.price != null ? new Prisma.Decimal(data.price) : undefined, vatRate: data.vatRate != null ? new Prisma.Decimal(data.vatRate) : undefined } });
+}
+export async function deleteServiceItem(propertyId: string, id: string) {
+  await prisma.serviceItem.deleteMany({ where: { id, propertyId } });
   return { ok: true };
 }
 

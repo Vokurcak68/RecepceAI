@@ -197,6 +197,7 @@ model Property {
   serviceRequests ServiceRequest[]
   documents     Document[]
   cashRegisters CashRegister[]
+  serviceItems  ServiceItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -316,6 +317,11 @@ model Guest {
   phone     String?
   language  String?
 
+  // Doklad totožnosti a adresa (pro evidenci ubytovaných osob).
+  address        String?
+  documentType   DocumentType?
+  documentNumber String?
+
   marketingConsent Boolean @default(false)
 
   reservationsAsPrimary Reservation[]       @relation("PrimaryGuest")
@@ -412,6 +418,22 @@ model Payment {
   @@index([reservationId])
   @@index([documentId])
   @@index([cashSessionId])
+}
+
+/// Ceník služeb provozovny (číselník) — nabídne se cena při připsání na účet.
+model ServiceItem {
+  id         String         @id @default(uuid())
+  property   Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  name       String
+  category   ChargeCategory @default(other)
+  price      Decimal        @db.Decimal(10, 2)
+  vatRate    Decimal        @default(0) @db.Decimal(5, 2)
+  active     Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId])
 }
 
 /// Připsaná položka na účet pokoje (konzumace/služby). Náklad k úhradě, NE platba.

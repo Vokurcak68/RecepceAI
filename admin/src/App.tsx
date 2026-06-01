@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -648,7 +648,32 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
           <button className="btn" onClick={saveRate}>Nastavit</button>
         </div>
       </div>
+
+      <ServiceCatalog selId={selId} />
     </>
+  );
+}
+
+// Ceník služeb (číselník pro připisování na účet pokoje).
+function ServiceCatalog({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<ServiceItem[]>(() => api.serviceItems(), [selId]);
+  const [f, setF] = useState({ name: "", category: "minibar", price: "", vatRate: "21" });
+  const add = async () => { if (!f.name || !f.price) return; await api.createServiceItem({ name: f.name, category: f.category, price: parseFloat(f.price.replace(",", ".")), vatRate: parseFloat(f.vatRate) || 21 }); setF({ name: "", category: "minibar", price: "", vatRate: "21" }); reload(); };
+  const del = async (id: string) => { await api.deleteServiceItem(id); reload(); };
+  return (
+    <div className="panel">
+      <h3>Ceník služeb <span className="muted" style={{ fontSize: 14 }}>nabídne se při připsání na účet</span></h3>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ padding: 16, flexWrap: "wrap" }}>
+        <input placeholder="Název (Cola, Masáž…)" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+        <select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{Object.entries(CHARGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <input placeholder="Cena" style={{ width: 100 }} value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} />
+        <label className="row">DPH <input style={{ width: 56 }} value={f.vatRate} onChange={(e) => setF({ ...f, vatRate: e.target.value })} /> %</label>
+        <button className="btn" disabled={!f.name || !f.price} onClick={add}>+ Přidat</button>
+      </div>
+      <Table cols={["Název", "Kategorie", "Cena", "DPH", ""]} rows={data ?? []} empty="Žádné položky ceníku"
+        render={(s: ServiceItem) => (<tr key={s.id}><td><b>{s.name}</b></td><td>{CHARGE_LABEL[s.category] ?? s.category}</td><td>{money(s.price)}</td><td className="muted">{parseFloat(s.vatRate)} %</td><td className="right"><button className="btn sm danger" onClick={() => del(s.id)}>Smazat</button></td></tr>)} />
+    </div>
   );
 }
 
@@ -930,8 +955,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const guestsA = useAsync<ResGuest[]>(() => api.resGuests(id), [id]);
   const [busy, setBusy] = useState(false);
   const [actErr, setActErr] = useState("");
+  const svc = useAsync<ServiceItem[]>(() => api.serviceItems(), [id]);
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
-  const [ng, setNg] = useState({ firstName: "", lastName: "" });
+  const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
+  const [gEdit, setGEdit] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
@@ -941,7 +968,13 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
 
   const refresh = () => { reload(); folioA.reload(); chargesA.reload(); guestsA.reload(); };
-  const addGuest = () => { if (!ng.firstName || !ng.lastName) return; run(async () => { await api.addResGuest(id, { firstName: ng.firstName, lastName: ng.lastName }); setNg({ firstName: "", lastName: "" }); }); };
+  const resetGf = () => { setGf({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" }); setGEdit(null); };
+  const saveGuest = () => {
+    if (!gf.firstName || !gf.lastName) return;
+    const body = { firstName: gf.firstName, lastName: gf.lastName, address: gf.address || undefined, documentType: gf.documentType || null, documentNumber: gf.documentNumber || undefined };
+    run(async () => { if (gEdit) await api.updateResGuest(gEdit, body); else await api.addResGuest(id, body); resetGf(); });
+  };
+  const editGuest = (g: ResGuest) => { setGEdit(g.id); setGf({ firstName: g.guest.firstName, lastName: g.guest.lastName, address: g.guest.address ?? "", documentType: g.guest.documentType ?? "", documentNumber: g.guest.documentNumber ?? "" }); };
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
 
@@ -989,24 +1022,36 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       </div>
 
       <div className="panel"><h3>Hosté na pokoji</h3>
-        <div className="toolbar" style={{ marginBottom: 10 }}>
-          <input placeholder="Jméno" value={ng.firstName} onChange={(e) => setNg({ ...ng, firstName: e.target.value })} />
-          <input placeholder="Příjmení" value={ng.lastName} onChange={(e) => setNg({ ...ng, lastName: e.target.value })} />
-          <button className="btn" disabled={busy || !ng.firstName || !ng.lastName} onClick={addGuest}>+ Přidat osobu</button>
+        <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap" }}>
+          <input placeholder="Jméno" value={gf.firstName} onChange={(e) => setGf({ ...gf, firstName: e.target.value })} />
+          <input placeholder="Příjmení" value={gf.lastName} onChange={(e) => setGf({ ...gf, lastName: e.target.value })} />
+          <input placeholder="Adresa" style={{ minWidth: 200 }} value={gf.address} onChange={(e) => setGf({ ...gf, address: e.target.value })} />
+          <select value={gf.documentType} onChange={(e) => setGf({ ...gf, documentType: e.target.value })}><option value="">Doklad…</option><option value="id_card">OP</option><option value="passport">Pas</option></select>
+          <input placeholder="Číslo dokladu" style={{ width: 130 }} value={gf.documentNumber} onChange={(e) => setGf({ ...gf, documentNumber: e.target.value })} />
+          <button className="btn" disabled={busy || !gf.firstName || !gf.lastName} onClick={saveGuest}>{gEdit ? "Uložit" : "+ Přidat osobu"}</button>
+          {gEdit && <button className="btn ghost" onClick={resetGf}>Zrušit</button>}
         </div>
-        <Table cols={["Jméno", "Role", "Kontakt", ""]} rows={guestsA.data ?? []} empty="—"
+        <Table cols={["Jméno", "Role", "Adresa", "Doklad", ""]} rows={guestsA.data ?? []} empty="—"
           render={(g: ResGuest) => (
-            <tr key={g.id}>
+            <tr key={g.id} className={gEdit === g.id ? "row-urgent" : ""}>
               <td>{g.guest.firstName} {g.guest.lastName}</td>
               <td>{g.isPrimary ? <span className="chip">hlavní host</span> : <span className="muted">spolubydlící</span>}</td>
-              <td className="muted">{g.guest.email ?? g.guest.phone ?? "—"}</td>
-              <td className="right">{!g.isPrimary && <button className="btn sm danger" onClick={() => run(() => api.removeResGuest(g.id))}>Odebrat</button>}</td>
+              <td className="muted">{g.guest.address ?? "—"}</td>
+              <td className="muted">{g.guest.documentNumber ? `${DOCTYPE_LABEL[g.guest.documentType ?? ""] ?? ""} ${g.guest.documentNumber}` : "—"}</td>
+              <td className="right" style={{ whiteSpace: "nowrap" }}>
+                <button className="btn sm ghost" onClick={() => editGuest(g)}>Upravit</button>{" "}
+                {!g.isPrimary && <button className="btn sm danger" onClick={() => run(() => api.removeResGuest(g.id))}>Odebrat</button>}
+              </td>
             </tr>
           )} />
       </div>
 
       <div className="panel"><h3>Účet pokoje — náklady</h3>
-        <div className="toolbar" style={{ marginBottom: 10 }}>
+        <div className="toolbar" style={{ marginBottom: 10, flexWrap: "wrap" }}>
+          <select value="" onChange={(e) => { const s = (svc.data ?? []).find((x) => x.id === e.target.value); if (s) setChg({ category: s.category, description: s.name, quantity: chg.quantity || "1", unitPrice: parseFloat(s.price).toString() }); }}>
+            <option value="">— z ceníku —</option>
+            {(svc.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} · {money(s.price)}</option>)}
+          </select>
           <select value={chg.category} onChange={(e) => setChg({ ...chg, category: e.target.value })}>
             {Object.entries(CHARGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>

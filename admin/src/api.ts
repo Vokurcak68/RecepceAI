@@ -43,7 +43,9 @@ export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: str
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };
 export type Charge = { id: string; category: string; description: string | null; quantity: Money; unitPrice: Money; amount: Money; vatRate: Money; createdAt: string };
 export type OccupancyRow = { id: string; code: string; unit: string; roomType: string | null; guestName: string; guests: number; checkInDate: string; checkOutDate: string; charges: number; balance: Money };
-export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null } };
+export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null } };
+export type ServiceItem = { id: string; name: string; category: string; price: Money; vatRate: Money; active: boolean };
+export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
 export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
 
 export type PaymentRow = Payment & { reservation?: { id: string; code: string; primaryGuest?: { firstName: string; lastName: string } } };
@@ -175,7 +177,14 @@ export const api = {
   occupancy: () => req<OccupancyRow[]>(`/admin/occupancy`),
   resGuests: (id: string) => req<ResGuest[]>(`/admin/reservations/${id}/guests`),
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),
+  updateResGuest: (rgId: string, b: unknown) => req<ResGuest>(`/admin/reservation-guests/${rgId}`, { method: "PATCH", body: JSON.stringify(b) }),
   removeResGuest: (id: string) => req(`/admin/reservation-guests/${id}`, { method: "DELETE" }),
+
+  // ceník služeb (číselník)
+  serviceItems: () => req<ServiceItem[]>(`/admin/service-items`),
+  createServiceItem: (b: unknown) => req<ServiceItem>(`/admin/service-items`, { method: "POST", body: JSON.stringify(b) }),
+  updateServiceItem: (id: string, b: unknown) => req<ServiceItem>(`/admin/service-items/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  deleteServiceItem: (id: string) => req(`/admin/service-items/${id}`, { method: "DELETE" }),
 
   // účet pokoje — připsané položky (konzumace/služby)
   charges: (id: string) => req<Charge[]>(`/admin/reservations/${id}/charges`),
