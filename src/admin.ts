@@ -117,6 +117,47 @@ export async function adminDeleteCharge(propertyId: string, chargeId: string) {
   return { ok: true };
 }
 
+// ── Obsazení (kdo je v jakém pokoji + zůstatek účtu) ─────────
+export async function occupancy(propertyId: string) {
+  const inHouse = await prisma.reservation.findMany({
+    where: { propertyId, status: ReservationStatus.checked_in },
+    include: { primaryGuest: true, room: true, bed: true, roomType: true, _count: { select: { reservationGuests: true, charges: true } } },
+    orderBy: { code: "asc" },
+  });
+  const rows = [];
+  for (const r of inHouse) {
+    const folio = await computeFolio(r.id);
+    rows.push({
+      id: r.id, code: r.code,
+      unit: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : "—",
+      roomType: r.roomType?.name ?? null,
+      guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`,
+      guests: r._count.reservationGuests || 1,
+      checkInDate: r.checkInDate, checkOutDate: r.checkOutDate,
+      charges: r._count.charges, balance: folio.balance.toFixed(2),
+    });
+  }
+  return rows;
+}
+
+// ── Hosté na pokoji (spolubydlící) ───────────────────────────
+export async function listReservationGuests(propertyId: string, id: string) {
+  await assertInProperty(propertyId, id);
+  return prisma.reservationGuest.findMany({ where: { reservationId: id }, include: { guest: true }, orderBy: { isPrimary: "desc" } });
+}
+export async function addReservationGuest(propertyId: string, id: string, g: { firstName: string; lastName: string; email?: string; phone?: string }) {
+  await assertInProperty(propertyId, id);
+  const guest = await prisma.guest.create({ data: { firstName: g.firstName, lastName: g.lastName, email: g.email, phone: g.phone } });
+  return prisma.reservationGuest.create({ data: { reservationId: id, guestId: guest.id, isPrimary: false }, include: { guest: true } });
+}
+export async function removeReservationGuest(propertyId: string, rgId: string) {
+  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { id: true, isPrimary: true } });
+  if (!rg) throw NOT_FOUND();
+  if (rg.isPrimary) throw new Error("Hlavního hosta nelze odebrat.");
+  await prisma.reservationGuest.delete({ where: { id: rgId } });
+  return { ok: true };
+}
+
 /** Sestaví podklad faktury (zejm. firmě u ubytoven). Číslo z kódu rezervace. */
 export async function buildInvoice(propertyId: string, id: string) {
   const r = await getReservation(propertyId, id);

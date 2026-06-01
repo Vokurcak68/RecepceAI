@@ -6,7 +6,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -51,6 +51,7 @@ export function App() {
   const propTabs = [
     { id: "dashboard", label: "Přehled", icon: "📊" },
     { id: "agents", label: "AI agenti", icon: "🤖" },
+    { id: "occupancy", label: "Obsazení", icon: "🛏️" },
     { id: "reservations", label: "Rezervace", icon: "📋" },
     { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
     { id: "equipment", label: "Vybavení", icon: "🧰" },
@@ -94,6 +95,7 @@ export function App() {
       <main className="main">
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
+        {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
@@ -412,6 +414,33 @@ function DashboardView({ selId }: { selId: string }) {
 }
 
 // ── Reservations ─────────────────────────────────────────────
+// ── Obsazení: kdo je v jakém pokoji + zůstatek účtu ──────────
+function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
+  const { data, error, reload } = useAsync<OccupancyRow[]>(() => api.occupancy(), [selId]);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
+  return (
+    <>
+      <div className="h1">Obsazení <span className="muted" style={{ fontSize: 14 }}>aktuálně ubytovaní hosté</span></div>
+      {error && <div className="error">{error}</div>}
+      <div className="panel">
+        <Table cols={["Jednotka", "Host", "Osob", "Pobyt", "Položky", "Zůstatek účtu", ""]} rows={data ?? []} empty="Nikdo není ubytovaný"
+          render={(o: OccupancyRow) => (
+            <tr key={o.id}>
+              <td><b>{o.unit}</b>{o.roomType ? <span className="muted"> · {o.roomType}</span> : null}</td>
+              <td>{o.guestName}</td>
+              <td className="muted">{o.guests}</td>
+              <td>{d(o.checkInDate)} → {d(o.checkOutDate)}</td>
+              <td className="muted">{o.charges > 0 ? `${o.charges}×` : "—"}</td>
+              <td><b style={{ color: parseFloat(o.balance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(o.balance)}</b></td>
+              <td className="right"><button className="btn sm" onClick={() => setDetailId(o.id)}>Účet / detail</button></td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
 function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -898,9 +927,11 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const { data, error, reload } = useAsync<ReservationDetail>(() => api.reservation(id), [id]);
   const folioA = useAsync<Folio>(() => api.resFolio(id), [id]);
   const chargesA = useAsync<Charge[]>(() => api.charges(id), [id]);
+  const guestsA = useAsync<ResGuest[]>(() => api.resGuests(id), [id]);
   const [busy, setBusy] = useState(false);
   const [actErr, setActErr] = useState("");
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
+  const [ng, setNg] = useState({ firstName: "", lastName: "" });
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
@@ -909,7 +940,8 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
   const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
 
-  const refresh = () => { reload(); folioA.reload(); chargesA.reload(); };
+  const refresh = () => { reload(); folioA.reload(); chargesA.reload(); guestsA.reload(); };
+  const addGuest = () => { if (!ng.firstName || !ng.lastName) return; run(async () => { await api.addResGuest(id, { firstName: ng.firstName, lastName: ng.lastName }); setNg({ firstName: "", lastName: "" }); }); };
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
 
@@ -954,6 +986,23 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
         </div>
+      </div>
+
+      <div className="panel"><h3>Hosté na pokoji</h3>
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <input placeholder="Jméno" value={ng.firstName} onChange={(e) => setNg({ ...ng, firstName: e.target.value })} />
+          <input placeholder="Příjmení" value={ng.lastName} onChange={(e) => setNg({ ...ng, lastName: e.target.value })} />
+          <button className="btn" disabled={busy || !ng.firstName || !ng.lastName} onClick={addGuest}>+ Přidat osobu</button>
+        </div>
+        <Table cols={["Jméno", "Role", "Kontakt", ""]} rows={guestsA.data ?? []} empty="—"
+          render={(g: ResGuest) => (
+            <tr key={g.id}>
+              <td>{g.guest.firstName} {g.guest.lastName}</td>
+              <td>{g.isPrimary ? <span className="chip">hlavní host</span> : <span className="muted">spolubydlící</span>}</td>
+              <td className="muted">{g.guest.email ?? g.guest.phone ?? "—"}</td>
+              <td className="right">{!g.isPrimary && <button className="btn sm danger" onClick={() => run(() => api.removeResGuest(g.id))}>Odebrat</button>}</td>
+            </tr>
+          )} />
       </div>
 
       <div className="panel"><h3>Účet pokoje — náklady</h3>

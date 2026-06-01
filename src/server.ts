@@ -276,6 +276,15 @@ adminRouter.use(requireAuth);
 adminRouter.use(propertyScope);
 
 adminRouter.get("/dashboard", h((req, res) => admin.dashboard(pid(res), req.query.date ? new Date(String(req.query.date)) : new Date())));
+adminRouter.get("/occupancy", h((_req, res) => admin.occupancy(pid(res))));
+
+// Hosté na pokoji (spolubydlící)
+adminRouter.get("/reservations/:id/guests", h((req, res) => admin.listReservationGuests(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/guests", h((req, res) => {
+  const b = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional() }).parse(req.body);
+  return admin.addReservationGuest(pid(res), req.params.id, b);
+}));
+adminRouter.delete("/reservation-guests/:id", h((req, res) => admin.removeReservationGuest(pid(res), req.params.id)));
 
 adminRouter.get("/reservations", h((req, res) => admin.listReservations(pid(res), { status: req.query.status as string | undefined, q: req.query.q as string | undefined })));
 adminRouter.post("/reservations", h((req, res) => {
