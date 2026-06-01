@@ -23,7 +23,7 @@ export type Money = string;
 export type PropertyType = "hotel" | "penzion" | "ubytovna";
 export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
-  street: string | null; city: string | null; phone: string | null; email: string | null; active: boolean; infoText: string | null;
+  street: string | null; city: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; active: boolean; infoText: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean;
   _count?: { rooms: number; beds: number; reservations: number };
@@ -41,6 +41,20 @@ export type Reservation = {
 };
 export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string; stayFrom: string; stayTo: string };
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };
+
+export type PaymentRow = Payment & { reservation?: { id: string; code: string; primaryGuest?: { firstName: string; lastName: string } } };
+export type PaymentsList = { payments: PaymentRow[]; totals: { total: Money; count: number; byMethod: Record<string, Money> } };
+export type ReceiptLine = { date: string; type: string; method: string; description: string | null; amount: Money };
+export type Receipt = {
+  kind: "payment" | "stay";
+  number: string; issuedAt: string;
+  property: Property; guest: Guest;
+  reservation: { code: string; checkInDate: string; checkOutDate: string; roomType: string | null; nights: number };
+  billing: { company: string | null; ico: string | null; dic: string | null };
+  lines: ReceiptLine[]; totalPaid: Money; charges?: Money; balance?: Money;
+};
+export const PAY_TYPE_LABEL: Record<string, string> = { deposit: "Záloha", balance: "Doplatek", city_tax: "Pobytový poplatek", extra: "Položka", deposit_hold: "Blokace", refund: "Vratka" };
+export const PAY_METHOD_LABEL: Record<string, string> = { card_terminal: "Karta", prepaid: "Předplaceno", cash: "Hotově", invoice: "Fakturou" };
 export type Folio = { charges: Money; paid: Money; balance: Money };
 export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null;
@@ -107,6 +121,11 @@ export const api = {
   setRate: (b: unknown) => req(`/admin/rate-plans`, { method: "POST", body: JSON.stringify(b) }),
 
   registrations: (from: string, to: string) => req<RegistrationEntry[]>(`/admin/registrations?from=${from}&to=${to}`),
+
+  // úhrady + doklady o zaplacení
+  payments: (from = "", to = "") => req<PaymentsList>(`/admin/payments?from=${from}&to=${to}`),
+  paymentReceipt: (id: string) => req<Receipt>(`/admin/payments/${id}/receipt`),
+  stayReceipt: (id: string) => req<Receipt>(`/admin/reservations/${id}/receipt`),
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),

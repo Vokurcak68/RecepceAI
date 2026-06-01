@@ -1,7 +1,7 @@
 // Admin operace majitele/správce — scopované na konkrétní provozovnu (propertyId).
-import { Prisma, ReservationStatus, RoomStatus, LockType, PaymentType, PaymentMethod } from "@prisma/client";
+import { Prisma, ReservationStatus, RoomStatus, LockType, PaymentType, PaymentMethod, PaymentStatus } from "@prisma/client";
 import { prisma } from "./prisma";
-import { toDateOnly, nightsBetween } from "./dates";
+import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio } from "./reservations";
 
@@ -124,6 +124,71 @@ export async function cancelReservation(propertyId: string, id: string) {
     where: { id, propertyId }, data: { status: ReservationStatus.cancelled, holdExpiresAt: null },
   });
   return { ok: true };
+}
+
+// ── Úhrady a doklady o zaplacení ─────────────────────────────
+/** deposit_hold je jen blokace (předautorizace), ne přijatá platba. */
+const isReceived = (p: { status: PaymentStatus; type: PaymentType }) =>
+  p.status === PaymentStatus.succeeded && p.type !== PaymentType.deposit_hold;
+
+/** Seznam úhrad provozovny napříč rezervacemi (s filtrem na datum) + souhrny. */
+export async function listPayments(propertyId: string, from?: Date, to?: Date) {
+  const where: Prisma.PaymentWhereInput = { reservation: { propertyId } };
+  if (from || to) where.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: toDateOnly(addDays(to, 1)) } : {}) };
+  const payments = await prisma.payment.findMany({
+    where,
+    include: { reservation: { select: { id: true, code: true, primaryGuest: { select: { firstName: true, lastName: true } } } } },
+    orderBy: { createdAt: "desc" }, take: 1000,
+  });
+  let total = new Prisma.Decimal(0);
+  const byMethod: Record<string, string> = {};
+  for (const p of payments) {
+    if (!isReceived(p)) continue;
+    total = total.add(p.amount);
+    const m = new Prisma.Decimal(byMethod[p.method] ?? 0).add(p.amount);
+    byMethod[p.method] = m.toFixed(2);
+  }
+  return { payments, totals: { total: total.toFixed(2), count: payments.filter(isReceived).length, byMethod } };
+}
+
+/** Doklad o zaplacení za JEDNU úhradu. Číslo: DOK-<kód>-<pořadí platby>. */
+export async function buildPaymentReceipt(propertyId: string, paymentId: string) {
+  const p = await prisma.payment.findFirst({
+    where: { id: paymentId, reservation: { propertyId } },
+    include: { reservation: { include: { primaryGuest: true, property: true, roomType: true } } },
+  });
+  if (!p) throw NOT_FOUND();
+  const r = p.reservation;
+  const seq = await prisma.payment.count({ where: { reservationId: r.id, createdAt: { lte: p.createdAt } } });
+  return {
+    kind: "payment" as const,
+    number: p.invoiceNumber || `DOK-${r.code.replace("RC-", "")}-${seq}`,
+    issuedAt: p.createdAt,
+    property: r.property,
+    guest: r.primaryGuest,
+    reservation: { code: r.code, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, roomType: r.roomType?.name ?? null, nights: r.nights },
+    billing: { company: r.billingCompany, ico: r.billingIco, dic: r.billingDic },
+    lines: [{ date: p.createdAt, type: p.type, method: p.method, description: p.description, amount: p.amount }],
+    totalPaid: p.amount,
+  };
+}
+
+/** Souhrnný doklad o zaplacení za celý pobyt (všechny přijaté platby). */
+export async function buildStayReceipt(propertyId: string, reservationId: string) {
+  const r = await getReservation(propertyId, reservationId);
+  const folio = await computeFolio(reservationId);
+  const lines = r.payments.filter(isReceived).map((p) => ({ date: p.createdAt, type: p.type, method: p.method, description: p.description, amount: p.amount }));
+  const totalPaid = lines.reduce((s, l) => s.add(l.amount), new Prisma.Decimal(0));
+  return {
+    kind: "stay" as const,
+    number: `DOK-${r.code.replace("RC-", "")}`,
+    issuedAt: new Date(),
+    property: r.property,
+    guest: r.primaryGuest,
+    reservation: { code: r.code, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, roomType: r.roomType?.name ?? null, nights: r.nights },
+    billing: { company: r.billingCompany, ico: r.billingIco, dic: r.billingDic },
+    lines, totalPaid, charges: folio.charges, balance: folio.balance,
+  };
 }
 
 // ── Pokoje ───────────────────────────────────────────────────

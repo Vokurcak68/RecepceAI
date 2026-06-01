@@ -143,6 +143,8 @@ model Property {
   country String? @default("CZ")
   phone   String?
   email   String?
+  ico     String? // IČO provozovny (dodavatel na dokladech)
+  dic     String? // DIČ provozovny
   active  Boolean @default(true)
   infoText String? // volný text pro AI asistenta (FAQ, služby, pravidla)
 

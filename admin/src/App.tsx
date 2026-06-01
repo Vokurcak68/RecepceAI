@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
-  type MaintenancePlan, type MaintItem, type PendingCall,
+  type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -58,6 +58,7 @@ export function App() {
     { id: "checks", label: "Kontroly", icon: "✅" },
     { id: "requests", label: "Požadavky", icon: "🛎️" },
     { id: "types", label: "Typy & ceny", icon: "🏷️" },
+    { id: "payments", label: "Úhrady", icon: "🧾" },
     { id: "book", label: "Kniha hostů", icon: "📖" },
   ];
 
@@ -99,6 +100,7 @@ export function App() {
         {prop && tab === "checks" && <ChecksView selId={selId} />}
         {prop && tab === "requests" && <RequestsView selId={selId} />}
         {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
+        {prop && tab === "payments" && <PaymentsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
         {isSuper && tab === "users" && <UsersView currentUserId={session.user.id} />}
@@ -706,7 +708,7 @@ function BookView({ selId }: { selId: string }) {
 }
 
 // ── CENTRÁLA: Provozovny ─────────────────────────────────────
-type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
+type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
 
 function PropertiesView() {
   const { data, error, reload } = useAsync<Property[]>(() => api.centralProperties(), []);
@@ -719,7 +721,7 @@ function PropertiesView() {
   const toggle = async (p: Property, field: "cityTaxEnabled" | "allowLongTerm" | "selfCheckin" | "breakfastIncluded" | "active") => { await api.updateProperty(p.id, { [field]: !p[field] }); reload(); };
   const startEdit = (p: Property) => {
     setEditId(p.id);
-    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
+    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
@@ -757,6 +759,10 @@ function PropertiesView() {
             <input placeholder="Město" value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} />
             <input placeholder="Telefon" value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} />
             <input placeholder="E-mail" value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} />
+          </div>
+          <div className="toolbar">
+            <input placeholder="IČO (na dokladech)" value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} />
+            <input placeholder="DIČ" value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} />
           </div>
           <div style={{ padding: "4px 0 10px" }}>
             <div className="muted" style={{ marginBottom: 6 }}>Informace pro AI asistenta (FAQ — wifi, snídaně, parkování, pravidla, okolí…):</div>
@@ -882,7 +888,9 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [actErr, setActErr] = useState("");
   const [extra, setExtra] = useState({ description: "", amount: "" });
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [guestQr, setGuestQr] = useState(false);
+  const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
 
   const refresh = () => { reload(); folioA.reload(); };
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
@@ -923,6 +931,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {bal > 0 && <button className="btn" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" }))}>Doplatit {money(bal)} kartou</button>}
           {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` }))}>Zaplaceno fakturou</button>}
           {showInvoice && <button className="btn ghost" disabled={busy} onClick={async () => { try { setInvoice(await api.invoice(id)); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } }}>📄 Faktura</button>}
+          <button className="btn ghost" disabled={busy} onClick={() => openReceipt(() => api.stayReceipt(id))}>🧾 Doklad o zaplacení</button>
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
         </div>
         <div className="toolbar" style={{ marginTop: 10 }}>
@@ -933,8 +942,8 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       </div>
 
       <div className="panel"><h3>Historie plateb</h3>
-        <Table cols={["Datum", "Typ", "Popis", "Způsob", "Částka"]} rows={r.payments} empty="Žádné platby"
-          render={(p: Payment) => (<tr key={p.id}><td className="muted">{p.createdAt.slice(0, 10)}</td><td>{p.type}</td><td>{p.description ?? "—"}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td><td className="muted">{p.method}</td><td>{money(p.amount)}</td></tr>)} />
+        <Table cols={["Datum", "Typ", "Popis", "Způsob", "Částka", ""]} rows={r.payments} empty="Žádné platby"
+          render={(p: Payment) => (<tr key={p.id}><td className="muted">{p.createdAt.slice(0, 10)}</td><td>{PAY_TYPE_LABEL[p.type] ?? p.type}</td><td>{p.description ?? "—"}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td><td className="muted">{PAY_METHOD_LABEL[p.method] ?? p.method}</td><td>{money(p.amount)}</td><td className="right">{p.type !== "deposit_hold" && <button className="btn sm ghost" onClick={() => openReceipt(() => api.paymentReceipt(p.id))}>🧾</button>}</td></tr>)} />
       </div>
 
       {r.registrationEntries.length > 0 && (
@@ -945,6 +954,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       )}
 
       {invoice && <InvoiceOverlay inv={invoice} onClose={() => setInvoice(null)} />}
+      {receipt && <ReceiptOverlay rec={receipt} onClose={() => setReceipt(null)} />}
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
     </>
   );
@@ -964,6 +974,98 @@ function InvoiceOverlay({ inv, onClose }: { inv: Invoice; onClose: () => void })
         <div className="inv-total"><span>Celkem k úhradě</span><b>{money(inv.total)}</b></div>
         <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(inv.paid)}</span></div>
         <div className="kvline"><span className="muted">Zbývá</span><b>{money(inv.balance)}</b></div>
+        <div className="inv-actions no-print"><button className="btn" onClick={() => window.print()}>🖨 Tisk</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Úhrady: seznam + doklady o zaplacení ─────────────────────
+function PaymentsView({ selId }: { selId: string }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const { data, error } = useAsync<PaymentsList>(() => api.payments(from, to), [selId, from, to]);
+  const [rec, setRec] = useState<Receipt | null>(null);
+  const [busyId, setBusyId] = useState("");
+  const openReceipt = async (id: string) => {
+    setBusyId(id);
+    try { setRec(await api.paymentReceipt(id)); } catch { /* */ } finally { setBusyId(""); }
+  };
+  const t = data?.totals;
+  return (
+    <>
+      <div className="h1">Úhrady</div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar">
+        <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="row">Do <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        {(from || to) && <button className="btn ghost sm" onClick={() => { setFrom(""); setTo(""); }}>Zrušit filtr</button>}
+        {t && <span className="muted" style={{ marginLeft: "auto" }}>{t.count} přijatých úhrad · celkem <b>{money(t.total)}</b></span>}
+      </div>
+      {t && Object.keys(t.byMethod).length > 0 && (
+        <div className="toolbar" style={{ gap: 16, marginTop: -6 }}>
+          {Object.entries(t.byMethod).map(([m, v]) => <span key={m} className="muted">{PAY_METHOD_LABEL[m] ?? m}: <b>{money(v)}</b></span>)}
+        </div>
+      )}
+      <div className="panel">
+        <Table cols={["Datum", "Rezervace", "Host", "Typ", "Způsob", "Částka", ""]} rows={data?.payments ?? []} empty="Žádné úhrady"
+          render={(p: PaymentRow) => (
+            <tr key={p.id}>
+              <td className="muted">{p.createdAt.slice(0, 10)}</td>
+              <td>{p.reservation?.code ?? "—"}</td>
+              <td>{p.reservation?.primaryGuest ? `${p.reservation.primaryGuest.firstName} ${p.reservation.primaryGuest.lastName}` : "—"}</td>
+              <td>{PAY_TYPE_LABEL[p.type] ?? p.type}{p.status !== "succeeded" && <span className="chip">{p.status}</span>}</td>
+              <td className="muted">{PAY_METHOD_LABEL[p.method] ?? p.method}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td>
+              <td>{money(p.amount)}</td>
+              <td className="right">{p.type !== "deposit_hold" && <button className="btn sm ghost" disabled={busyId === p.id} onClick={() => openReceipt(p.id)}>🧾 Doklad</button>}</td>
+            </tr>
+          )} />
+      </div>
+      {rec && <ReceiptOverlay rec={rec} onClose={() => setRec(null)} />}
+    </>
+  );
+}
+
+// Tisknutelný doklad o zaplacení (za platbu i souhrnný za pobyt).
+function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void }) {
+  const p = rec.property;
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div>
+            <h2 style={{ margin: 0 }}>Doklad o zaplacení</h2>
+            <div className="muted" style={{ marginTop: 2 }}>č. {rec.number}{rec.kind === "stay" ? " · souhrn za pobyt" : ""}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              <b>{p.name}</b><br />
+              {[p.street, p.city].filter(Boolean).join(", ")}
+              {(p.ico || p.dic) && <><br />{p.ico ? `IČO: ${p.ico}` : ""}{p.ico && p.dic ? " · " : ""}{p.dic ? `DIČ: ${p.dic}` : ""}</>}
+            </div>
+          </div>
+          <div className="inv-to">
+            <div className="muted">Plátce</div>
+            <b>{rec.billing.company ?? `${rec.guest.firstName} ${rec.guest.lastName}`}</b>
+            {rec.billing.ico && <div>IČO: {rec.billing.ico}</div>}
+            {rec.billing.dic && <div>DIČ: {rec.billing.dic}</div>}
+          </div>
+        </div>
+        <div className="muted" style={{ margin: "6px 0 14px" }}>
+          Vystaveno {d(rec.issuedAt)} · pobyt {d(rec.reservation.checkInDate)} → {d(rec.reservation.checkOutDate)}{rec.reservation.roomType ? ` · ${rec.reservation.roomType}` : ""} · rezervace {rec.reservation.code}
+        </div>
+        <table>
+          <thead><tr><th>Datum</th><th>Položka</th><th>Způsob</th><th className="right">Částka</th></tr></thead>
+          <tbody>{rec.lines.map((l: ReceiptLine, i: number) => (
+            <tr key={i}><td className="muted">{d(l.date)}</td><td>{PAY_TYPE_LABEL[l.type] ?? l.type}{l.description ? ` — ${l.description}` : ""}</td><td className="muted">{PAY_METHOD_LABEL[l.method] ?? l.method}</td><td className="right">{money(l.amount)}</td></tr>
+          ))}</tbody>
+        </table>
+        <div className="inv-total"><span>Zaplaceno celkem</span><b>{money(rec.totalPaid)}</b></div>
+        {rec.kind === "stay" && rec.charges != null && (
+          <>
+            <div className="kvline"><span className="muted">Celkem k úhradě</span><span>{money(rec.charges)}</span></div>
+            <div className="kvline"><span className="muted">Zbývá doplatit</span><b>{money(rec.balance ?? "0")}</b></div>
+          </>
+        )}
+        <div className="muted" style={{ marginTop: 14, fontSize: 13 }}>Potvrzujeme přijetí platby. Děkujeme.</div>
         <div className="inv-actions no-print"><button className="btn" onClick={() => window.print()}>🖨 Tisk</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
       </div>
     </div>

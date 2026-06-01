@@ -199,7 +199,7 @@ centralRouter.post("/properties", h((req) => {
 }));
 centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
-    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
+    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
   }).parse(req.body);
@@ -284,6 +284,7 @@ adminRouter.post("/reservations/:id/payments", h((req, res) => {
   return admin.adminAddPayment(pid(res), req.params.id, b);
 }));
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
+adminRouter.get("/reservations/:id/receipt", h((req, res) => admin.buildStayReceipt(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/cancel", h((req, res) => admin.cancelReservation(pid(res), req.params.id)));
 
 adminRouter.get("/rooms", h((_req, res) => admin.listRooms(pid(res))));
@@ -314,6 +315,13 @@ adminRouter.post("/pricing/apply", h((req, res) => {
 }));
 
 adminRouter.get("/registrations", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return admin.listRegistrations(pid(res), new Date(q.from), new Date(q.to)); }));
+
+// Úhrady (seznam) + doklad o zaplacení za jednotlivou platbu.
+adminRouter.get("/payments", h((req, res) => {
+  const q = z.object({ from: dateStr.optional(), to: dateStr.optional() }).parse({ from: req.query.from || undefined, to: req.query.to || undefined });
+  return admin.listPayments(pid(res), q.from ? new Date(q.from) : undefined, q.to ? new Date(q.to) : undefined);
+}));
+adminRouter.get("/payments/:id/receipt", h((req, res) => admin.buildPaymentReceipt(pid(res), req.params.id)));
 
 // Přehled servisních požadavků (manažer/super_admin).
 adminRouter.get("/requests", h((req, res) => {
