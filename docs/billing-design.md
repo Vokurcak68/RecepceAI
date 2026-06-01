@@ -5,9 +5,15 @@ Rozhodnutí zadavatele: **plátcovství DPH je přepínatelné per provozovna**,
 **karty se jen evidují** (samostatný terminál, žádná integrace), staví se
 **doklady i pokladna společně**. EET je zrušená (od 1. 1. 2023) — neřešíme.
 
-> Stav: **návrh.** Navazuje na již hotové: `Property.ico/dic`, záložka „Úhrady"
-> (seznam plateb). Současný zjednodušený „doklad o zaplacení" nahradí systém
-> dokladů s typy a číselnými řadami.
+> Stav: **IMPLEMENTOVÁNO** (2026-06-01). Hotovo: plátcovství DPH per provozovna,
+> číselné řady, doklady (zálohová/daňový doklad k záloze/faktura/účtenka/dobropis)
+> s DPH, úhrada dokladu (hotově/kartou) navázaná na pokladnu, pokladna (směny,
+> příjem/výdej, denní uzávěrka, tržby kartou), check-out → účtenka (recepce i
+> kiosek), hromadná faktura. Soubory: `src/billing.ts`, `src/cashregister.ts`,
+> admin záložky Doklady/Pokladna/Úhrady.
+> **Zbývá doladit:** odečet zálohy v konečné faktuře (advance settlement),
+> periodická fakturace dlouhodobých (napojit na billing agenta), QR platba na
+> proformě, export do účetnictví.
 
 ---
 
