@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
@@ -9,7 +9,7 @@ import {
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem,
 } from "./api";
 
-const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
+const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
 
 // Adresa portálu hosta (přepsatelné přes VITE_GUEST_URL při buildu).
 const GUEST_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_GUEST_URL || "http://localhost:5175";
@@ -508,7 +508,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
         <button className="btn ghost" onClick={reload}>Hledat</button>
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Všechny stavy</option>
-          {["pending", "hold", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"].map((s) => <option key={s} value={s}>{s}</option>)}
+          {["pending", "hold", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
         <button className="btn ghost" onClick={() => setGuestQr((data ?? []).filter((r) => ["confirmed", "checked_in"].includes(r.status)))}>🏷 QR hostů</button>
         {sel.size > 0 && <button className="btn" onClick={bulk}>🧾 Hromadná faktura ({sel.size})</button>}
@@ -558,7 +558,7 @@ function RoomsView({ selId }: { selId: string }) {
       </div>
       <div className="panel">
         <Table cols={["Číslo", "Typ", "Patro", "Zámek", "Stav", ""]} rows={data ?? []} empty="Žádné pokoje"
-          render={(r: Room) => (<tr key={r.id}><td><b>{r.number}</b></td><td>{r.roomType?.name}</td><td>{r.floor}.</td><td className="muted">{r.lockType === "smart_code" ? "🔢 kód" : "🔑 klíč"}</td><td><select value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>{["clean", "dirty", "out_of_service"].map((s) => <option key={s} value={s}>{s}</option>)}</select></td><td className="right"><button className="btn sm danger" onClick={() => del(r.id)}>Smazat</button></td></tr>)} />
+          render={(r: Room) => (<tr key={r.id}><td><b>{r.number}</b></td><td>{r.roomType?.name}</td><td>{r.floor}.</td><td className="muted">{r.lockType === "smart_code" ? "🔢 kód" : "🔑 klíč"}</td><td><select value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>{["clean", "dirty", "out_of_service"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}</select></td><td className="right"><button className="btn sm danger" onClick={() => del(r.id)}>Smazat</button></td></tr>)} />
       </div>
     </>
   );
@@ -1156,7 +1156,7 @@ function PaymentsView({ selId }: { selId: string }) {
               <td className="muted">{p.createdAt.slice(0, 10)}</td>
               <td>{p.reservation?.code ?? "—"}</td>
               <td>{p.reservation?.primaryGuest ? `${p.reservation.primaryGuest.firstName} ${p.reservation.primaryGuest.lastName}` : "—"}</td>
-              <td>{PAY_TYPE_LABEL[p.type] ?? p.type}{p.status !== "succeeded" && <span className="chip">{p.status}</span>}</td>
+              <td>{PAY_TYPE_LABEL[p.type] ?? p.type}{p.status !== "succeeded" && <span className="chip">{statusLabel(p.status)}</span>}</td>
               <td className="muted">{PAY_METHOD_LABEL[p.method] ?? p.method}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td>
               <td>{money(p.amount)}</td>
               <td className="right">{p.type !== "deposit_hold" && <button className="btn sm ghost" disabled={busyId === p.id} onClick={() => openReceipt(p.id)}>🧾 Doklad</button>}</td>
@@ -1760,7 +1760,7 @@ function RequestsView({ selId }: { selId: string }) {
     <>
       <div className="h1">Servisní požadavky</div>
       {error && <div className="error">{error}</div>}
-      <div className="toolbar"><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Všechny stavy</option>{["open", "in_progress", "done", "cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+      <div className="toolbar"><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Všechny stavy</option>{["open", "in_progress", "done", "cancelled"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}</select></div>
       <div className="panel">
         <Table cols={["Typ", "Fronta", "Pokoj", "Host", "Popis", "Stav", ""]} rows={data ?? []} empty="Žádné požadavky"
           render={(r: ServiceRequest) => (

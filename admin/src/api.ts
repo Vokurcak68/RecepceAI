@@ -46,6 +46,21 @@ export type OccupancyRow = { id: string; code: string; unit: string; roomType: s
 export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null } };
 export type ServiceItem = { id: string; name: string; category: string; price: Money; vatRate: Money; active: boolean };
 export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
+
+// Počeštění všech stavů (rezervace, požadavky, doklady, platby, pokoje).
+export const STATUS_LABEL: Record<string, string> = {
+  // rezervace
+  pending: "Čeká", hold: "Blokace", confirmed: "Potvrzeno", checked_in: "Ubytován", checked_out: "Odhlášen", cancelled: "Zrušeno", no_show: "Nedorazil",
+  // servisní požadavky
+  open: "Otevřeno", in_progress: "Probíhá", done: "Hotovo",
+  // doklady
+  draft: "Koncept", issued: "Vystaveno", paid: "Zaplaceno",
+  // platby
+  succeeded: "Úspěšná", failed: "Neúspěšná",
+  // pokoje / lůžka
+  clean: "Uklizeno", dirty: "K úklidu", out_of_service: "Mimo provoz",
+};
+export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
 export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
 
 export type PaymentRow = Payment & { reservation?: { id: string; code: string; primaryGuest?: { firstName: string; lastName: string } } };
