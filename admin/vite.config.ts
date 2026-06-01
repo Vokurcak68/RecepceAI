@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true, // poslouchej na všech rozhraních → dostupné i přes http://192.168.0.54:5174
     port: 5174,
     proxy: {
       "/api": {

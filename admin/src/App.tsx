@@ -111,25 +111,33 @@ export function App() {
 
 // ── Login ────────────────────────────────────────────────────
 function Login({ onLogin }: { onLogin: (s: LoginResult) => void }) {
-  const [email, setEmail] = useState("");
+  // Předvyplň posledního přihlášeného uživatele (zapamatováno mezi sezeními).
+  const [email, setEmail] = useState(() => localStorage.getItem("lastEmail") ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const submit = async () => {
+  const submit = async (e?: { preventDefault?: () => void }) => {
+    e?.preventDefault?.();
+    if (busy) return;
     setBusy(true); setError("");
-    try { const s = await api.login(email, password); setToken(s.token); onLogin(s); }
-    catch { setError("Nesprávný e-mail nebo heslo."); } finally { setBusy(false); }
+    try {
+      const s = await api.login(email, password);
+      localStorage.setItem("lastEmail", email); // zapamatuj uživatele
+      setToken(s.token);
+      onLogin(s);
+    } catch { setError("Nesprávný e-mail nebo heslo."); } finally { setBusy(false); }
   };
   return (
     <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
-      <div className="panel" style={{ width: 380, padding: 28 }}>
+      {/* Pravý <form> s autocomplete → prohlížeč nabídne uložení hesla. */}
+      <form className="panel" style={{ width: 380, padding: 28 }} onSubmit={submit}>
         <div className="logo" style={{ padding: "0 0 8px" }}>🛎️ Hotelový systém</div>
         <div className="muted" style={{ marginBottom: 16 }}>Přihlášení správce</div>
         {error && <div className="error">{error}</div>}
-        <input placeholder="E-mail" value={email} autoFocus style={{ width: "100%", marginBottom: 10 }} onChange={(e) => setEmail(e.target.value)} />
-        <input type="password" placeholder="Heslo" value={password} style={{ width: "100%", marginBottom: 12 }} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-        <button className="btn" style={{ width: "100%" }} disabled={busy} onClick={submit}>{busy ? "Přihlašuji…" : "Přihlásit"}</button>
-      </div>
+        <input name="email" type="email" autoComplete="username" placeholder="E-mail" value={email} autoFocus={!email} style={{ width: "100%", marginBottom: 10 }} onChange={(e) => setEmail(e.target.value)} />
+        <input name="password" type="password" autoComplete="current-password" placeholder="Heslo" value={password} autoFocus={!!email} style={{ width: "100%", marginBottom: 12 }} onChange={(e) => setPassword(e.target.value)} />
+        <button className="btn" type="submit" style={{ width: "100%" }} disabled={busy}>{busy ? "Přihlašuji…" : "Přihlásit"}</button>
+      </form>
     </div>
   );
 }
