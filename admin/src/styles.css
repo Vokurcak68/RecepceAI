@@ -67,6 +67,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .b-dirty { background: #fff5e6; color: var(--warn); }
 .b-out_of_service { background: #fdeceb; color: var(--danger); }
 
+tr.row-cancelled { opacity: 0.5; text-decoration: line-through; }
+
 /* Zvoneček — přivolání člověka z kiosku (v sidebaru u loga) */
 .logo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .callbell-wrap { position: relative; }

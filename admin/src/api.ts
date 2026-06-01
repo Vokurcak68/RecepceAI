@@ -55,6 +55,17 @@ export type Receipt = {
 };
 export const PAY_TYPE_LABEL: Record<string, string> = { deposit: "Záloha", balance: "Doplatek", city_tax: "Pobytový poplatek", extra: "Položka", deposit_hold: "Blokace", refund: "Vratka" };
 export const PAY_METHOD_LABEL: Record<string, string> = { card_terminal: "Karta", prepaid: "Předplaceno", cash: "Hotově", invoice: "Fakturou" };
+
+export type DocLine = { id: string; label: string; qty: Money; unitPrice: Money; vatRate: Money; lineTotal: Money };
+export type Doc = {
+  id: string; type: string; number: string; status: string; issuedAt: string; taxDate: string | null; dueDate: string | null;
+  supplierName: string; supplierAddress: string | null; supplierIco: string | null; supplierDic: string | null; vatPayer: boolean;
+  customerName: string; customerAddress: string | null; customerIco: string | null; customerDic: string | null;
+  subtotal: Money; vatTotal: Money; total: Money; paidTotal: Money; note: string | null;
+  lines?: DocLine[]; reservations?: { reservation: { code: string } }[];
+};
+export const DOC_TYPE_LABEL: Record<string, string> = { proforma: "Zálohová faktura", advance_tax: "Daňový doklad k záloze", invoice: "Faktura", receipt: "Účtenka", credit_note: "Opravný doklad" };
+export const DOC_STATUS_LABEL: Record<string, string> = { draft: "Koncept", issued: "Vystaveno", paid: "Zaplaceno", cancelled: "Storno" };
 export type Folio = { charges: Money; paid: Money; balance: Money };
 export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null;
@@ -126,6 +137,13 @@ export const api = {
   payments: (from = "", to = "") => req<PaymentsList>(`/admin/payments?from=${from}&to=${to}`),
   paymentReceipt: (id: string) => req<Receipt>(`/admin/payments/${id}/receipt`),
   stayReceipt: (id: string) => req<Receipt>(`/admin/reservations/${id}/receipt`),
+
+  // doklady (faktury, zálohové, účtenky)
+  documents: (q = "") => req<Doc[]>(`/admin/documents${q}`),
+  document: (id: string) => req<Doc>(`/admin/documents/${id}`),
+  issueDocument: (resId: string, type: "invoice" | "receipt") => req<Doc>(`/admin/reservations/${resId}/documents`, { method: "POST", body: JSON.stringify({ type }) }),
+  issueProforma: (resId: string, amount: number, dueInDays?: number) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays }) }),
+  cancelDocument: (id: string) => req(`/admin/documents/${id}/cancel`, { method: "POST" }),
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),
