@@ -22,7 +22,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [selId, setSelId] = useState(getProperty());
   const [tab, setTab] = useState("dashboard");
-  const [openGroup, setOpenGroup] = useState("Hosté");
+  const [openGroup, setOpenGroup] = useState(() => localStorage.getItem("navGroup") ?? "Hosté");
+  useEffect(() => { localStorage.setItem("navGroup", openGroup); }, [openGroup]);
 
   useEffect(() => {
     if (!localStorage.getItem("adminToken")) { setLoading(false); return; }
