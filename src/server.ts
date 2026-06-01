@@ -99,7 +99,11 @@ app.post("/reservations/walkin", h(async (req) => {
 app.post("/reservations/:id/confirm", h((req) => confirmReservation(req.params.id)));
 app.post("/reservations/:id/checkin", h((req) => checkIn(req.params.id)));
 app.get("/reservations/:id/folio", h((req) => computeFolio(req.params.id)));
-app.post("/reservations/:id/checkout", h((req) => checkOut(req.params.id)));
+app.post("/reservations/:id/checkout", h(async (req) => {
+  const result = await checkOut(req.params.id);
+  const document = await billing.issueReservationDocument(result.reservation.propertyId, req.params.id, "receipt" as BillingDocType).catch(() => null); // self-checkout účtenka
+  return { ...result, document };
+}));
 
 const registrationBody = z.object({
   guestId: z.string().uuid(), fullName: z.string().min(1), dateOfBirth: dateStr, nationality: z.string().min(1),
@@ -280,7 +284,11 @@ adminRouter.post("/reservations", h((req, res) => {
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/folio", h((req, res) => admin.adminFolio(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkin", h((req, res) => admin.adminCheckIn(pid(res), req.params.id)));
-adminRouter.post("/reservations/:id/checkout", h((req, res) => admin.adminCheckOut(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/checkout", h(async (req, res) => {
+  const result = await admin.adminCheckOut(pid(res), req.params.id);
+  const document = await billing.issueReservationDocument(pid(res), req.params.id, "receipt" as BillingDocType).catch(() => null); // účtenka za pobyt
+  return { ...result, document };
+}));
 adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
   const b = z.object({ type: z.nativeEnum(PaymentType), amount: z.number(), method: z.nativeEnum(PaymentMethod).optional(), description: z.string().optional(), invoiceNumber: z.string().optional() }).parse(req.body);
   const payment = await admin.adminAddPayment(pid(res), req.params.id, b);
@@ -337,6 +345,15 @@ adminRouter.post("/documents/:id/cancel", h((req, res) => billing.cancelDocument
 adminRouter.post("/documents/:id/pay", h((req, res) => {
   const b = z.object({ method: z.enum(["cash", "card_terminal", "prepaid", "invoice"]) }).parse(req.body);
   return billing.payDocument(pid(res), req.params.id, b.method as PaymentMethod);
+}));
+adminRouter.post("/documents/:id/credit-note", h((req, res) => {
+  const b = z.object({ reason: z.string().optional() }).parse(req.body ?? {});
+  return billing.createCreditNote(pid(res), req.params.id, b.reason);
+}));
+adminRouter.post("/documents/:id/advance-tax", h((req, res) => billing.issueAdvanceTaxDoc(pid(res), req.params.id)));
+adminRouter.post("/documents/bulk-invoice", h((req, res) => {
+  const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body);
+  return billing.issueBulkInvoice(pid(res), b.reservationIds);
 }));
 adminRouter.post("/reservations/:id/documents", h((req, res) => {
   const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});

@@ -422,6 +422,10 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [showForm, setShowForm] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", billingCompany: "", billingIco: "" });
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bulkDoc, setBulkDoc] = useState<Doc | null>(null);
+  const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
+  const bulk = async () => { setFormErr(""); try { setBulkDoc(await api.bulkInvoice([...sel])); setSel(new Set()); } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); } };
 
   const cancel = async (id: string) => { if (confirm("Zrušit rezervaci?")) { await api.cancel(id); reload(); } };
   const create = async () => {
@@ -478,11 +482,13 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
           {["pending", "hold", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <button className="btn ghost" onClick={() => setGuestQr((data ?? []).filter((r) => ["confirmed", "checked_in"].includes(r.status)))}>🏷 QR hostů</button>
+        {sel.size > 0 && <button className="btn" onClick={bulk}>🧾 Hromadná faktura ({sel.size})</button>}
       </div>
       <div className="panel">
-        <Table cols={["Kód", "Host", "Termín", "Jednotka", "Stav", "Částka", ""]} rows={data ?? []} empty="Žádné rezervace"
+        <Table cols={["", "Kód", "Host", "Termín", "Jednotka", "Stav", "Částka", ""]} rows={data ?? []} empty="Žádné rezervace"
           render={(r: Reservation) => (
             <tr key={r.id}>
+              <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>
               <td className="muted">{r.code}</td>
               <td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td>
               <td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td>
@@ -497,6 +503,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
           )} />
       </div>
       {guestQr && <GuestQrLabels rows={guestQr.map((r) => ({ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.roomType?.name ?? r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }))} onClose={() => setGuestQr(null)} />}
+      {bulkDoc && <DocumentOverlay doc={bulkDoc} onClose={() => setBulkDoc(null)} />}
     </>
   );
 }
@@ -934,7 +941,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
         <h3 style={{ border: "none", padding: 0, marginBottom: 12 }}>Akce</h3>
         <div className="toolbar">
           {canCheckIn && <button className="btn ok" disabled={busy} onClick={() => run(() => api.checkin(id))}>Check-in</button>}
-          {canCheckOut && <button className="btn" disabled={busy} onClick={() => run(() => api.checkout(id))}>Check-out</button>}
+          {canCheckOut && <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await api.checkout(id); if (r.document) setIssuedDoc(r.document); })}>Check-out</button>}
           {bal > 0 && <button className="btn" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" }))}>Doplatit {money(bal)} kartou</button>}
           {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={() => run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` }))}>Zaplaceno fakturou</button>}
           <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>
@@ -1130,6 +1137,13 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
     catch (e) { setPerr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
+  // Vytvoří navazující doklad (dobropis / daňový doklad k záloze) a zobrazí ho.
+  const act = async (fn: () => Promise<Doc>) => {
+    setBusy(true); setPerr("");
+    try { setCur(await fn()); }
+    catch (e) { setPerr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="inv-backdrop" onClick={onClose}>
       <div className="invoice" onClick={(e) => e.stopPropagation()}>
@@ -1175,6 +1189,8 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
             <button className="btn ok" disabled={busy} onClick={() => pay("cash")}>💵 Zaplatit hotově</button>
             <button className="btn" disabled={busy} onClick={() => pay("card_terminal")}>💳 Zaplatit kartou</button>
           </>}
+          {cur.type === "proforma" && <button className="btn ghost" disabled={busy} onClick={() => act(() => api.advanceTaxDoc(cur.id))}>Daňový doklad k záloze</button>}
+          {cur.type !== "credit_note" && cur.status !== "cancelled" && <button className="btn ghost" disabled={busy} onClick={() => { const r = prompt("Důvod dobropisu (nepovinné):") ?? undefined; act(() => api.creditNote(cur.id, r)); }}>Dobropis</button>}
           <button className="btn ghost" onClick={() => window.print()}>🖨 Tisk</button>
           <button className="btn ghost" onClick={onClose}>Zavřít</button>
         </div>

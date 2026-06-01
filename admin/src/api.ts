@@ -121,7 +121,7 @@ export const api = {
   reservation: (id: string) => req<ReservationDetail>(`/admin/reservations/${id}`),
   resFolio: (id: string) => req<Folio>(`/admin/reservations/${id}/folio`),
   checkin: (id: string) => req(`/admin/reservations/${id}/checkin`, { method: "POST" }),
-  checkout: (id: string) => req(`/admin/reservations/${id}/checkout`, { method: "POST" }),
+  checkout: (id: string) => req<{ document: Doc | null }>(`/admin/reservations/${id}/checkout`, { method: "POST" }),
   addPayment: (id: string, b: unknown) => req(`/admin/reservations/${id}/payments`, { method: "POST", body: JSON.stringify(b) }),
   invoice: (id: string) => req<Invoice>(`/admin/reservations/${id}/invoice`),
 
@@ -161,6 +161,9 @@ export const api = {
   issueProforma: (resId: string, amount: number, dueInDays?: number) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays }) }),
   cancelDocument: (id: string) => req(`/admin/documents/${id}/cancel`, { method: "POST" }),
   payDocument: (id: string, method: "cash" | "card_terminal") => req<Doc>(`/admin/documents/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),
+  creditNote: (id: string, reason?: string) => req<Doc>(`/admin/documents/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
+  advanceTaxDoc: (id: string) => req<Doc>(`/admin/documents/${id}/advance-tax`, { method: "POST" }),
+  bulkInvoice: (reservationIds: string[]) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds }) }),
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),

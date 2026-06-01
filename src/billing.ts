@@ -148,6 +148,50 @@ export async function issueProforma(propertyId: string, reservationId: string, a
   });
 }
 
+/** Daňový doklad k přijaté záloze (plátce DPH) — z uhrazené zálohové faktury. */
+export async function issueAdvanceTaxDoc(propertyId: string, proformaId: string) {
+  const pf = await prisma.document.findFirst({ where: { id: proformaId, propertyId, type: BillingDocType.proforma }, include: { reservations: true } });
+  if (!pf) throw NOT_FOUND();
+  return createDocument({
+    propertyId, type: BillingDocType.advance_tax,
+    customer: { name: pf.customerName, address: pf.customerAddress, ico: pf.customerIco, dic: pf.customerDic },
+    lines: [{ label: `Přijatá záloha k ${pf.number}`, unitPrice: pf.total, vatRate: VAT_ACCOMMODATION }],
+    reservationIds: pf.reservations.map((r) => r.reservationId),
+    paidTotal: pf.total, // záloha je uhrazená
+    note: `Daňový doklad k přijaté záloze (${pf.number})`,
+  });
+}
+
+/** Opravný daňový doklad (dobropis) — zrcadlí původní doklad s mínusovými částkami. */
+export async function createCreditNote(propertyId: string, originalId: string, reason?: string) {
+  const orig = await prisma.document.findFirst({ where: { id: originalId, propertyId }, include: { lines: true, reservations: true } });
+  if (!orig) throw NOT_FOUND();
+  if (orig.type === BillingDocType.credit_note) throw new Error("Z opravného dokladu nelze dělat další.");
+  return createDocument({
+    propertyId, type: BillingDocType.credit_note,
+    customer: { name: orig.customerName, address: orig.customerAddress, ico: orig.customerIco, dic: orig.customerDic },
+    lines: orig.lines.map((l) => ({ label: l.label, qty: Number(l.qty), unitPrice: l.unitPrice.neg(), vatRate: Number(l.vatRate) })),
+    reservationIds: orig.reservations.map((r) => r.reservationId),
+    note: `Opravný doklad k ${orig.number}${reason ? ` — ${reason}` : ""}`,
+    taxDate: null,
+  });
+}
+
+/** Hromadná faktura za víc rezervací (firma / skupina) — jeden odběratel. */
+export async function issueBulkInvoice(propertyId: string, reservationIds: string[]) {
+  if (!reservationIds.length) throw new Error("Vyber alespoň jednu rezervaci.");
+  const lines: LineInput[] = [];
+  let customer: { name: string; address?: string | null; ico?: string | null; dic?: string | null } | null = null;
+  let paid = new Prisma.Decimal(0);
+  for (const rid of reservationIds) {
+    const r = await loadReservationForDoc(propertyId, rid);
+    if (!customer) customer = customerFromReservation(r);
+    for (const l of linesFromReservation(r)) lines.push({ ...l, label: `${r.code}: ${l.label}` });
+    paid = paid.add((await computeFolio(rid)).paid);
+  }
+  return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: paid, dueInDays: 14 });
+}
+
 // ── Čtení ────────────────────────────────────────────────────
 export function listDocuments(propertyId: string, filter: { type?: BillingDocType; from?: Date; to?: Date } = {}) {
   const where: Prisma.DocumentWhereInput = { propertyId };
