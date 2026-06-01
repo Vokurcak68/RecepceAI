@@ -109,6 +109,16 @@ export async function assertInProperty(propertyId: string, id: string) {
   if (!it) throw NOT_FOUND();
 }
 
+// Kusy, které smí provozovna „vidět a vybrat": vlastní + centrální sklad
+// (propertyId=null & roomId=null). Centrální sklad je sdílený fond pro všechny.
+export const ownOrCentral = (propertyId: string): Prisma.EquipmentItemWhereInput =>
+  ({ OR: [{ propertyId }, { propertyId: null, roomId: null }] });
+
+export async function assertInPropertyOrCentral(propertyId: string, id: string) {
+  const it = await prisma.equipmentItem.findFirst({ where: { id, ...ownOrCentral(propertyId) }, select: { id: true } });
+  if (!it) throw NOT_FOUND();
+}
+
 // ── Dávkové založení a hromadné akce ─────────────────────────
 /** Založí `quantity` shodných kusů (každý s vlastním auto-kódem). */
 export async function createEquipmentBatch(data: EquipmentInput, quantity: number) {
@@ -118,11 +128,11 @@ export async function createEquipmentBatch(data: EquipmentInput, quantity: numbe
   return out;
 }
 
-const scopeWhere = (ids: string[], scopePropertyId?: string): Prisma.EquipmentItemWhereInput =>
-  ({ id: { in: ids }, ...(scopePropertyId ? { propertyId: scopePropertyId } : {}) });
+const scopeWhere = (ids: string[], scopePropertyId?: string, includeCentral?: boolean): Prisma.EquipmentItemWhereInput =>
+  ({ id: { in: ids }, ...(scopePropertyId ? (includeCentral ? ownOrCentral(scopePropertyId) : { propertyId: scopePropertyId }) : {}) });
 
-export async function bulkMove(ids: string[], to: Location, note: string | undefined, scopePropertyId?: string) {
-  const rows = await prisma.equipmentItem.findMany({ where: scopeWhere(ids, scopePropertyId), select: { id: true } });
+export async function bulkMove(ids: string[], to: Location, note: string | undefined, scopePropertyId?: string, includeCentral?: boolean) {
+  const rows = await prisma.equipmentItem.findMany({ where: scopeWhere(ids, scopePropertyId, includeCentral), select: { id: true } });
   for (const r of rows) await moveEquipment(r.id, to, note);
   return { moved: rows.length };
 }

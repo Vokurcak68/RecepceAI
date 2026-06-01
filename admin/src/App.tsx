@@ -1504,10 +1504,12 @@ function EquipmentView({ selId }: { selId: string }) {
   const refresh = () => { setSel(new Set()); reload(); };
   const add = async () => {
     if (!f.name) return;
-    await api.createEquipment({ name: f.name, categoryId: f.categoryId || null, code: f.code || undefined, serialNumber: f.serialNumber || undefined, acquiredAt: f.acquiredAt || undefined, quantity: Number(f.quantity) || 1, roomId: f.roomId || null });
+    const loc = f.roomId; // "" = sklad provozovny · "central" = centrální sklad · jinak roomId
+    await api.createEquipment({ name: f.name, categoryId: f.categoryId || null, code: f.code || undefined, serialNumber: f.serialNumber || undefined, acquiredAt: f.acquiredAt || undefined, quantity: Number(f.quantity) || 1, central: loc === "central", roomId: loc && loc !== "central" ? loc : null });
     setF({ name: "", categoryId: "", code: "", serialNumber: "", acquiredAt: "", quantity: 1, roomId: "" }); refresh();
   };
-  const moveOptions: MoveOpt[] = [{ value: "", label: "Sklad provozovny" }, ...(rooms.data ?? []).map((r) => ({ value: r.id, label: `Pokoj ${r.number}` }))];
+  const moveOptions: MoveOpt[] = [{ value: "", label: "Sklad provozovny" }, { value: "central", label: "Centrální sklad" }, ...(rooms.data ?? []).map((r) => ({ value: r.id, label: `Pokoj ${r.number}` }))];
+  const moveBody = (v: string) => ({ central: v === "central", roomId: v && v !== "central" ? v : null });
   const ids = [...sel];
 
   return (
@@ -1522,7 +1524,7 @@ function EquipmentView({ selId }: { selId: string }) {
           <select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}><option value="">Kategorie…</option>{(cats.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           <input placeholder="Kód (prázdné = auto)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} />
           <input placeholder="Sériové č." value={f.serialNumber} onChange={(e) => setF({ ...f, serialNumber: e.target.value })} />
-          <select value={f.roomId} onChange={(e) => setF({ ...f, roomId: e.target.value })}><option value="">Sklad provozovny</option>{(rooms.data ?? []).map((r) => <option key={r.id} value={r.id}>Pokoj {r.number}</option>)}</select>
+          <select value={f.roomId} onChange={(e) => setF({ ...f, roomId: e.target.value })}><option value="">Sklad provozovny</option><option value="central">Centrální sklad</option>{(rooms.data ?? []).map((r) => <option key={r.id} value={r.id}>Pokoj {r.number}</option>)}</select>
           <label className="row">Pořízeno <input type="date" value={f.acquiredAt} onChange={(e) => setF({ ...f, acquiredAt: e.target.value })} /></label>
           <label className="row">Počet <input type="number" min={1} max={500} style={{ width: 70 }} value={f.quantity} onChange={(e) => setF({ ...f, quantity: Number(e.target.value) })} /></label>
           <button className="btn" onClick={add}>+ Přidat</button>
@@ -1533,7 +1535,7 @@ function EquipmentView({ selId }: { selId: string }) {
         <div className="panel bulkbar"><div className="toolbar" style={{ padding: 14 }}>
           <b>{sel.size} vybráno:</b>
           <select value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value)}>{moveOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          <button className="btn sm ok" onClick={async () => { await apiBulk("/admin/equipment/bulk-move", { ids, roomId: bulkTarget || null }); refresh(); }}>Přesunout</button>
+          <button className="btn sm ok" onClick={async () => { await apiBulk("/admin/equipment/bulk-move", { ids, ...moveBody(bulkTarget) }); refresh(); }}>Přesunout</button>
           <button className="btn sm" onClick={async () => { const r = prompt("Důvod vyřazení:") ?? ""; await apiBulk("/admin/equipment/bulk-retire", { ids, retiredReason: r }); refresh(); }}>Vyřadit</button>
           <button className="btn sm ghost" onClick={() => setLabels(items.filter((e) => sel.has(e.id)))}>🏷 QR štítky</button>
           <button className="btn sm danger" onClick={async () => { if (confirm(`Smazat ${sel.size} kusů?`)) { await apiBulk("/admin/equipment/bulk-delete", { ids }); refresh(); } }}>Smazat</button>
@@ -1543,11 +1545,11 @@ function EquipmentView({ selId }: { selId: string }) {
 
       <div className="panel">
         <div className="toolbar" style={{ padding: "10px 16px", justifyContent: "flex-end" }}><button className="btn sm ghost" onClick={() => setLabels(items)}>🏷 QR štítky všech ({items.length})</button></div>
-        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={(e) => e.room ? `pokoj ${e.room.number}` : "sklad provozovny"} />
+        <EquipTable items={items} sel={sel} setSel={setSel} onDetail={setDetail} location={(e) => e.room ? `pokoj ${e.room.number}` : (e.propertyId ? "sklad provozovny" : "Centrální sklad")} />
       </div>
 
-      {detail && <EquipmentDetail item={detail} categories={cats.data ?? []} moveOptions={moveOptions} currentMove={detail.roomId ?? ""}
-        onUpdate={(b) => api.updateEquipment(detail.id, b)} onMove={(v, note) => api.moveEquipment(detail.id, { roomId: v || null, note })}
+      {detail && <EquipmentDetail item={detail} categories={cats.data ?? []} moveOptions={moveOptions} currentMove={detail.room ? (detail.roomId ?? "") : (detail.propertyId ? "" : "central")}
+        onUpdate={(b) => api.updateEquipment(detail.id, b)} onMove={(v, note) => api.moveEquipment(detail.id, { ...moveBody(v), note })}
         onDelete={() => api.deleteEquipment(detail.id)} loadMoves={() => api.equipMoves(detail.id)}
         onClose={() => setDetail(null)} onChanged={reload} />}
       {labels && <QrLabels items={labels} onClose={() => setLabels(null)} />}

@@ -476,18 +476,18 @@ const patchToInput = (b: z.infer<typeof equipPatch>) => ({
 });
 
 adminRouter.get("/equipment-categories", h(() => equip.listCategories()));
-adminRouter.get("/equipment", h((_req, res) => equip.listEquipment({ propertyId: pid(res) })));
+adminRouter.get("/equipment", h((_req, res) => equip.listEquipment(equip.ownOrCentral(pid(res)))));
 adminRouter.post("/equipment", h(async (req, res) => {
-  const b = z.object({ ...equipCreate.shape, roomId: z.string().uuid().nullable().optional(), quantity: z.number().int().positive().max(500).optional() }).parse(req.body);
+  const b = z.object({ ...equipCreate.shape, roomId: z.string().uuid().nullable().optional(), central: z.boolean().optional(), quantity: z.number().int().positive().max(500).optional() }).parse(req.body);
   if (b.roomId) { const room = await prisma.room.findUnique({ where: { id: b.roomId } }); if (!room || room.propertyId !== pid(res)) throw new Error("Pokoj nepatří do této provozovny."); }
-  const input = { ...b, acquiredAt: toD(b.acquiredAt) ?? undefined, manufacturedAt: toD(b.manufacturedAt) ?? undefined, propertyId: pid(res), roomId: b.roomId ?? null };
+  const input = { ...b, acquiredAt: toD(b.acquiredAt) ?? undefined, manufacturedAt: toD(b.manufacturedAt) ?? undefined, propertyId: b.central ? null : pid(res), roomId: b.central ? null : (b.roomId ?? null) };
   return equip.createEquipmentBatch(input, b.quantity ?? 1);
 }));
 adminRouter.patch("/equipment/:id", h(async (req, res) => { await equip.assertInProperty(pid(res), req.params.id); return equip.updateEquipment(req.params.id, patchToInput(equipPatch.parse(req.body))); }));
-adminRouter.post("/equipment/bulk-move", h((req, res) => { const b = z.object({ ids: z.array(z.string().uuid()), roomId: z.string().uuid().nullable(), note: z.string().optional() }).parse(req.body); return equip.bulkMove(b.ids, { propertyId: pid(res), roomId: b.roomId }, b.note, pid(res)); }));
+adminRouter.post("/equipment/bulk-move", h((req, res) => { const b = z.object({ ids: z.array(z.string().uuid()), roomId: z.string().uuid().nullable().optional(), central: z.boolean().optional(), note: z.string().optional() }).parse(req.body); const target = b.central ? { propertyId: null, roomId: null } : { propertyId: pid(res), roomId: b.roomId }; return equip.bulkMove(b.ids, target, b.note, pid(res), true); }));
 adminRouter.post("/equipment/bulk-retire", h((req, res) => { const b = z.object({ ids: z.array(z.string().uuid()), retiredReason: z.string().optional() }).parse(req.body); return equip.bulkRetire(b.ids, b.retiredReason ?? "—", pid(res)); }));
 adminRouter.post("/equipment/bulk-delete", h((req, res) => { const b = z.object({ ids: z.array(z.string().uuid()) }).parse(req.body); return equip.bulkDelete(b.ids, pid(res)); }));
-adminRouter.post("/equipment/:id/move", h(async (req, res) => { await equip.assertInProperty(pid(res), req.params.id); const b = z.object({ roomId: z.string().uuid().nullable(), note: z.string().optional() }).parse(req.body); return equip.moveEquipment(req.params.id, { propertyId: pid(res), roomId: b.roomId }, b.note); }));
+adminRouter.post("/equipment/:id/move", h(async (req, res) => { await equip.assertInPropertyOrCentral(pid(res), req.params.id); const b = z.object({ roomId: z.string().uuid().nullable().optional(), central: z.boolean().optional(), note: z.string().optional() }).parse(req.body); const target = b.central ? { propertyId: null, roomId: null } : { propertyId: pid(res), roomId: b.roomId }; return equip.moveEquipment(req.params.id, target, b.note); }));
 adminRouter.delete("/equipment/:id", h(async (req, res) => { await equip.assertInProperty(pid(res), req.params.id); await equip.deleteEquipment(req.params.id); return { ok: true }; }));
 adminRouter.get("/equipment/:id/moves", h(async (req, res) => { await equip.assertInProperty(pid(res), req.params.id); return equip.listMoves(req.params.id); }));
 
