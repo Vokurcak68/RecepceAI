@@ -24,6 +24,7 @@ import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
 import * as callsStore from "./calls";
 import { isJaasConfigured, mintJaasToken } from "./jaas";
 import * as billing from "./billing";
+import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -280,9 +281,11 @@ adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(re
 adminRouter.get("/reservations/:id/folio", h((req, res) => admin.adminFolio(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkin", h((req, res) => admin.adminCheckIn(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkout", h((req, res) => admin.adminCheckOut(pid(res), req.params.id)));
-adminRouter.post("/reservations/:id/payments", h((req, res) => {
+adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
   const b = z.object({ type: z.nativeEnum(PaymentType), amount: z.number(), method: z.nativeEnum(PaymentMethod).optional(), description: z.string().optional(), invoiceNumber: z.string().optional() }).parse(req.body);
-  return admin.adminAddPayment(pid(res), req.params.id, b);
+  const payment = await admin.adminAddPayment(pid(res), req.params.id, b);
+  if (b.method === PaymentMethod.cash) await cash.recordCashPayment(pid(res), payment); // hotovost → do otevřené směny
+  return payment;
 }));
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/receipt", h((req, res) => admin.buildStayReceipt(pid(res), req.params.id)));
@@ -338,6 +341,22 @@ adminRouter.post("/reservations/:id/documents", h((req, res) => {
 adminRouter.post("/reservations/:id/proforma", h((req, res) => {
   const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional() }).parse(req.body);
   return billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
+}));
+
+// Pokladna — stav, otevření směny, příjem/výdej, uzávěrka, historie.
+adminRouter.get("/cashregister", h((_req, res) => cash.getState(pid(res))));
+adminRouter.get("/cashregister/sessions", h((_req, res) => cash.listSessions(pid(res))));
+adminRouter.post("/cashregister/open", h((req, res) => {
+  const b = z.object({ openingFloat: z.number().nonnegative() }).parse(req.body);
+  return cash.openSession(pid(res), res.locals.user.id, b.openingFloat);
+}));
+adminRouter.post("/cashregister/movement", h((req, res) => {
+  const b = z.object({ kind: z.enum(["income", "expense"]), amount: z.number().positive(), note: z.string().optional() }).parse(req.body);
+  return cash.addMovement(pid(res), { kind: b.kind as import("@prisma/client").CashMovementKind, amount: b.amount, note: b.note });
+}));
+adminRouter.post("/cashregister/close", h((req, res) => {
+  const b = z.object({ countedCash: z.number().nonnegative(), note: z.string().optional() }).parse(req.body);
+  return cash.closeSession(pid(res), res.locals.user.id, b.countedCash, b.note);
 }));
 
 // Přehled servisních požadavků (manažer/super_admin).

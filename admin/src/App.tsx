@@ -6,6 +6,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
+  type CashState, type CashSession, type CashMovement,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -59,6 +60,7 @@ export function App() {
     { id: "requests", label: "Požadavky", icon: "🛎️" },
     { id: "types", label: "Typy & ceny", icon: "🏷️" },
     { id: "payments", label: "Úhrady", icon: "🧾" },
+    { id: "cashregister", label: "Pokladna", icon: "💰" },
     { id: "documents", label: "Doklady", icon: "📄" },
     { id: "book", label: "Kniha hostů", icon: "📖" },
   ];
@@ -102,6 +104,7 @@ export function App() {
         {prop && tab === "requests" && <RequestsView selId={selId} />}
         {prop && tab === "types" && <TypesView selId={selId} prop={prop} />}
         {prop && tab === "payments" && <PaymentsView selId={selId} />}
+        {prop && tab === "cashregister" && <CashRegisterView selId={selId} />}
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
@@ -1160,6 +1163,107 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         <div className="inv-actions no-print"><button className="btn" onClick={() => window.print()}>🖨 Tisk</button><button className="btn ghost" onClick={onClose}>Zavřít</button></div>
       </div>
     </div>
+  );
+}
+
+// ── Pokladna: směny, příjem/výdej, uzávěrka ──────────────────
+function CashRegisterView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<CashState>(() => api.cashState(), [selId]);
+  const hist = useAsync<CashSession[]>(() => api.cashSessions(), [selId]);
+  const [float, setFloat] = useState("");
+  const [mv, setMv] = useState<{ kind: "income" | "expense"; amount: string; note: string }>({ kind: "income", amount: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const reloadAll = () => { reload(); hist.reload(); };
+  const run = async (fn: () => Promise<unknown>) => { setBusy(true); setErr(""); try { await fn(); reloadAll(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+
+  const open = () => { const n = parseFloat((float || "0").replace(",", ".")); if (isNaN(n) || n < 0) return; run(() => api.cashOpen(n).then(() => setFloat(""))); };
+  const addMv = () => { const n = parseFloat(mv.amount.replace(",", ".")); if (isNaN(n) || n <= 0) return; run(() => api.cashMovement(mv.kind, n, mv.note || undefined).then(() => setMv({ ...mv, amount: "", note: "" }))); };
+  const close = () => {
+    const s = data?.session; if (!s) return;
+    const v = prompt(`Spočítaná hotovost v pokladně (Kč)?\nOčekáváno: ${s.summary.expected} Kč`);
+    if (v == null) return;
+    const n = parseFloat(v.replace(",", ".")); if (isNaN(n) || n < 0) return;
+    run(() => api.cashClose(n));
+  };
+
+  const s = data?.session;
+  return (
+    <>
+      <div className="h1">Pokladna <span className="muted" style={{ fontSize: 14 }}>{data?.register.name}</span></div>
+      {(error || err) && <div className="error">{error || err}</div>}
+
+      {!s ? (
+        <div className="panel" style={{ padding: 24, maxWidth: 460 }}>
+          <h3 style={{ border: "none", padding: 0 }}>Pokladna je zavřená</h3>
+          <p className="muted">Otevři směnu zadáním počátečního stavu hotovosti.</p>
+          <div className="toolbar">
+            <input placeholder="Počáteční hotovost (Kč)" value={float} onChange={(e) => setFloat(e.target.value)} style={{ width: 200 }} />
+            <button className="btn ok" disabled={busy} onClick={open}>Otevřít směnu</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="panel" style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <div className="muted">Otevřeno {s.openedAt.slice(0, 16).replace("T", " ")} · {s.openedByName} · počáteční {money(s.summary.openingFloat)}</div>
+              <button className="btn" disabled={busy} onClick={close}>🔒 Uzávěrka</button>
+            </div>
+            <div className="stats" style={{ marginTop: 14 }}>
+              <div className="stat"><div className="n">{money(s.summary.income)}</div><div className="l">Příjem</div></div>
+              <div className="stat"><div className="n">{money(s.summary.expense)}</div><div className="l">Výdej</div></div>
+              <div className="stat"><div className="n">{money(s.summary.expected)}</div><div className="l">Očekávaná hotovost</div></div>
+            </div>
+          </div>
+
+          <div className="panel" style={{ padding: 16 }}>
+            <h3 style={{ border: "none", padding: 0, marginBottom: 10 }}>Pohyb hotovosti</h3>
+            <div className="toolbar">
+              <select value={mv.kind} onChange={(e) => setMv({ ...mv, kind: e.target.value as "income" | "expense" })}>
+                <option value="income">Příjem (PPD)</option>
+                <option value="expense">Výdej (VPD)</option>
+              </select>
+              <input placeholder="Částka" style={{ width: 110 }} value={mv.amount} onChange={(e) => setMv({ ...mv, amount: e.target.value })} />
+              <input placeholder="Poznámka" value={mv.note} onChange={(e) => setMv({ ...mv, note: e.target.value })} />
+              <button className="btn" disabled={busy || !mv.amount} onClick={addMv}>+ Přidat</button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <Table cols={["Čas", "Druh", "Poznámka", "Částka"]} rows={s.movements} empty="Žádné pohyby"
+              render={(m: CashMovement) => (
+                <tr key={m.id}>
+                  <td className="muted">{m.createdAt.slice(11, 16)}</td>
+                  <td>{m.kind === "income" ? "Příjem" : "Výdej"}</td>
+                  <td className="muted">{m.note ?? "—"}</td>
+                  <td className={m.kind === "income" ? "price-up" : "price-down"}>{m.kind === "income" ? "+" : "−"}{money(m.amount)}</td>
+                </tr>
+              )} />
+          </div>
+        </>
+      )}
+
+      <div className="panel">
+        <h3>Uzávěrky</h3>
+        <Table cols={["Otevřeno", "Zavřeno", "Kdo", "Počáteční", "Příjem", "Výdej", "Očekáváno", "Spočítáno", "Rozdíl"]} rows={hist.data ?? []} empty="Žádné uzávěrky"
+          render={(x: CashSession) => {
+            const diff = x.summary.difference ? parseFloat(x.summary.difference) : 0;
+            return (
+              <tr key={x.id}>
+                <td className="muted">{x.openedAt.slice(0, 16).replace("T", " ")}</td>
+                <td className="muted">{x.closedAt?.slice(0, 16).replace("T", " ") ?? "—"}</td>
+                <td>{x.openedByName}</td>
+                <td>{money(x.summary.openingFloat)}</td>
+                <td>{money(x.summary.income)}</td>
+                <td>{money(x.summary.expense)}</td>
+                <td>{money(x.summary.expected)}</td>
+                <td>{x.summary.counted ? money(x.summary.counted) : "—"}</td>
+                <td className={diff < 0 ? "price-down" : diff > 0 ? "price-up" : "muted"}>{x.summary.difference ? money(x.summary.difference) : "—"}</td>
+              </tr>
+            );
+          }} />
+      </div>
+    </>
   );
 }
 

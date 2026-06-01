@@ -66,6 +66,15 @@ export type Doc = {
 };
 export const DOC_TYPE_LABEL: Record<string, string> = { proforma: "Zálohová faktura", advance_tax: "Daňový doklad k záloze", invoice: "Faktura", receipt: "Účtenka", credit_note: "Opravný doklad" };
 export const DOC_STATUS_LABEL: Record<string, string> = { draft: "Koncept", issued: "Vystaveno", paid: "Zaplaceno", cancelled: "Storno" };
+
+export type CashMovement = { id: string; kind: "income" | "expense"; amount: Money; note: string | null; paymentId: string | null; createdAt: string };
+export type CashSummary = { openingFloat: Money; income: Money; expense: Money; expected: Money; counted: Money | null; difference: Money | null };
+export type CashSession = {
+  id: string; openedAt: string; openedByName: string; openingFloat: Money;
+  closedAt: string | null; closedByName: string | null; countedCash: Money | null; note: string | null;
+  movements: CashMovement[]; summary: CashSummary;
+};
+export type CashState = { register: { id: string; name: string }; session: CashSession | null };
 export type Folio = { charges: Money; paid: Money; balance: Money };
 export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null;
@@ -137,6 +146,13 @@ export const api = {
   payments: (from = "", to = "") => req<PaymentsList>(`/admin/payments?from=${from}&to=${to}`),
   paymentReceipt: (id: string) => req<Receipt>(`/admin/payments/${id}/receipt`),
   stayReceipt: (id: string) => req<Receipt>(`/admin/reservations/${id}/receipt`),
+
+  // pokladna
+  cashState: () => req<CashState>(`/admin/cashregister`),
+  cashSessions: () => req<CashSession[]>(`/admin/cashregister/sessions`),
+  cashOpen: (openingFloat: number) => req<unknown>(`/admin/cashregister/open`, { method: "POST", body: JSON.stringify({ openingFloat }) }),
+  cashMovement: (kind: "income" | "expense", amount: number, note?: string) => req<unknown>(`/admin/cashregister/movement`, { method: "POST", body: JSON.stringify({ kind, amount, note }) }),
+  cashClose: (countedCash: number, note?: string) => req<unknown>(`/admin/cashregister/close`, { method: "POST", body: JSON.stringify({ countedCash, note }) }),
 
   // doklady (faktury, zálohové, účtenky)
   documents: (q = "") => req<Doc[]>(`/admin/documents${q}`),
