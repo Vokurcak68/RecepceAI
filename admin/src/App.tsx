@@ -22,6 +22,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [selId, setSelId] = useState(getProperty());
   const [tab, setTab] = useState("dashboard");
+  const [openGroup, setOpenGroup] = useState("Hosté");
 
   useEffect(() => {
     if (!localStorage.getItem("adminToken")) { setLoading(false); return; }
@@ -48,37 +49,82 @@ export function App() {
   const isSuper = session.user.role === "super_admin";
   const prop = session.properties.find((p) => p.id === selId);
 
-  const propTabs = [
+  const roomsTab = prop?.inventoryUnit === "bed"
+    ? { id: "beds", label: "Lůžka" }
+    : { id: "rooms", label: "Pokoje" };
+
+  // Samostatné položky (bez skupiny) + rozbalovací skupiny (varianta A)
+  const navItems: { id: string; label: string; icon: string }[] = [
     { id: "dashboard", label: "Přehled", icon: "📊" },
-    { id: "agents", label: "AI agenti", icon: "🤖" },
-    { id: "occupancy", label: "Obsazení", icon: "🛏️" },
-    { id: "reservations", label: "Rezervace", icon: "📋" },
-    { id: prop?.inventoryUnit === "bed" ? "beds" : "rooms", label: prop?.inventoryUnit === "bed" ? "Lůžka" : "Pokoje", icon: "🛏️" },
-    { id: "equipment", label: "Vybavení", icon: "🧰" },
-    { id: "housekeeping", label: "Dispečink úklidu", icon: "🧹" },
-    { id: "maintenance", label: "Dispečink údržby", icon: "🔧" },
-    { id: "checks", label: "Kontroly", icon: "✅" },
-    { id: "requests", label: "Požadavky", icon: "🛎️" },
-    { id: "types", label: "Typy & ceny", icon: "🏷️" },
-    { id: "payments", label: "Úhrady", icon: "🧾" },
-    { id: "cashregister", label: "Pokladna", icon: "💰" },
-    { id: "documents", label: "Doklady", icon: "📄" },
-    { id: "book", label: "Kniha hostů", icon: "📖" },
   ];
+  const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
+    { label: "Hosté", icon: "🛎️", items: [
+      { id: "occupancy", label: "Obsazení" },
+      { id: "reservations", label: "Rezervace" },
+      { id: "book", label: "Kniha hostů" },
+    ] },
+    { label: "Finance", icon: "💰", items: [
+      { id: "payments", label: "Úhrady" },
+      { id: "cashregister", label: "Pokladna" },
+      { id: "documents", label: "Doklady" },
+    ] },
+    { label: "Provoz", icon: "🧹", items: [
+      { id: "housekeeping", label: "Dispečink úklidu" },
+      { id: "maintenance", label: "Dispečink údržby" },
+      { id: "requests", label: "Požadavky" },
+      { id: "checks", label: "Kontroly" },
+    ] },
+    { label: "Nastavení", icon: "🏨", items: [
+      roomsTab,
+      { id: "types", label: "Typy & ceny" },
+      { id: "equipment", label: "Vybavení" },
+    ] },
+  ];
+  const navItemsBottom = [{ id: "agents", label: "AI agenti", icon: "🤖" }];
+  const goTab = (id: string, group?: string) => { setTab(id); if (group) setOpenGroup(group); };
 
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="logo"><span>🛎️ Recepce</span>{(session.user.role === "manager" || isSuper) && <CallBell />}</div>
 
+
         <select className="prop-switch" value={selId} onChange={(e) => { setProperty(e.target.value); setSelId(e.target.value); }}>
           {session.properties.map((p) => <option key={p.id} value={p.id}>{p.name} · {TYPE_LABEL[p.type]}</option>)}
         </select>
 
         <nav className="nav">
-          {propTabs.map((t) => (
-            <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}><span>{t.icon}</span> {t.label}</button>
+          {navItems.map((t) => (
+            <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => goTab(t.id)}><span>{t.icon}</span> {t.label}</button>
           ))}
+
+          {navGroups.map((g) => {
+            const active = g.items.some((i) => i.id === tab);
+            const open = openGroup === g.label;
+            return (
+              <div key={g.label} className="nav-grp">
+                <button
+                  className={`nav-grp-head${active ? " has-active" : ""}${open ? " open" : ""}`}
+                  onClick={() => setOpenGroup(open ? "" : g.label)}
+                >
+                  <span>{g.icon}</span> {g.label}
+                  <span className="nav-grp-arrow">{open ? "▾" : "▸"}</span>
+                </button>
+                {open && (
+                  <div className="nav-grp-items">
+                    {g.items.map((i) => (
+                      <button key={i.id} className={`nav-sub${tab === i.id ? " active" : ""}`} onClick={() => goTab(i.id, g.label)}>{i.label}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {navItemsBottom.map((t) => (
+            <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => goTab(t.id)}><span>{t.icon}</span> {t.label}</button>
+          ))}
+
           {isSuper && (
             <>
               <div className="nav-sep">CENTRÁLA</div>
