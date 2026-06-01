@@ -36,7 +36,7 @@ tr.row-central { background: #f6f9ff; box-shadow: inset 3px 0 0 var(--accent); }
 .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
 
 /* Cards / stats */
-.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+.stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 14px; margin-bottom: 24px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
 .stat .n { font-size: 34px; font-weight: 800; }
 .stat .l { color: var(--muted); font-size: 14px; margin-top: 4px; }
