@@ -5,7 +5,7 @@
 //  - veřejné      kiosek: availability / rezervace (scopováno přes x-property-id)
 import express, { type Request, type Response, type NextFunction } from "express";
 import { z, ZodError } from "zod";
-import { DocumentType, PaymentType, PaymentMethod, RoomStatus, LockType, PropertyType, UserRole, InventoryUnit, EquipmentCondition, ServiceType, ServiceStatus, ServiceDomain } from "@prisma/client";
+import { DocumentType, PaymentType, PaymentMethod, RoomStatus, LockType, PropertyType, UserRole, InventoryUnit, EquipmentCondition, ServiceType, ServiceStatus, ServiceDomain, BillingDocType } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
   getAvailability, createWalkInHold, confirmReservation, findReservationByCode, findReservationsByLastName,
@@ -23,6 +23,7 @@ import { runChecks } from "./checks";
 import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
 import * as callsStore from "./calls";
 import { isJaasConfigured, mintJaasToken } from "./jaas";
+import * as billing from "./billing";
 import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
@@ -199,7 +200,7 @@ centralRouter.post("/properties", h((req) => {
 }));
 centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
-    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
+    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
   }).parse(req.body);
@@ -322,6 +323,22 @@ adminRouter.get("/payments", h((req, res) => {
   return admin.listPayments(pid(res), q.from ? new Date(q.from) : undefined, q.to ? new Date(q.to) : undefined);
 }));
 adminRouter.get("/payments/:id/receipt", h((req, res) => admin.buildPaymentReceipt(pid(res), req.params.id)));
+
+// Doklady — seznam, detail, vystavení (faktura/účtenka, zálohová), storno.
+adminRouter.get("/documents", h((req, res) => {
+  const q = z.object({ type: z.nativeEnum(BillingDocType).optional(), from: dateStr.optional(), to: dateStr.optional() }).parse({ type: req.query.type || undefined, from: req.query.from || undefined, to: req.query.to || undefined });
+  return billing.listDocuments(pid(res), { type: q.type, from: q.from ? new Date(q.from) : undefined, to: q.to ? new Date(q.to) : undefined });
+}));
+adminRouter.get("/documents/:id", h((req, res) => billing.getDocument(pid(res), req.params.id)));
+adminRouter.post("/documents/:id/cancel", h((req, res) => billing.cancelDocument(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/documents", h((req, res) => {
+  const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});
+  return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType);
+}));
+adminRouter.post("/reservations/:id/proforma", h((req, res) => {
+  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional() }).parse(req.body);
+  return billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
+}));
 
 // Přehled servisních požadavků (manažer/super_admin).
 adminRouter.get("/requests", h((req, res) => {

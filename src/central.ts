@@ -29,7 +29,7 @@ export function createProperty(data: {
 }
 
 export function updateProperty(id: string, data: Partial<{
-  name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; active: boolean; infoText: string;
+  name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; vatPayer: boolean; active: boolean; infoText: string;
   inventoryUnit: InventoryUnit; cityTaxEnabled: boolean; cityTaxPerPersonNight: number;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean;
 }>) {

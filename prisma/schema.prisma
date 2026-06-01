@@ -127,6 +127,26 @@ enum EquipmentCondition {
   retired
 }
 
+enum BillingDocType {
+  proforma // zálohová faktura (výzva k platbě, ne daňový doklad)
+  advance_tax // daňový doklad k přijaté záloze (plátce DPH)
+  invoice // konečná faktura / daňový doklad
+  receipt // účtenka / zjednodušený daňový doklad / doklad o zaplacení
+  credit_note // opravný daňový doklad (dobropis)
+}
+
+enum DocumentStatus {
+  draft
+  issued
+  paid
+  cancelled
+}
+
+enum CashMovementKind {
+  income // příjem (PPD)
+  expense // výdej (VPD)
+}
+
 // ─────────────────────────────────────────────────────────────
 // Centrální systém: provozovny a uživatelé
 // ─────────────────────────────────────────────────────────────
@@ -143,9 +163,10 @@ model Property {
   country String? @default("CZ")
   phone   String?
   email   String?
-  ico     String? // IČO provozovny (dodavatel na dokladech)
-  dic     String? // DIČ provozovny
-  active  Boolean @default(true)
+  ico      String? // IČO provozovny (dodavatel na dokladech)
+  dic      String? // DIČ provozovny
+  vatPayer Boolean @default(false) // plátce DPH — určuje typy a náležitosti dokladů
+  active   Boolean @default(true)
   infoText String? // volný text pro AI asistenta (FAQ, služby, pravidla)
 
   // Typově závislé chování (výchozí dle typu, ale přepsatelné per provozovna).
@@ -163,6 +184,8 @@ model Property {
   users        UserProperty[]
   equipment    EquipmentItem[]
   serviceRequests ServiceRequest[]
+  documents     Document[]
+  cashRegisters CashRegister[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -335,6 +358,7 @@ model Reservation {
   payments            Payment[]
   registrationEntries RegistrationEntry[]
   serviceRequests     ServiceRequest[]
+  documents           DocumentReservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -365,9 +389,17 @@ model Payment {
   description   String?
   invoiceNumber String?
 
+  // Vazba na doklad a pokladní směnu (hotovost).
+  document      Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  documentId    String?
+  cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  cashSessionId String?
+
   createdAt DateTime @default(now())
 
   @@index([reservationId])
+  @@index([documentId])
+  @@index([cashSessionId])
 }
 
 model RegistrationEntry {
@@ -490,4 +522,137 @@ model EquipmentMove {
   createdAt DateTime      @default(now())
 
   @@index([itemId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Doklady (faktury, zálohy, účtenky) a pokladna
+// ─────────────────────────────────────────────────────────────
+
+/// Vystavený doklad. Dodavatel i odběratel jsou SNÍMEK k datu vystavení
+/// (doklad je neměnný i po změně údajů provozovny/hosta).
+model Document {
+  id         String         @id @default(uuid())
+  property   Property       @relation(fields: [propertyId], references: [id])
+  propertyId String
+  type       BillingDocType
+  number     String         @unique // číselná řada per typ a rok (FA-2026-0001…)
+  status     DocumentStatus @default(issued)
+
+  issuedAt DateTime  @default(now())
+  taxDate  DateTime? @db.Date // DUZP — datum uskutečnění zdanitelného plnění
+  dueDate  DateTime? @db.Date // splatnost (proforma / faktura)
+
+  // Snímek dodavatele (provozovna v čase vystavení).
+  supplierName    String
+  supplierAddress String?
+  supplierIco     String?
+  supplierDic     String?
+  vatPayer        Boolean @default(false) // vystaveno jako plátce DPH?
+
+  // Odběratel (host nebo firma).
+  customerName    String
+  customerAddress String?
+  customerIco     String?
+  customerDic     String?
+
+  subtotal  Decimal @default(0) @db.Decimal(10, 2) // základ (bez DPH, nebo celek u neplátce)
+  vatTotal  Decimal @default(0) @db.Decimal(10, 2)
+  total     Decimal @default(0) @db.Decimal(10, 2)
+  paidTotal Decimal @default(0) @db.Decimal(10, 2)
+
+  note String?
+
+  lines        DocumentLine[]
+  payments     Payment[]
+  reservations DocumentReservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, type, issuedAt])
+  @@index([propertyId, status])
+}
+
+model DocumentLine {
+  id         String   @id @default(uuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+
+  label     String
+  qty       Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice Decimal @db.Decimal(10, 2) // jednotková cena (vč. DPH u neplátce / koncová)
+  vatRate   Decimal @default(0) @db.Decimal(5, 2) // 0 / 12 / 21
+  lineTotal Decimal @db.Decimal(10, 2)
+
+  @@index([documentId])
+}
+
+/// M:N doklad ↔ rezervace (hromadná faktura za víc pobytů).
+model DocumentReservation {
+  document      Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId    String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+
+  @@id([documentId, reservationId])
+  @@index([reservationId])
+}
+
+/// Atomický čítač číselných řad. key = "<typ>-<rok>" nebo "<prefix>-<rok>".
+model DocumentCounter {
+  id    String @id @default(uuid())
+  key   String @unique
+  value Int    @default(0)
+}
+
+/// Pokladna provozovny (může jich být víc — recepce, bar).
+model CashRegister {
+  id         String   @id @default(uuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  name       String
+
+  sessions CashRegisterSession[]
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+/// Pokladní směna (od otevření po uzávěrku).
+model CashRegisterSession {
+  id         String       @id @default(uuid())
+  register   CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  registerId String
+
+  openedAt     DateTime @default(now())
+  openedById   String // userId
+  openingFloat Decimal  @default(0) @db.Decimal(10, 2) // počáteční stav hotovosti
+
+  closedAt    DateTime?
+  closedById  String?
+  countedCash Decimal? @db.Decimal(10, 2) // spočítaná hotovost při uzávěrce
+  note        String?
+
+  movements CashMovement[]
+  payments  Payment[]
+
+  @@index([registerId, openedAt])
+}
+
+/// Pohyb v pokladně — příjmový (PPD) / výdajový (VPD) doklad.
+model CashMovement {
+  id        String              @id @default(uuid())
+  session   CashRegisterSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  kind       CashMovementKind
+  amount     Decimal          @db.Decimal(10, 2)
+  paymentId  String? // volitelná vazba na platbu
+  documentId String? // volitelná vazba na doklad
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
 }
