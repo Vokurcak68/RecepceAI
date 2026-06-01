@@ -1,7 +1,7 @@
 // Hlavní operace rezervačního jádra — scopované na provozovnu, s rozlišením
 // jednotky pokoj/lůžko dle typu provozovny.
 import {
-  Prisma, ReservationStatus, PaymentType, PaymentMethod, PaymentStatus, DocumentType, InventoryUnit, RoomStatus,
+  Prisma, ReservationStatus, PaymentType, PaymentMethod, PaymentStatus, DocumentType, InventoryUnit, RoomStatus, ChargeCategory,
 } from "@prisma/client";
 import { prisma } from "./prisma";
 import { findFreeRoom, findFreeBed } from "./availability";
@@ -153,18 +153,35 @@ export async function addPayment(input: PaymentInput) {
 export type Folio = { charges: Prisma.Decimal; paid: Prisma.Decimal; balance: Prisma.Decimal };
 
 export async function computeFolio(reservationId: string): Promise<Folio> {
-  const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { payments: true } });
-  let extraCharges = new Prisma.Decimal(0);
+  const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { payments: true, charges: true } });
+  // Náklady = ubytování (totalAmount, vč. poplatku) + připsané položky (Charge).
+  let extra = new Prisma.Decimal(0);
+  for (const c of res.charges) extra = extra.add(c.amount);
+  // Zaplaceno = skutečné platby (záloha/doplatek/poplatek/vratka), NE položky.
   let paid = new Prisma.Decimal(0);
   for (const p of res.payments) {
     if (p.status !== PaymentStatus.succeeded) continue;
-    if (p.type === PaymentType.extra) { extraCharges = extraCharges.add(p.amount); paid = paid.add(p.amount); }
-    else if (p.type === PaymentType.deposit || p.type === PaymentType.balance || p.type === PaymentType.city_tax) paid = paid.add(p.amount);
-    else if (p.type === PaymentType.refund) paid = paid.add(p.amount);
+    if (p.type === PaymentType.deposit || p.type === PaymentType.balance || p.type === PaymentType.city_tax || p.type === PaymentType.refund) paid = paid.add(p.amount);
   }
-  const charges = res.totalAmount.add(extraCharges);
+  const charges = res.totalAmount.add(extra);
   return { charges, paid, balance: charges.sub(paid) };
 }
+
+// ── Účet pokoje: připsané položky (konzumace/služby) ─────────
+/** Výchozí sazba DPH dle kategorie (restaurace/strava 12 %, ostatní služby 21 %). */
+const CHARGE_VAT: Record<ChargeCategory, number> = { minibar: 21, restaurant: 12, wellness: 21, service: 21, parking: 21, other: 21 };
+export const CHARGE_LABEL: Record<ChargeCategory, string> = { minibar: "Minibar", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
+
+export async function addCharge(input: { reservationId: string; category: ChargeCategory; description?: string; quantity?: number; unitPrice: number; vatRate?: number }) {
+  const qty = new Prisma.Decimal(input.quantity ?? 1);
+  const unit = new Prisma.Decimal(input.unitPrice);
+  const amount = new Prisma.Decimal(qty.mul(unit).toFixed(2));
+  return prisma.charge.create({
+    data: { reservationId: input.reservationId, category: input.category, description: input.description, quantity: qty, unitPrice: unit, amount, vatRate: new Prisma.Decimal(input.vatRate ?? CHARGE_VAT[input.category]) },
+  });
+}
+export const listCharges = (reservationId: string) => prisma.charge.findMany({ where: { reservationId }, orderBy: { createdAt: "desc" } });
+export const deleteCharge = (id: string) => prisma.charge.delete({ where: { id } });
 
 // ── Check-out ────────────────────────────────────────────────
 export async function checkOut(reservationId: string) {

@@ -3,7 +3,8 @@ import { Prisma, ReservationStatus, RoomStatus, LockType, PaymentType, PaymentMe
 import { prisma } from "./prisma";
 import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
-import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio } from "./reservations";
+import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
+import { ChargeCategory } from "@prisma/client";
 
 // ── Dashboard ────────────────────────────────────────────────
 export async function dashboard(propertyId: string, date: Date) {
@@ -98,6 +99,22 @@ export async function adminFolio(propertyId: string, id: string) { await assertI
 export async function adminAddPayment(propertyId: string, id: string, input: { type: PaymentType; amount: number; method?: PaymentMethod; description?: string; invoiceNumber?: string }) {
   await assertInProperty(propertyId, id);
   return addPayment({ reservationId: id, ...input });
+}
+
+// ── Účet pokoje: připsané položky (scopováno na provozovnu) ───
+export async function adminAddCharge(propertyId: string, id: string, input: { category: ChargeCategory; description?: string; quantity?: number; unitPrice: number; vatRate?: number }) {
+  await assertInProperty(propertyId, id);
+  return addCharge({ reservationId: id, ...input });
+}
+export async function adminListCharges(propertyId: string, id: string) {
+  await assertInProperty(propertyId, id);
+  return listCharges(id);
+}
+export async function adminDeleteCharge(propertyId: string, chargeId: string) {
+  const c = await prisma.charge.findFirst({ where: { id: chargeId, reservation: { propertyId } }, select: { id: true } });
+  if (!c) throw NOT_FOUND();
+  await deleteCharge(chargeId);
+  return { ok: true };
 }
 
 /** Sestaví podklad faktury (zejm. firmě u ubytoven). Číslo z kódu rezervace. */

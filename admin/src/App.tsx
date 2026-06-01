@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement,
+  type CashState, type CashSession, type CashMovement, type Charge,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{s}</span>;
@@ -897,9 +897,10 @@ function UsersView({ currentUserId }: { currentUserId: string }) {
 function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Property; onBack: () => void }) {
   const { data, error, reload } = useAsync<ReservationDetail>(() => api.reservation(id), [id]);
   const folioA = useAsync<Folio>(() => api.resFolio(id), [id]);
+  const chargesA = useAsync<Charge[]>(() => api.charges(id), [id]);
   const [busy, setBusy] = useState(false);
   const [actErr, setActErr] = useState("");
-  const [extra, setExtra] = useState({ description: "", amount: "" });
+  const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
@@ -908,8 +909,9 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
   const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
 
-  const refresh = () => { reload(); folioA.reload(); };
+  const refresh = () => { reload(); folioA.reload(); chargesA.reload(); };
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
 
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
   if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
@@ -952,14 +954,33 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
         </div>
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <input placeholder="Položka (minibar, parkování…)" value={extra.description} onChange={(e) => setExtra({ ...extra, description: e.target.value })} />
-          <input placeholder="Částka" style={{ width: 110 }} value={extra.amount} onChange={(e) => setExtra({ ...extra, amount: e.target.value })} />
-          <button className="btn ghost" disabled={busy || !extra.amount} onClick={() => run(async () => { await api.addPayment(id, { type: "extra", amount: parseFloat(extra.amount), method: "card_terminal", description: extra.description || "Položka" }); setExtra({ description: "", amount: "" }); })}>+ Připsat položku</button>
-        </div>
       </div>
 
-      <div className="panel"><h3>Historie plateb</h3>
+      <div className="panel"><h3>Účet pokoje — náklady</h3>
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <select value={chg.category} onChange={(e) => setChg({ ...chg, category: e.target.value })}>
+            {Object.entries(CHARGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <input placeholder="Popis (cola, masáž…)" value={chg.description} onChange={(e) => setChg({ ...chg, description: e.target.value })} />
+          <input placeholder="Ks" style={{ width: 60 }} value={chg.quantity} onChange={(e) => setChg({ ...chg, quantity: e.target.value })} />
+          <input placeholder="Cena/ks" style={{ width: 100 }} value={chg.unitPrice} onChange={(e) => setChg({ ...chg, unitPrice: e.target.value })} />
+          <button className="btn" disabled={busy || !chg.unitPrice} onClick={addCharge}>+ Připsat na účet</button>
+        </div>
+        <Table cols={["Datum", "Kategorie", "Popis", "Ks", "Cena", "Celkem", ""]} rows={chargesA.data ?? []} empty="Žádné připsané položky"
+          render={(c: Charge) => (
+            <tr key={c.id}>
+              <td className="muted">{c.createdAt.slice(0, 10)}</td>
+              <td>{CHARGE_LABEL[c.category] ?? c.category}</td>
+              <td>{c.description ?? "—"}</td>
+              <td className="muted">{parseFloat(c.quantity)}</td>
+              <td className="muted">{money(c.unitPrice)}</td>
+              <td>{money(c.amount)}</td>
+              <td className="right"><button className="btn sm danger" onClick={() => run(() => api.deleteCharge(c.id))}>Smazat</button></td>
+            </tr>
+          )} />
+      </div>
+
+      <div className="panel"><h3>Platby</h3>
         <Table cols={["Datum", "Typ", "Popis", "Způsob", "Částka", ""]} rows={r.payments} empty="Žádné platby"
           render={(p: Payment) => (<tr key={p.id}><td className="muted">{p.createdAt.slice(0, 10)}</td><td>{PAY_TYPE_LABEL[p.type] ?? p.type}</td><td>{p.description ?? "—"}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td><td className="muted">{PAY_METHOD_LABEL[p.method] ?? p.method}</td><td>{money(p.amount)}</td><td className="right">{p.type !== "deposit_hold" && <button className="btn sm ghost" onClick={() => openReceipt(() => api.paymentReceipt(p.id))}>🧾</button>}</td></tr>)} />
       </div>

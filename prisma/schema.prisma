@@ -147,6 +147,16 @@ enum CashMovementKind {
   expense // výdej (VPD)
 }
 
+/// Kategorie připsané položky na účet pokoje (mimo ubytování + poplatek, ty jsou na rezervaci).
+enum ChargeCategory {
+  minibar
+  wellness
+  service // služby (úklid navíc, pronájem…)
+  restaurant // restaurace / bar
+  parking
+  other
+}
+
 // ─────────────────────────────────────────────────────────────
 // Centrální systém: provozovny a uživatelé
 // ─────────────────────────────────────────────────────────────
@@ -357,6 +367,7 @@ model Reservation {
 
   reservationGuests   ReservationGuest[]
   payments            Payment[]
+  charges             Charge[]
   registrationEntries RegistrationEntry[]
   serviceRequests     ServiceRequest[]
   documents           DocumentReservation[]
@@ -401,6 +412,23 @@ model Payment {
   @@index([reservationId])
   @@index([documentId])
   @@index([cashSessionId])
+}
+
+/// Připsaná položka na účet pokoje (konzumace/služby). Náklad k úhradě, NE platba.
+model Charge {
+  id            String        @id @default(uuid())
+  reservation   Reservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+  category      ChargeCategory
+  description   String?
+  quantity      Decimal       @default(1) @db.Decimal(10, 2)
+  unitPrice     Decimal       @db.Decimal(10, 2)
+  amount        Decimal       @db.Decimal(10, 2) // quantity * unitPrice (snímek)
+  vatRate       Decimal       @default(0) @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
 }
 
 model RegistrationEntry {

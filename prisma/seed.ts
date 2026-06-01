@@ -169,8 +169,9 @@ async function main() {
   await prisma.payment.createMany({ data: [
     { reservationId: res2.id, type: "balance", amount: D(1400), method: "prepaid", status: "succeeded" },
     { reservationId: res2.id, type: "city_tax", amount: D(50), method: "prepaid", status: "succeeded" },
-    { reservationId: res2.id, type: "extra", amount: D(120), method: "card_terminal", status: "succeeded", description: "Minibar" },
   ] });
+  // Připsaná položka na účet pokoje (konzumace) — náklad, ne platba.
+  await prisma.charge.create({ data: { reservationId: res2.id, category: "minibar", description: "Cola, voda", quantity: D(1), unitPrice: D(120), amount: D(120), vatRate: D(21) } });
   await prisma.registrationEntry.create({
     data: {
       reservationId: res2.id, guestId: smith.id, fullName: "John Smith", dateOfBirth: new Date(Date.UTC(1985, 3, 12)),

@@ -5,11 +5,12 @@
 //  - veřejné      kiosek: availability / rezervace (scopováno přes x-property-id)
 import express, { type Request, type Response, type NextFunction } from "express";
 import { z, ZodError } from "zod";
-import { DocumentType, PaymentType, PaymentMethod, RoomStatus, LockType, PropertyType, UserRole, InventoryUnit, EquipmentCondition, ServiceType, ServiceStatus, ServiceDomain, BillingDocType } from "@prisma/client";
+import { DocumentType, PaymentType, PaymentMethod, RoomStatus, LockType, PropertyType, UserRole, InventoryUnit, EquipmentCondition, ServiceType, ServiceStatus, ServiceDomain, BillingDocType, ChargeCategory } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
   getAvailability, createWalkInHold, confirmReservation, findReservationByCode, findReservationsByLastName,
   checkIn, addRegistrationEntry, addPayment, computeFolio, checkOut, releaseExpiredHolds, purgeExpiredRegistrations,
+  addCharge, listCharges, deleteCharge,
 } from "./index";
 import { serialize } from "./serialize";
 import * as admin from "./admin";
@@ -295,6 +296,14 @@ adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
   await cash.recordPayment(pid(res), { paymentId: payment.id, amount: payment.amount, method: payment.method, note: payment.description ?? undefined }); // naváže na směnu (hotovost i karta)
   return payment;
 }));
+
+// Účet pokoje — připsané položky (minibar, wellness, služby…).
+adminRouter.get("/reservations/:id/charges", h((req, res) => admin.adminListCharges(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/charges", h((req, res) => {
+  const b = z.object({ category: z.nativeEnum(ChargeCategory), description: z.string().optional(), quantity: z.number().positive().optional(), unitPrice: z.number().nonnegative(), vatRate: z.number().nonnegative().optional() }).parse(req.body);
+  return admin.adminAddCharge(pid(res), req.params.id, b);
+}));
+adminRouter.delete("/charges/:id", h((req, res) => admin.adminDeleteCharge(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/receipt", h((req, res) => admin.buildStayReceipt(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/cancel", h((req, res) => admin.cancelReservation(pid(res), req.params.id)));

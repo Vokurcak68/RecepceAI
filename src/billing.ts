@@ -4,7 +4,7 @@
 import { Prisma, BillingDocType, DocumentStatus, PaymentStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import { prisma } from "./prisma";
 import { toDateOnly, addDays, nightsBetween } from "./dates";
-import { computeFolio } from "./reservations";
+import { computeFolio, CHARGE_LABEL } from "./reservations";
 import * as cash from "./cashregister";
 
 // Sazby DPH v ČR: ubytování 12 %, pobytový poplatek mimo DPH (0), ostatní 21 %.
@@ -97,7 +97,7 @@ export async function createDocument(input: CreateDocInput) {
 async function loadReservationForDoc(propertyId: string, reservationId: string) {
   const r = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId },
-    include: { primaryGuest: true, roomType: true, payments: true },
+    include: { primaryGuest: true, roomType: true, payments: true, charges: true },
   });
   if (!r) throw NOT_FOUND();
   return r;
@@ -108,16 +108,14 @@ function customerFromReservation(r: Awaited<ReturnType<typeof loadReservationFor
   return { name: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}` };
 }
 
-/** Položky vyúčtování rezervace: ubytování, pobytový poplatek, připsané položky. */
+/** Položky vyúčtování rezervace: ubytování, pobytový poplatek, připsané položky účtu. */
 function linesFromReservation(r: Awaited<ReturnType<typeof loadReservationForDoc>>): LineInput[] {
   const lines: LineInput[] = [];
   const accommodation = r.totalAmount.sub(r.cityTax);
   lines.push({ label: `Ubytování — ${r.roomType?.name ?? "pokoj"} (${r.nights} ${r.nights === 1 ? "noc" : "nocí"})`, unitPrice: accommodation, vatRate: VAT_ACCOMMODATION });
   if (!r.cityTax.isZero()) lines.push({ label: "Pobytový poplatek", unitPrice: r.cityTax, vatRate: 0 });
-  for (const pay of r.payments) {
-    if (pay.status === PaymentStatus.succeeded && pay.type === PaymentType.extra) {
-      lines.push({ label: pay.description ?? "Položka", unitPrice: pay.amount, vatRate: VAT_DEFAULT });
-    }
+  for (const c of r.charges) {
+    lines.push({ label: `${CHARGE_LABEL[c.category]}${c.description ? ` — ${c.description}` : ""}`, qty: Number(c.quantity), unitPrice: c.unitPrice, vatRate: Number(c.vatRate) });
   }
   return lines;
 }
