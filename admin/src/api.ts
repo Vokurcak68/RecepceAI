@@ -23,7 +23,7 @@ export type Money = string;
 export type PropertyType = "hotel" | "penzion" | "ubytovna";
 export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
-  street: string | null; city: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; active: boolean; infoText: string | null;
+  street: string | null; city: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; active: boolean; infoText: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean;
   _count?: { rooms: number; beds: number; reservations: number };
@@ -62,7 +62,7 @@ export type Doc = {
   supplierName: string; supplierAddress: string | null; supplierIco: string | null; supplierDic: string | null; vatPayer: boolean;
   customerName: string; customerAddress: string | null; customerIco: string | null; customerDic: string | null;
   subtotal: Money; vatTotal: Money; total: Money; paidTotal: Money; note: string | null;
-  lines?: DocLine[]; reservations?: { reservation: { code: string } }[];
+  lines?: DocLine[]; reservations?: { reservation: { code: string } }[]; qrPayment?: string | null;
 };
 export const DOC_TYPE_LABEL: Record<string, string> = { proforma: "Zálohová faktura", advance_tax: "Daňový doklad k záloze", invoice: "Faktura", receipt: "Účtenka", credit_note: "Opravný doklad" };
 export const DOC_STATUS_LABEL: Record<string, string> = { draft: "Koncept", issued: "Vystaveno", paid: "Zaplaceno", cancelled: "Storno" };
@@ -164,6 +164,8 @@ export const api = {
   creditNote: (id: string, reason?: string) => req<Doc>(`/admin/documents/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
   advanceTaxDoc: (id: string) => req<Doc>(`/admin/documents/${id}/advance-tax`, { method: "POST" }),
   bulkInvoice: (reservationIds: string[]) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds }) }),
+  periodInvoice: (resId: string, from: string, to: string) => req<Doc>(`/admin/reservations/${resId}/period-invoice`, { method: "POST", body: JSON.stringify({ from, to }) }),
+  documentsCsv: async (q = "") => { const r = await fetch(`/api/admin/documents/export.csv${q}`, { headers: { "x-admin-token": token(), "x-property-id": getProperty() } }); if (!r.ok) throw new Error("Export selhal"); return r.text(); },
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),

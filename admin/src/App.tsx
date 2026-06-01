@@ -720,7 +720,7 @@ function BookView({ selId }: { selId: string }) {
 }
 
 // ── CENTRÁLA: Provozovny ─────────────────────────────────────
-type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
+type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; iban: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
 
 function PropertiesView() {
   const { data, error, reload } = useAsync<Property[]>(() => api.centralProperties(), []);
@@ -733,7 +733,7 @@ function PropertiesView() {
   const toggle = async (p: Property, field: "cityTaxEnabled" | "allowLongTerm" | "selfCheckin" | "breakfastIncluded" | "active") => { await api.updateProperty(p.id, { [field]: !p[field] }); reload(); };
   const startEdit = (p: Property) => {
     setEditId(p.id);
-    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
+    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
@@ -775,6 +775,7 @@ function PropertiesView() {
           <div className="toolbar">
             <input placeholder="IČO (na dokladech)" value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} />
             <input placeholder="DIČ" value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} />
+            <input placeholder="IBAN (QR platba)" style={{ minWidth: 240 }} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} />
           </div>
           <div style={{ padding: "4px 0 10px" }}>
             <div className="muted" style={{ marginBottom: 6 }}>Informace pro AI asistenta (FAQ — wifi, snídaně, parkování, pravidla, okolí…):</div>
@@ -905,6 +906,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
+  const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
 
   const refresh = () => { reload(); folioA.reload(); };
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
@@ -947,6 +949,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>
           <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "receipt"))}>🧾 Vystavit účtenku</button>
           <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>
+          {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
         </div>
         <div className="toolbar" style={{ marginTop: 10 }}>
@@ -1094,6 +1097,13 @@ function DocumentsView({ selId }: { selId: string }) {
   const [doc, setDoc] = useState<Doc | null>(null);
   const open = async (id: string) => { try { setDoc(await api.document(id)); } catch { /* */ } };
   const cancel = async (id: string) => { if (!confirm("Opravdu stornovat doklad?")) return; await api.cancelDocument(id); reload(); };
+  const exportCsv = async () => {
+    try {
+      const csv = await api.documentsCsv(type ? `?type=${type}` : "");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a"); a.href = url; a.download = "doklady.csv"; a.click(); URL.revokeObjectURL(url);
+    } catch { /* */ }
+  };
   return (
     <>
       <div className="h1">Doklady</div>
@@ -1103,6 +1113,7 @@ function DocumentsView({ selId }: { selId: string }) {
           <option value="">Všechny typy</option>
           {Object.entries(DOC_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <button className="btn ghost" style={{ marginLeft: "auto" }} onClick={exportCsv}>⬇ Export CSV</button>
       </div>
       <div className="panel">
         <Table cols={["Číslo", "Datum", "Typ", "Odběratel", "Celkem", "Stav", ""]} rows={data ?? []} empty="Žádné doklady"
@@ -1130,6 +1141,8 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
   const [cur, setCur] = useState<Doc>(doc);
   const [busy, setBusy] = useState(false);
   const [perr, setPerr] = useState("");
+  const [qrImg, setQrImg] = useState("");
+  useEffect(() => { if (cur.qrPayment) QRCode.toDataURL(cur.qrPayment, { margin: 1, width: 150 }).then(setQrImg).catch(() => setQrImg("")); else setQrImg(""); }, [cur.qrPayment]);
   const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
   const pay = async (method: "cash" | "card_terminal") => {
     setBusy(true); setPerr("");
@@ -1183,6 +1196,7 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         <div className="inv-total"><span>Celkem{cur.vatPayer ? " vč. DPH" : ""}</span><b>{money(cur.total)}</b></div>
         <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(cur.paidTotal)}</span></div>
         {due > 0.005 && <div className="kvline"><span className="muted">Zbývá uhradit</span><b>{money(due.toFixed(2))}</b></div>}
+        {qrImg && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}><img src={qrImg} alt="QR platba" width={120} height={120} /><div className="muted" style={{ fontSize: 13 }}>QR platba<br />Naskenuj v bankovní aplikaci pro úhradu zálohy.</div></div>}
         {perr && <div className="error" style={{ marginTop: 10 }}>{perr}</div>}
         <div className="inv-actions no-print">
           {due > 0.005 && cur.status !== "cancelled" && <>

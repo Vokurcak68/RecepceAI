@@ -3,7 +3,7 @@
 // aby byl neměnný. Karty se jen evidují (žádná integrace terminálu).
 import { Prisma, BillingDocType, DocumentStatus, PaymentStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import { prisma } from "./prisma";
-import { toDateOnly, addDays } from "./dates";
+import { toDateOnly, addDays, nightsBetween } from "./dates";
 import { computeFolio } from "./reservations";
 import * as cash from "./cashregister";
 
@@ -20,6 +20,7 @@ const PREFIX: Record<BillingDocType, string> = {
 };
 
 const round2 = (d: Prisma.Decimal) => new Prisma.Decimal(d.toFixed(2));
+const iso = (d: Date) => toDateOnly(d).toISOString().slice(0, 10);
 const NOT_FOUND = () => Object.assign(new Error("not_found"), { code: "P2025" });
 
 /** Atomicky vrátí další číslo řady: <PREFIX>-<ROK>-<NNNN>. */
@@ -121,17 +122,43 @@ function linesFromReservation(r: Awaited<ReturnType<typeof loadReservationForDoc
   return lines;
 }
 
-/** Konečná faktura / účtenka za pobyt (zúčtuje přijaté platby). */
+/** Odečet uhrazených záloh — mínusové řádky do konečné faktury (advance settlement). */
+async function advanceDeductions(reservationId: string): Promise<LineInput[]> {
+  const advances = await prisma.document.findMany({
+    where: { status: { not: DocumentStatus.cancelled }, reservations: { some: { reservationId } }, type: { in: [BillingDocType.advance_tax, BillingDocType.proforma] } },
+    include: { lines: true }, orderBy: { issuedAt: "asc" },
+  });
+  const tax = advances.filter((a) => a.type === BillingDocType.advance_tax);
+  const use = tax.length ? tax : advances.filter((a) => a.type === BillingDocType.proforma && a.status === DocumentStatus.paid);
+  return use.map((a) => ({ label: `Odečet zálohy ${a.number}`, unitPrice: a.total.neg(), vatRate: Number(a.lines[0]?.vatRate ?? 0) }));
+}
+
+/** Konečná faktura / účtenka za pobyt. Faktura odečte uhrazené zálohy. */
 export async function issueReservationDocument(propertyId: string, reservationId: string, type: BillingDocType = BillingDocType.invoice) {
   const r = await loadReservationForDoc(propertyId, reservationId);
   const folio = await computeFolio(reservationId);
+  const lines = linesFromReservation(r);
+  let paidTotal: Prisma.Decimal | number = 0;
+  if (type === BillingDocType.receipt) {
+    paidTotal = folio.paid; // účtenka potvrzuje, co bylo zaplaceno
+  } else if (type === BillingDocType.invoice) {
+    lines.push(...(await advanceDeductions(reservationId))); // odečet uhrazených záloh
+  }
+  return createDocument({ propertyId, type, customer: customerFromReservation(r), lines, reservationIds: [r.id], paidTotal, dueInDays: type === BillingDocType.invoice ? 14 : undefined });
+}
+
+/** Periodická faktura za období (dlouhodobí) — poměrná část ubytování. */
+export async function issuePeriodInvoice(propertyId: string, reservationId: string, from: Date, to: Date) {
+  const r = await loadReservationForDoc(propertyId, reservationId);
+  const nights = nightsBetween(from, to);
+  if (nights < 1) throw new Error("Neplatné období.");
+  const dailyAccommodation = r.totalAmount.sub(r.cityTax).div(r.nights);
+  const accommodation = round2(dailyAccommodation.mul(nights));
   return createDocument({
-    propertyId, type,
+    propertyId, type: BillingDocType.invoice,
     customer: customerFromReservation(r),
-    lines: linesFromReservation(r),
-    reservationIds: [r.id],
-    paidTotal: folio.paid,
-    dueInDays: type === BillingDocType.invoice ? 14 : undefined,
+    lines: [{ label: `Ubytování za období ${iso(from)} – ${iso(to)} (${nights} ${nights === 1 ? "noc" : "nocí"})`, unitPrice: accommodation, vatRate: VAT_ACCOMMODATION }],
+    reservationIds: [r.id], dueInDays: 14, note: `Periodická faktura za období ${iso(from)} – ${iso(to)}`,
   });
 }
 
@@ -189,7 +216,8 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
     for (const l of linesFromReservation(r)) lines.push({ ...l, label: `${r.code}: ${l.label}` });
     paid = paid.add((await computeFolio(rid)).paid);
   }
-  return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: paid, dueInDays: 14 });
+  void paid; // hromadná faktura je splatná (platí se přes payDocument)
+  return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 });
 }
 
 // ── Čtení ────────────────────────────────────────────────────
@@ -204,10 +232,26 @@ export function listDocuments(propertyId: string, filter: { type?: BillingDocTyp
   });
 }
 
+/** SPAYD řetězec pro QR platbu (jen proforma s vyplněným IBANem provozovny). */
+function spaydFor(doc: { type: BillingDocType; number: string; total: Prisma.Decimal; property: { iban: string | null } }): string | null {
+  if (doc.type !== BillingDocType.proforma || !doc.property.iban) return null;
+  const vs = doc.number.replace(/\D/g, "").slice(-10);
+  return `SPD*1.0*ACC:${doc.property.iban.replace(/\s/g, "")}*AM:${doc.total.toFixed(2)}*CC:CZK*X-VS:${vs}*MSG:Zaloha ${doc.number}`;
+}
+
 export async function getDocument(propertyId: string, id: string) {
   const doc = await prisma.document.findFirst({ where: { id, propertyId }, include: DOC_INCLUDE });
   if (!doc) throw NOT_FOUND();
-  return doc;
+  return { ...doc, qrPayment: spaydFor(doc) };
+}
+
+/** Export dokladů do CSV (oddělovač ;, kódování UTF-8 s BOM pro Excel). */
+export async function exportDocumentsCsv(propertyId: string, filter: { type?: BillingDocType; from?: Date; to?: Date } = {}): Promise<string> {
+  const docs = await listDocuments(propertyId, filter);
+  const header = ["Číslo", "Datum", "Typ", "Odběratel", "IČO", "Základ", "DPH", "Celkem", "Zaplaceno", "Stav"];
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = docs.map((d) => [d.number, iso(d.issuedAt), d.type, d.customerName, d.customerIco ?? "", d.subtotal.toFixed(2), d.vatTotal.toFixed(2), d.total.toFixed(2), d.paidTotal.toFixed(2), d.status]);
+  return "﻿" + [header, ...rows].map((r) => r.map(esc).join(";")).join("\r\n");
 }
 
 /**
@@ -228,11 +272,12 @@ export async function payDocument(propertyId: string, documentId: string, method
   });
   // Naváže platbu na otevřenou směnu (hotovost i do šuplíku, karta jako tržba kartou).
   await cash.recordPayment(propertyId, { paymentId: payment.id, amount: remaining, method, documentId: doc.id, note: `${doc.number} — ${doc.customerName}` });
-  // paidTotal dle folia rezervace (po přidání platby), stav podle úhrady.
-  const folio = await computeFolio(reservationId);
+  // paidTotal = součet plateb navázaných na tento doklad.
+  const agg = await prisma.payment.aggregate({ where: { documentId: doc.id, status: PaymentStatus.succeeded }, _sum: { amount: true } });
+  const paidTotal = agg._sum.amount ?? new Prisma.Decimal(0);
   return prisma.document.update({
     where: { id: doc.id },
-    data: { paidTotal: folio.paid, status: folio.paid.greaterThanOrEqualTo(doc.total) ? DocumentStatus.paid : DocumentStatus.issued },
+    data: { paidTotal, status: paidTotal.greaterThanOrEqualTo(doc.total) ? DocumentStatus.paid : DocumentStatus.issued },
     include: DOC_INCLUDE,
   });
 }

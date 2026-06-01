@@ -205,7 +205,7 @@ centralRouter.post("/properties", h((req) => {
 }));
 centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
-    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
+    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
   }).parse(req.body);
@@ -340,6 +340,13 @@ adminRouter.get("/documents", h((req, res) => {
   const q = z.object({ type: z.nativeEnum(BillingDocType).optional(), from: dateStr.optional(), to: dateStr.optional() }).parse({ type: req.query.type || undefined, from: req.query.from || undefined, to: req.query.to || undefined });
   return billing.listDocuments(pid(res), { type: q.type, from: q.from ? new Date(q.from) : undefined, to: q.to ? new Date(q.to) : undefined });
 }));
+adminRouter.get("/documents/export.csv", asyncWrap(async (req, res) => {
+  const q = z.object({ type: z.nativeEnum(BillingDocType).optional(), from: dateStr.optional(), to: dateStr.optional() }).parse({ type: req.query.type || undefined, from: req.query.from || undefined, to: req.query.to || undefined });
+  const csv = await billing.exportDocumentsCsv(pid(res), { type: q.type, from: q.from ? new Date(q.from) : undefined, to: q.to ? new Date(q.to) : undefined });
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="doklady.csv"`);
+  res.send(csv);
+}));
 adminRouter.get("/documents/:id", h((req, res) => billing.getDocument(pid(res), req.params.id)));
 adminRouter.post("/documents/:id/cancel", h((req, res) => billing.cancelDocument(pid(res), req.params.id)));
 adminRouter.post("/documents/:id/pay", h((req, res) => {
@@ -354,6 +361,10 @@ adminRouter.post("/documents/:id/advance-tax", h((req, res) => billing.issueAdva
 adminRouter.post("/documents/bulk-invoice", h((req, res) => {
   const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body);
   return billing.issueBulkInvoice(pid(res), b.reservationIds);
+}));
+adminRouter.post("/reservations/:id/period-invoice", h((req, res) => {
+  const b = z.object({ from: dateStr, to: dateStr }).parse(req.body);
+  return billing.issuePeriodInvoice(pid(res), req.params.id, new Date(b.from), new Date(b.to));
 }));
 adminRouter.post("/reservations/:id/documents", h((req, res) => {
   const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});
