@@ -23,8 +23,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json();
 }
 
+const CODE_KEY = "guest_code";
+
 export function App() {
-  const [code, setCode] = useState(() => new URLSearchParams(location.search).get("code") || "");
+  const [code, setCode] = useState(() => (new URLSearchParams(location.search).get("code") || localStorage.getItem(CODE_KEY) || "").toUpperCase());
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,13 +34,30 @@ export function App() {
   const [desc, setDesc] = useState("");
   const [sent, setSent] = useState(false);
 
+  // Tiché načtení (polling na pozadí) bez busy/error blikání a bez mazání dat při výpadku.
+  const refresh = async (c: string) => {
+    try { setData(await api<Data>(`/guest/${encodeURIComponent(c.trim())}`)); } catch { /* ponech současná data */ }
+  };
   const load = async (c: string) => {
+    const norm = c.trim().toUpperCase();
     setError(""); setBusy(true);
-    try { setData(await api<Data>(`/guest/${encodeURIComponent(c.trim())}`)); }
-    catch { setError("Rezervace nenalezena. Zkontrolujte kód."); setData(null); }
-    finally { setBusy(false); }
+    try {
+      setData(await api<Data>(`/guest/${encodeURIComponent(norm)}`));
+      localStorage.setItem(CODE_KEY, norm); // zapamatuj kód → přežije ruční refresh
+    } catch {
+      setError("Rezervace nenalezena. Zkontrolujte kód.");
+      setData(null);
+      localStorage.removeItem(CODE_KEY); // neplatný/expirovaný kód neukládej
+    } finally { setBusy(false); }
   };
   useEffect(() => { if (code) load(code); }, []); // eslint-disable-line
+
+  // Periodická aktualizace „Moje požadavky" (stavy mění personál), jen když jsme přihlášení.
+  useEffect(() => {
+    if (!data) return;
+    const t = setInterval(() => refresh(code), 15000);
+    return () => clearInterval(t);
+  }, [data, code]); // eslint-disable-line
 
   const send = async () => {
     if (!picked) return;
@@ -99,7 +118,7 @@ export function App() {
         ))}
       </div>
 
-      <button className="btn ghost block" onClick={() => { setData(null); setCode(""); }}>Odhlásit</button>
+      <button className="btn ghost block" onClick={() => { setData(null); setCode(""); localStorage.removeItem(CODE_KEY); }}>Odhlásit</button>
     </div>
   );
 }
