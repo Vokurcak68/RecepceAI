@@ -93,6 +93,12 @@ export function StaffCall({ room, propertyName, onClose }: {
       });
       apiRef.current = japi;
       japi.addEventListener("participantJoined", () => { setConnected(true); resolveBell(); });
+      // Recepční mohl naskočit (přes WhatsApp/QR) DŘÍV, než se kiosek připojil — pak už
+      // participantJoined nepřijde. Po vlastním připojení proto zkontroluj stávající účastníky.
+      japi.addEventListener("videoConferenceJoined", () => {
+        const check = () => { try { if ((japi.getNumberOfParticipants?.() ?? 1) > 1) { setConnected(true); resolveBell(); } } catch { /* */ } };
+        check(); setTimeout(check, 1500);
+      });
       japi.addEventListener("participantLeft", () => { try { if ((japi.getNumberOfParticipants?.() ?? 1) <= 1) setConnected(false); } catch { /* */ } });
       japi.addEventListener("readyToClose", onClose);
     };
