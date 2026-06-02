@@ -36,7 +36,7 @@ function buildSystem(p: Awaited<ReturnType<typeof prisma.property.findUniqueOrTh
     p.street ? `Adresa: ${p.street}, ${p.city ?? ""}.` : "",
     `Snídaně v ceně: ${p.breakfastIncluded ? "ano" : "ne"}.`,
     `Samoobslužný check-in: ${p.selfCheckin ? "ano" : "ne"}.`,
-    p.cityTaxEnabled ? `Účtuje se pobytový poplatek ${p.cityTaxPerPersonNight.toFixed(0)} Kč/osoba/noc.` : `Pobytový poplatek se neúčtuje.`,
+    p.cityTaxEnabled ? `Účtuje se pobytový poplatek ${p.cityTaxPerPersonNight.toFixed(0)} Kč/osoba/noc; děti do ${p.cityTaxFreeAge} let neplatí.` : `Pobytový poplatek se neúčtuje.`,
     p.allowLongTerm ? `Umožňuje dlouhodobé pobyty (týdenní/měsíční ceny).` : "",
     p.infoText ? `Další informace:\n${p.infoText}` : "",
   ].filter(Boolean).join("\n");
@@ -49,6 +49,7 @@ ROZSAH (důležité):
 - Odpovídáš VÝHRADNĚ na témata této provozovny: dostupnost pokojů/lůžek, ceny, rezervace, check-in/out, služby a praktické informace pro hosty.
 - Na cokoliv mimo ubytování (počasí, zprávy, obecné dotazy, programování, jiné firmy…) zdvořile odmítni a nabídni pomoc s ubytováním. Nevymýšlej si.
 - Nikdy si nevymýšlej ceny ani dostupnost — vždy použij nástroje. Před vytvořením rezervace si nech od hosta potvrdit termín, typ a cenu.
+- Zeptej se i na počet dětí a jejich věk; věk každého dítěte předej do book_room jako childAges (např. [5, 16]). Děti do věkové hranice provozovny neplatí pobytový poplatek, takže věk ovlivní cenu. Bez dětí pošli prázdné pole.
 - Buď stručná, vlídná a konkrétní. ${langLine}
 
 FORMÁT ODPOVĚDI (důležité): Tvoje odpovědi se hostovi PŘEDČÍTAJÍ nahlas a zároveň zobrazují na dotykovém kiosku. Piš proto jako mluvená řeč:
@@ -90,7 +91,8 @@ const TOOLS: Anthropic.Tool[] = [
         roomTypeId: { type: "string", description: "ID typu jednotky z check_availability" },
         from: { type: "string", description: "Příjezd YYYY-MM-DD" },
         to: { type: "string", description: "Odjezd YYYY-MM-DD" },
-        adults: { type: "integer" },
+        adults: { type: "integer", description: "Počet dospělých" },
+        childAges: { type: "array", items: { type: "integer" }, description: "Věk každého dítěte (roky). Prázdné pole, pokud bez dětí. Ovlivňuje pobytový poplatek." },
         guestFirstName: { type: "string" },
         guestLastName: { type: "string" },
       },
@@ -116,7 +118,8 @@ async function executeTool(propertyId: string, name: string, input: Record<strin
   if (name === "book_room") {
     const r = await createWalkInHold({
       propertyId, roomTypeId: String(input.roomTypeId), from: new Date(String(input.from)), to: new Date(String(input.to)),
-      adults: Number(input.adults), guest: { firstName: String(input.guestFirstName), lastName: String(input.guestLastName) },
+      adults: Number(input.adults), childAges: Array.isArray(input.childAges) ? (input.childAges as unknown[]).map(Number).filter((n) => Number.isFinite(n)) : [],
+      guest: { firstName: String(input.guestFirstName), lastName: String(input.guestLastName) },
     });
     return { kod: r.code, jednotka: r.room?.number ?? r.bed?.label ?? r.roomType?.name, cenaCelkem: money(r.totalAmount), stav: "blokace (platba na recepci/kiosku)" };
   }
