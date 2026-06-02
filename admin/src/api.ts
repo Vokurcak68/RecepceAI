@@ -49,6 +49,9 @@ export type ServiceItem = { id: string; name: string; category: string; price: M
 export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
 export type CalType = { roomTypeId: string; name: string; total: number; cells: { booked: number; free: number }[] };
 export type OccupancyCalendar = { from: string; days: number; unit: "room" | "bed"; dates: string[]; types: CalType[] };
+export type TapeUnit = { id: string; label: string; roomTypeId: string };
+export type TapeRes = { id: string; code: string; guestName: string; status: string; roomTypeId: string; unitId: string | null; checkInDate: string; checkOutDate: string };
+export type TapeChart = { from: string; days: number; unit: "room" | "bed"; dates: string[]; types: { roomTypeId: string; name: string }[]; units: TapeUnit[]; reservations: TapeRes[] };
 export type EmailLog = { id: string; type: string; recipient: string; subject: string; status: string; error: string | null; createdAt: string };
 export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace" };
 
@@ -199,6 +202,8 @@ export const api = {
   occupancy: () => req<OccupancyRow[]>(`/admin/occupancy`),
   resGuests: (id: string) => req<ResGuest[]>(`/admin/reservations/${id}/guests`),
   calendar: (from?: string, days = 21) => req<OccupancyCalendar>(`/admin/calendar?days=${days}${from ? `&from=${from}` : ""}`),
+  tapechart: (from?: string, days = 14) => req<TapeChart>(`/admin/tapechart?days=${days}${from ? `&from=${from}` : ""}`),
+  assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),

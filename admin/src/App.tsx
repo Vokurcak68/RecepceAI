@@ -7,7 +7,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -64,6 +64,7 @@ export function App() {
   const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
     { label: "Hosté", icon: "🛎️", items: [
       { id: "calendar", label: "Kalendář obsazení" },
+      { id: "tapechart", label: "Plán pokojů" },
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
       { id: "book", label: "Kniha hostů" },
@@ -147,6 +148,7 @@ export function App() {
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
         {prop && tab === "calendar" && <CalendarView selId={selId} />}
+        {prop && tab === "tapechart" && <TapeChartView selId={selId} prop={prop} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
@@ -508,6 +510,92 @@ function CalendarView({ selId }: { selId: string }) {
               {data.types.length === 0 && <tr><td className="muted" style={{ padding: 16 }} colSpan={data.dates.length + 1}>Žádné typy pokojů — nejdřív je založ v „Typy &amp; ceny".</td></tr>}
             </tbody>
           </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
+  const [days, setDays] = useState(14);
+  const [from, setFrom] = useState(todayIso());
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<TapeRes | null>(null);
+  const [msg, setMsg] = useState("");
+  const { data, error, reload } = useAsync<TapeChart>(() => api.tapechart(from, days), [selId, from, days]);
+
+  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
+
+  const DAYW = 44, LABELW = 150, ROWH = 30;
+  const DOW = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+  const dayHdr = (iso: string) => { const dt = new Date(iso); return { dom: dt.getUTCDate(), mon: dt.getUTCMonth() + 1, we: [0, 6].includes(dt.getUTCDay()), dow: DOW[dt.getUTCDay()] }; };
+  const idx = (iso: string) => data ? Math.round((Date.parse(iso) - Date.parse(data.from)) / 86400000) : 0;
+  const STCOL: Record<string, string> = { hold: "#e8a33d", confirmed: "#4f7cff", checked_in: "#1a9e63", checked_out: "#9aa7b3" };
+  const grid: CSSProperties = { backgroundImage: `repeating-linear-gradient(to right, #eef1f4 0 1px, transparent 1px ${DAYW}px)` };
+
+  const assign = async (unitId: string) => {
+    if (!assigning) return;
+    setMsg("");
+    try { await api.assignUnit(assigning.id, unitId); setAssigning(null); reload(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
+  };
+
+  const bar = (r: TapeRes, lane = false) => {
+    const s = Math.max(0, idx(r.checkInDate)), e = Math.min(days, idx(r.checkOutDate));
+    const span = e - s; if (span <= 0) return null;
+    return (
+      <div key={r.id} title={`${r.code} · ${r.guestName} · ${statusLabel(r.status)}`} onClick={(ev) => { ev.stopPropagation(); if (lane) setAssigning(r); else setDetailId(r.id); }}
+        style={{ position: "absolute", left: s * DAYW + 2, width: span * DAYW - 4, top: 3, height: ROWH - 6, background: STCOL[r.status] ?? "#4f7cff", color: "#fff", borderRadius: 6, fontSize: 11, lineHeight: `${ROWH - 6}px`, padding: "0 6px", overflow: "hidden", whiteSpace: "nowrap", cursor: "pointer", boxShadow: lane ? "0 0 0 2px #fff, 0 0 0 3px #e8a33d" : undefined }}>
+        {r.guestName}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="h1">Plán pokojů</div>
+      <div className="toolbar">
+        <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="row">Dní <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7</option><option value={14}>14</option><option value={21}>21</option></select></label>
+        <span className="muted">klik na pruh = detail · <b style={{ color: "#e8a33d" }}>blokace</b> / <b style={{ color: "#4f7cff" }}>potvrzeno</b> / <b style={{ color: "#1a9e63" }}>ubytován</b></span>
+      </div>
+      {(error || msg) && <div className="error">{error || msg}</div>}
+      {assigning && <div className="ok-msg" style={{ background: "#fff4e0", color: "#9a6b00" }}>Přiřazuji <b>{assigning.code}</b> ({assigning.guestName}) — klikni na řádek volného pokoje téhož typu. <button className="btn sm ghost" onClick={() => setAssigning(null)}>Zrušit</button></div>}
+      {!data ? <div className="muted" style={{ padding: 20 }}>Načítám…</div> : (
+        <div className="panel" style={{ overflowX: "auto", padding: 0 }}>
+          <div style={{ minWidth: LABELW + days * DAYW }}>
+            <div style={{ display: "flex", borderBottom: "2px solid #e6eaee" }}>
+              <div style={{ width: LABELW, flex: "0 0 auto", padding: "6px 8px", fontWeight: 700, fontSize: 12, position: "sticky", left: 0, background: "#f6f8fa", zIndex: 1 }}>Pokoj / lůžko</div>
+              {data.dates.map((iso) => { const f = dayHdr(iso); return <div key={iso} style={{ width: DAYW, flex: "0 0 auto", textAlign: "center", padding: "4px 0", fontSize: 11, background: f.we ? "#eef1f4" : "#f6f8fa" }}>{f.dow}<br />{f.dom}.{f.mon}.</div>; })}
+            </div>
+            {data.types.map((tp) => {
+              const tUnits = data.units.filter((u) => u.roomTypeId === tp.roomTypeId);
+              const unassigned = data.reservations.filter((r) => r.roomTypeId === tp.roomTypeId && !r.unitId);
+              const canAssignHere = !!assigning && assigning.roomTypeId === tp.roomTypeId;
+              return (
+                <div key={tp.roomTypeId}>
+                  <div style={{ padding: "4px 8px", fontWeight: 700, fontSize: 12, background: "#f0f3f8", position: "sticky", left: 0 }}>{tp.name}</div>
+                  {tUnits.map((u) => (
+                    <div key={u.id} onClick={() => { if (canAssignHere) assign(u.id); }} style={{ display: "flex", height: ROWH, borderBottom: "1px solid #f0f3f8", cursor: canAssignHere ? "pointer" : "default", background: canAssignHere ? "#fffaf0" : undefined }}>
+                      <div style={{ width: LABELW, flex: "0 0 auto", padding: "0 8px", fontSize: 13, lineHeight: `${ROWH}px`, position: "sticky", left: 0, background: canAssignHere ? "#fffaf0" : "#fff", borderRight: "1px solid #eef1f4" }}>{u.label}</div>
+                      <div style={{ position: "relative", width: days * DAYW, flex: "0 0 auto", ...grid }}>
+                        {data.reservations.filter((r) => r.unitId === u.id).map((r) => bar(r))}
+                      </div>
+                    </div>
+                  ))}
+                  {unassigned.length > 0 && (
+                    <div style={{ display: "flex", height: ROWH, borderBottom: "1px solid #f0f3f8", background: "#fcf4e6" }}>
+                      <div style={{ width: LABELW, flex: "0 0 auto", padding: "0 8px", fontSize: 12, fontStyle: "italic", color: "#9a6b00", lineHeight: `${ROWH}px`, position: "sticky", left: 0, background: "#fcf4e6", borderRight: "1px solid #eef1f4" }}>Nepřiřazené ({unassigned.length})</div>
+                      <div style={{ position: "relative", width: days * DAYW, flex: "0 0 auto", ...grid }}>
+                        {unassigned.map((r) => bar(r, true))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {data.units.length === 0 && <div className="muted" style={{ padding: 16 }}>Žádné pokoje — založ je v „Pokoje".</div>}
+          </div>
         </div>
       )}
     </>

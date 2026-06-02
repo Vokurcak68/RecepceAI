@@ -3,7 +3,8 @@ import { Prisma, ReservationStatus, RoomStatus, LockType, PaymentType, PaymentMe
 import { prisma } from "./prisma";
 import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
-import { freeUnitsForType } from "./availability";
+import { freeUnitsForType, overlapWhere } from "./availability";
+import { InventoryUnit } from "@prisma/client";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
@@ -121,6 +122,26 @@ export async function adminDeleteCharge(propertyId: string, chargeId: string) {
   if (!c) throw NOT_FOUND();
   await deleteCharge(chargeId);
   return { ok: true };
+}
+
+// ── Přiřazení pokoje/lůžka rezervaci (tape chart) ────────────
+export async function assignUnit(propertyId: string, id: string, unitId: string) {
+  await assertInProperty(propertyId, id);
+  const res = await prisma.reservation.findFirst({ where: { id, propertyId }, include: { property: true } });
+  if (!res) throw NOT_FOUND();
+  const useBed = res.property.inventoryUnit === InventoryUnit.bed;
+  if (useBed) {
+    const bed = await prisma.bed.findFirst({ where: { id: unitId, room: { propertyId, roomTypeId: res.roomTypeId } }, select: { id: true } });
+    if (!bed) throw new Error("Neplatné lůžko pro tento typ.");
+    const clash = await prisma.reservation.findFirst({ where: { id: { not: id }, bedId: unitId, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { id: true } });
+    if (clash) throw new Error("Lůžko je v tomto termínu obsazené.");
+    return prisma.reservation.update({ where: { id }, data: { bedId: unitId } });
+  }
+  const room = await prisma.room.findFirst({ where: { id: unitId, propertyId, roomTypeId: res.roomTypeId }, select: { id: true } });
+  if (!room) throw new Error("Neplatný pokoj pro tento typ.");
+  const clash = await prisma.reservation.findFirst({ where: { id: { not: id }, roomId: unitId, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { id: true } });
+  if (clash) throw new Error("Pokoj je v tomto termínu obsazený.");
+  return prisma.reservation.update({ where: { id }, data: { roomId: unitId } });
 }
 
 // ── E-maily hostovi: přehled + znovuodeslání (scopováno) ─────

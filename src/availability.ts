@@ -147,6 +147,40 @@ export async function occupancyCalendar(propertyId: string, from: Date, days: nu
   return { from: start.toISOString(), days, unit: property.inventoryUnit, dates, types };
 }
 
+/** Tape chart: jednotlivé pokoje/lůžka (řádky) + rezervace v okně (pruhy). */
+export async function tapeChart(propertyId: string, from: Date, days: number) {
+  const start = toDateOnly(from);
+  const end = addDays(start, days);
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { inventoryUnit: true } });
+  const useBed = property.inventoryUnit === InventoryUnit.bed;
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId },
+    include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: { where: { status: { not: "out_of_service" } } } }, orderBy: { number: "asc" } } },
+    orderBy: { name: "asc" },
+  });
+  const units: { id: string; label: string; roomTypeId: string }[] = [];
+  for (const rt of roomTypes) {
+    if (useBed) for (const r of rt.rooms) for (const b of r.beds) units.push({ id: b.id, label: `Lůžko ${b.label}`, roomTypeId: rt.id });
+    else for (const r of rt.rooms) units.push({ id: r.id, label: `Pokoj ${r.number}`, roomTypeId: rt.id });
+  }
+  const reservations = await prisma.reservation.findMany({
+    where: { propertyId, status: { in: BLOCKING_STATUSES }, checkInDate: { lt: end }, checkOutDate: { gt: start } },
+    include: { primaryGuest: true },
+  });
+  const dates: string[] = [];
+  for (let i = 0; i < days; i++) dates.push(toDateOnly(addDays(start, i)).toISOString());
+  return {
+    from: start.toISOString(), days, unit: property.inventoryUnit, dates,
+    types: roomTypes.map((rt) => ({ roomTypeId: rt.id, name: rt.name })),
+    units,
+    reservations: reservations.map((r) => ({
+      id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status,
+      roomTypeId: r.roomTypeId, unitId: useBed ? r.bedId : r.roomId,
+      checkInDate: r.checkInDate.toISOString(), checkOutDate: r.checkOutDate.toISOString(),
+    })),
+  };
+}
+
 /** Najde volný pokoj daného typu pro termín (hotel/penzion). */
 export async function findFreeRoom(propertyId: string, roomTypeId: string, from: Date, to: Date): Promise<string | null> {
   const occupied = await prisma.reservation.findMany({
