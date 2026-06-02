@@ -1,26 +1,26 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import "flag-icons/css/flag-icons.min.css";
+import { makeT, detectLang, LANGS, type Lang } from "./i18n";
 
 type Reservation = { code: string; propertyName: string; guestName: string; unit: string | null; checkInDate: string; checkOutDate: string; status: string };
 type Request = { id: string; type: string; status: string; description: string | null; createdAt: string };
 type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
-type Data = { reservation: Reservation; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
+type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
 
 const inputStyle: CSSProperties = { width: "100%", minWidth: 0, height: 44, padding: "0 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
-// Date input: nativní vykreslení (Chrome) ignoruje height/width → appearance:none ho srovná
-// na ostatní pole. Aplikovat JEN na date (na <select> by to sebralo šipku).
 const dateStyle: CSSProperties = { ...inputStyle, marginTop: 4, appearance: "none", WebkitAppearance: "none" };
 
-const TYPES: { id: string; label: string; icon: string }[] = [
-  { id: "cleaning", label: "Úklid", icon: "🧹" },
-  { id: "maintenance", label: "Údržba", icon: "🔧" },
-  { id: "laundry", label: "Praní", icon: "🧺" },
-  { id: "ironing", label: "Žehlení", icon: "👔" },
-  { id: "minibar", label: "Minibar", icon: "🥤" },
-  { id: "other", label: "Jiné", icon: "📌" },
+const TYPES: { id: string; icon: string; key: string }[] = [
+  { id: "cleaning", icon: "🧹", key: "tCleaning" },
+  { id: "maintenance", icon: "🔧", key: "tMaintenance" },
+  { id: "laundry", icon: "🧺", key: "tLaundry" },
+  { id: "ironing", icon: "👔", key: "tIroning" },
+  { id: "minibar", icon: "🥤", key: "tMinibar" },
+  { id: "other", icon: "📌", key: "tOther" },
 ];
-const LABEL: Record<string, string> = Object.fromEntries(TYPES.map((t) => [t.id, t.label]));
 const ICON: Record<string, string> = Object.fromEntries(TYPES.map((t) => [t.id, t.icon]));
-const STATUS: Record<string, string> = { open: "přijato", in_progress: "řeší se", done: "hotovo", cancelled: "zrušeno" };
+const TYPE_KEY: Record<string, string> = Object.fromEntries(TYPES.map((t) => [t.id, t.key]));
+const STATUS_KEY: Record<string, string> = { open: "sOpen", in_progress: "sInProgress", done: "sDone", cancelled: "sCancelled" };
 const d = (s: string) => s.slice(0, 10);
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -30,9 +30,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const CODE_KEY = "guest_code";
+const LANG_KEY = "guest_lang";
 
 export function App() {
   const [code, setCode] = useState(() => (new URLSearchParams(location.search).get("code") || localStorage.getItem(CODE_KEY) || "").toUpperCase());
+  const [lang, setLang] = useState<Lang>(() => detectLang());
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,7 +45,8 @@ export function App() {
   const [ciBusy, setCiBusy] = useState(false);
   const [ciErr, setCiErr] = useState("");
 
-  // Tiché načtení (polling na pozadí) bez busy/error blikání a bez mazání dat při výpadku.
+  const t = makeT(lang);
+
   const refresh = async (c: string) => {
     try { setData(await api<Data>(`/guest/${encodeURIComponent(c.trim())}`)); } catch { /* ponech současná data */ }
   };
@@ -51,24 +54,29 @@ export function App() {
     const norm = c.trim().toUpperCase();
     setError(""); setBusy(true);
     try {
-      setData(await api<Data>(`/guest/${encodeURIComponent(norm)}`));
-      localStorage.setItem(CODE_KEY, norm); // zapamatuj kód → přežije ruční refresh
+      const dt = await api<Data>(`/guest/${encodeURIComponent(norm)}`);
+      setData(dt);
+      localStorage.setItem(CODE_KEY, norm);
+      // Výchozí jazyk dle hosta z rezervace, pokud si ho host ještě sám nezvolil.
+      if (dt.lang && !localStorage.getItem(LANG_KEY)) setLang(dt.lang as Lang);
     } catch {
-      setError("Rezervace nenalezena. Zkontrolujte kód.");
-      setData(null);
-      localStorage.removeItem(CODE_KEY); // neplatný/expirovaný kód neukládej
+      setError(t("notFound")); setData(null); localStorage.removeItem(CODE_KEY);
     } finally { setBusy(false); }
   };
   useEffect(() => { if (code) load(code); }, []); // eslint-disable-line
 
-  // Periodická aktualizace „Moje požadavky" (stavy mění personál), jen když jsme přihlášení.
   useEffect(() => {
     if (!data) return;
-    const t = setInterval(() => refresh(code), 15000);
-    return () => clearInterval(t);
+    const iv = setInterval(() => refresh(code), 15000);
+    return () => clearInterval(iv);
   }, [data, code]); // eslint-disable-line
 
-  // Předvyplň jméno z rezervace, jakmile je online check-in dostupný.
+  // Změna jazyka: ulož lokálně i k hostovi (pro budoucí e-maily).
+  const changeLang = (l: Lang) => {
+    setLang(l); localStorage.setItem(LANG_KEY, l);
+    if (data) api(`/guest/${encodeURIComponent(code.trim())}/language`, { method: "POST", body: JSON.stringify({ lang: l }) }).catch(() => {});
+  };
+
   useEffect(() => {
     if (data?.onlineCheckin?.available && !ci.fullName) setCi((c) => ({ ...c, fullName: data.reservation.guestName }));
   }, [data]); // eslint-disable-line
@@ -80,7 +88,7 @@ export function App() {
     try {
       await api(`/guest/${encodeURIComponent(code.trim())}/checkin`, { method: "POST", body: JSON.stringify(ci) });
       await load(code);
-    } catch (e) { setCiErr(e instanceof Error ? e.message : "Nepodařilo se odeslat."); }
+    } catch (e) { setCiErr(e instanceof Error ? e.message : t("reqFail")); }
     finally { setCiBusy(false); }
   };
 
@@ -91,20 +99,31 @@ export function App() {
       await api(`/guest/${encodeURIComponent(code.trim())}/requests`, { method: "POST", body: JSON.stringify({ type: picked, description: desc || undefined }) });
       setPicked(""); setDesc(""); setSent(true); setTimeout(() => setSent(false), 2500);
       await load(code);
-    } catch (e) { setError(e instanceof Error ? e.message : "Nepodařilo se odeslat."); }
+    } catch (e) { setError(e instanceof Error ? e.message : t("reqFail")); }
     finally { setBusy(false); }
   };
+
+  const LangSwitch = () => (
+    <div className="langs">
+      {LANGS.map((l) => (
+        <button key={l.code} className={`langbtn ${lang === l.code ? "on" : ""}`} title={l.label} onClick={() => changeLang(l.code)}>
+          <span className={`fi fi-${l.cc}`} />
+        </button>
+      ))}
+    </div>
+  );
 
   if (!data) {
     return (
       <div className="wrap">
         <div className="card center">
+          <LangSwitch />
           <div className="logo">🛎️</div>
-          <h1>Požadavky hosta</h1>
-          <p className="muted">Zadejte svůj rezervační kód (najdete ho v potvrzení nebo na pokoji).</p>
+          <h1>{t("appTitle")}</h1>
+          <p className="muted">{t("loginHint")}</p>
           {error && <div className="error">{error}</div>}
           <input className="big-input" placeholder="RC-XXXXXX" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === "Enter" && load(code)} />
-          <button className="btn block" disabled={busy || !code} onClick={() => load(code)}>{busy ? "Načítám…" : "Pokračovat"}</button>
+          <button className="btn block" disabled={busy || !code} onClick={() => load(code)}>{busy ? t("loading") : t("cont")}</button>
         </div>
       </div>
     );
@@ -118,58 +137,59 @@ export function App() {
       <div className="header">
         <div className="logo-sm">🛎️ {r.propertyName}</div>
         <div className="muted">{r.guestName}{r.unit ? ` · ${r.unit}` : ""} · {d(r.checkInDate)}–{d(r.checkOutDate)}</div>
+        <LangSwitch />
       </div>
 
       {oc?.done && (
-        <div className="card"><div className="ok-msg" style={{ margin: 0 }}>✓ Online check-in dokončen. Na recepci už jen vyzvednete klíč.</div></div>
+        <div className="card"><div className="ok-msg" style={{ margin: 0 }}>{t("ocDone")}</div></div>
       )}
 
       {oc?.available && (
         <div className="card">
-          <h2>Online check-in</h2>
-          <p className="muted">Vyplňte prosím údaje k ubytování — na recepci pak bude odbavení rychlejší.</p>
-          <input style={inputStyle} placeholder="Jméno a příjmení" value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
-          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>Datum narození</div>
+          <h2>{t("ocTitle")}</h2>
+          <p className="muted">{t("ocHint")}</p>
+          <input style={inputStyle} placeholder={t("ocName")} value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
+          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>{t("ocDob")}</div>
           <input style={dateStyle} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
-          <input style={inputStyle} placeholder="Státní příslušnost" value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
+          <input style={inputStyle} placeholder={t("ocNat")} value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
           <select style={inputStyle} value={ci.documentType} onChange={(e) => setCi({ ...ci, documentType: e.target.value })}>
-            <option value="id_card">Občanský průkaz</option>
-            <option value="passport">Cestovní pas</option>
+            <option value="id_card">{t("ocDocId")}</option>
+            <option value="passport">{t("ocDocPassport")}</option>
           </select>
-          <input style={inputStyle} placeholder="Číslo dokladu" value={ci.documentNumber} onChange={(e) => setCi({ ...ci, documentNumber: e.target.value })} />
-          <input style={inputStyle} placeholder="Adresa trvalého bydliště" value={ci.homeAddress} onChange={(e) => setCi({ ...ci, homeAddress: e.target.value })} />
+          <input style={inputStyle} placeholder={t("ocDocNum")} value={ci.documentNumber} onChange={(e) => setCi({ ...ci, documentNumber: e.target.value })} />
+          <input style={inputStyle} placeholder={t("ocAddress")} value={ci.homeAddress} onChange={(e) => setCi({ ...ci, homeAddress: e.target.value })} />
           {ciErr && <div className="error">{ciErr}</div>}
-          <button className="btn block" style={{ marginTop: 16 }} disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? "Odesílám…" : "Dokončit check-in"}</button>
+          <button className="btn block" style={{ marginTop: 16 }} disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? t("ocSending") : t("ocSubmit")}</button>
         </div>
       )}
 
       <div className="card">
-        <h2>Nový požadavek</h2>
-        {!data.canRequestAll && <p className="muted">Před příjezdem můžete poslat jen obecný požadavek či dotaz. Úklid, údržbu apod. zadáte po ubytování.</p>}
+        <h2>{t("reqTitle")}</h2>
+        {!data.canRequestAll && <p className="muted">{t("reqNoteBefore")}</p>}
         <div className="types">
-          {reqTypes.map((t) => (
-            <button key={t.id} className={`type ${picked === t.id ? "on" : ""}`} onClick={() => setPicked(t.id)}>
-              <span className="ico">{t.icon}</span>{t.label}
+          {reqTypes.map((tp) => (
+            <button key={tp.id} className={`type ${picked === tp.id ? "on" : ""}`} onClick={() => setPicked(tp.id)}>
+              <span className="ico">{tp.icon}</span>{t(tp.key)}
             </button>
           ))}
         </div>
-        <textarea className="desc" placeholder="Upřesnění (nepovinné) — např. počet kusů, detail závady…" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <textarea className="desc" placeholder={t("reqDescPh")} value={desc} onChange={(e) => setDesc(e.target.value)} />
         {error && <div className="error">{error}</div>}
-        {sent && <div className="ok-msg">✓ Odesláno, personál se o to postará.</div>}
-        <button className="btn block" disabled={busy || !picked} onClick={send}>Odeslat požadavek</button>
+        {sent && <div className="ok-msg">{t("reqSent")}</div>}
+        <button className="btn block" disabled={busy || !picked} onClick={send}>{t("reqSubmit")}</button>
       </div>
 
       <div className="card">
-        <h2>Moje požadavky</h2>
-        {data.requests.length === 0 ? <p className="muted">Zatím žádné.</p> : data.requests.map((q) => (
+        <h2>{t("myTitle")}</h2>
+        {data.requests.length === 0 ? <p className="muted">{t("myEmpty")}</p> : data.requests.map((q) => (
           <div key={q.id} className="req">
-            <div className="req-l"><span className="ico">{ICON[q.type]}</span><div><b>{LABEL[q.type]}</b>{q.description && <div className="muted">{q.description}</div>}</div></div>
-            <span className={`st st-${q.status}`}>{STATUS[q.status] ?? q.status}</span>
+            <div className="req-l"><span className="ico">{ICON[q.type]}</span><div><b>{t(TYPE_KEY[q.type] ?? "tOther")}</b>{q.description && <div className="muted">{q.description}</div>}</div></div>
+            <span className={`st st-${q.status}`}>{t(STATUS_KEY[q.status] ?? "sOpen")}</span>
           </div>
         ))}
       </div>
 
-      <button className="btn ghost block" onClick={() => { setData(null); setCode(""); localStorage.removeItem(CODE_KEY); }}>Odhlásit</button>
+      <button className="btn ghost block" onClick={() => { setData(null); setCode(""); localStorage.removeItem(CODE_KEY); }}>{t("logout")}</button>
     </div>
   );
 }

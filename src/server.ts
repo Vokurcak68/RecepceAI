@@ -316,7 +316,7 @@ adminRouter.delete("/service-items/:id", h((req, res) => admin.deleteServiceItem
 
 adminRouter.get("/reservations", h((req, res) => admin.listReservations(pid(res), { status: req.query.status as string | undefined, q: req.query.q as string | undefined })));
 adminRouter.post("/reservations", h((req, res) => {
-  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional() }).parse(req.body);
+  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional() }).parse(req.body);
   return admin.createReservation({ propertyId: pid(res), ...b, from: new Date(b.from), to: new Date(b.to) });
 }));
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
@@ -537,11 +537,19 @@ app.get("/guest/:code", h(async (req) => {
       unit: r.room ? `pokoj ${r.room.number}` : r.bed ? `lůžko ${r.bed.label}` : null,
       checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, status: r.status,
     },
+    lang: r.primaryGuest.language,
     onlineCheckin: onlineCheckinInfo(r, r.property),
     // Požadavky (úklid apod.) až po ubytování; před příjezdem jen „Jiné".
     canRequestAll: inHouse,
     requests,
   };
+}));
+app.post("/guest/:code/language", h(async (req) => {
+  const r = await service.loadReservationByCode(req.params.code);
+  if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const b = z.object({ lang: z.string().min(2).max(5) }).parse(req.body);
+  await prisma.guest.update({ where: { id: r.primaryGuestId }, data: { language: b.lang } });
+  return { ok: true };
 }));
 app.post("/guest/:code/checkin", h(async (req) => {
   const r = await service.loadReservationByCode(req.params.code);

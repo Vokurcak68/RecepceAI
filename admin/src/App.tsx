@@ -14,6 +14,8 @@ const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS
 
 // Adresa portálu hosta (přepsatelné přes VITE_GUEST_URL při buildu).
 const GUEST_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_GUEST_URL || "http://localhost:5175";
+// Jazyky hosta (pro e-maily + výchozí jazyk portálu) — sjednoceno s kioskem/portálem.
+const GUEST_LANGS: [string, string][] = [["cs", "Čeština"], ["en", "English"], ["de", "Deutsch"], ["ru", "Русский"], ["uk", "Українська"], ["pl", "Polski"], ["sk", "Slovenčina"], ["it", "Italiano"], ["fr", "Français"], ["es", "Español"], ["zh", "中文"]];
 const guestUrl = (code: string) => `${GUEST_BASE}/?code=${encodeURIComponent(code)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const tomorrowIso = () => new Date(Date.now() + 864e5).toISOString().slice(0, 10);
@@ -498,7 +500,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formErr, setFormErr] = useState("");
-  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", billingCompany: "", billingIco: "" });
+  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [bulkDoc, setBulkDoc] = useState<Doc | null>(null);
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
@@ -510,9 +512,9 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
     if (!f.roomTypeId || !f.firstName || !f.lastName) { setFormErr("Vyplň typ, jméno a příjmení."); return; }
     try {
       await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults),
-        guest: { firstName: f.firstName, lastName: f.lastName, email: f.email || undefined, phone: f.phone || undefined },
+        guest: { firstName: f.firstName, lastName: f.lastName, email: f.email || undefined, phone: f.phone || undefined, language: f.language },
         billingCompany: f.billingCompany || undefined, billingIco: f.billingIco || undefined });
-      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", billingCompany: "", billingIco: "" }); reload();
+      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" }); reload();
     } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -540,6 +542,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
             <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} />
             <input placeholder="E-mail" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
             <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+            <label className="row">Jazyk hosta <select value={f.language} onChange={(e) => setF({ ...f, language: e.target.value })}>{GUEST_LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}</select></label>
           </div>
           {prop.type === "ubytovna" && (
             <div className="toolbar">

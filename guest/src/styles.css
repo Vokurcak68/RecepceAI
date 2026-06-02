@@ -21,6 +21,11 @@ h1 { font-size: 24px; margin: 6px 0; } h2 { font-size: 18px; margin: 0 0 12px; }
 .type .ico { font-size: 24px; }
 .desc { width: 100%; min-height: 70px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; margin-bottom: 12px; }
 .desc:focus { outline: none; border-color: var(--accent); }
+.langs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 12px; }
+.header .langs { justify-content: flex-start; margin-top: 10px; margin-bottom: 0; }
+.langbtn { padding: 3px; border: 2px solid transparent; border-radius: 6px; background: none; cursor: pointer; line-height: 0; opacity: 0.5; }
+.langbtn.on { border-color: var(--accent); opacity: 1; }
+.langbtn .fi { width: 26px; height: 19px; border-radius: 2px; }
 .error { background: #fdeceb; color: var(--danger); padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; font-size: 14px; }
 .ok-msg { background: #e6f7ee; color: var(--ok); padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; font-size: 14px; }
 .req { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }

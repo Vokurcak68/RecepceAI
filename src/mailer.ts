@@ -5,6 +5,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { Prisma, PaymentStatus, PaymentType } from "@prisma/client";
 import { prisma } from "./prisma";
+import { mailLang, mt, type MailLang } from "./mail-i18n";
 
 let transporter: Transporter | null = null;
 
@@ -44,11 +45,11 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 type ResForMail = Prisma.ReservationGetPayload<{ include: { primaryGuest: true; property: true; room: true; bed: true; roomType: true } }>;
 
-const unitLabel = (r: ResForMail) =>
-  r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.roomType?.name ?? "—";
+const unitLabel = (r: ResForMail, lang: MailLang) =>
+  r.room ? `${mt(lang, "roomWord")} ${r.room.number}` : r.bed ? `${mt(lang, "bedWord")} ${r.bed.label}` : r.roomType?.name ?? "—";
 
 // ── HTML šablona (inline styly kvůli e-mailovým klientům) ─────
-function layout(p: ResForMail["property"], title: string, intro: string, rowsHtml: string, ctaLabel?: string, ctaUrl?: string, extraHtml = ""): string {
+function layout(lang: MailLang, p: ResForMail["property"], title: string, intro: string, rowsHtml: string, ctaLabel?: string, ctaUrl?: string, extraHtml = ""): string {
   const addr = [p.street, [p.city, p.country].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   const contact = [p.phone && `tel.: ${esc(p.phone)}`, p.email && `e-mail: ${esc(p.email)}`].filter(Boolean).join(" · ");
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -68,7 +69,7 @@ function layout(p: ResForMail["property"], title: string, intro: string, rowsHtm
       <div style="font-weight:600;color:#243240;">${esc(p.name)}</div>
       ${addr ? `<div>${esc(addr)}</div>` : ""}
       ${contact ? `<div>${contact}</div>` : ""}
-      <div style="margin-top:10px;color:#9aa7b3;">Tato zpráva byla odeslána automaticky systémem ReceptionAI. Neodpovídejte na ni prosím, případné dotazy směřujte na kontakt výše.</div>
+      <div style="margin-top:10px;color:#9aa7b3;">${esc(mt(lang, "footerAuto"))}</div>
     </div>
   </div>
 </body></html>`;
@@ -77,16 +78,16 @@ function layout(p: ResForMail["property"], title: string, intro: string, rowsHtm
 const row = (label: string, value: string) =>
   `<tr><td style="padding:7px 0;color:#6b7a89;width:42%;">${esc(label)}</td><td style="padding:7px 0;font-weight:600;text-align:right;">${value}</td></tr>`;
 
-function stayRows(r: ResForMail): string {
-  const guests = `${r.adults} dosp.${r.children ? ` + ${r.children} dět.` : ""}`;
+function stayRows(r: ResForMail, lang: MailLang): string {
+  const guests = `${r.adults} ${mt(lang, "adultsShort")}${r.children ? ` + ${r.children} ${mt(lang, "childrenShort")}` : ""}`;
   return [
-    row("Rezervační kód", `<span style="font-family:monospace;font-size:15px;">${esc(r.code)}</span>`),
-    row("Příjezd", fmtDate(r.checkInDate)),
-    row("Odjezd", fmtDate(r.checkOutDate)),
-    row("Počet nocí", String(r.nights)),
-    row("Ubytování", esc(unitLabel(r))),
-    row("Hosté", guests),
-    row("Cena celkem", money(r.totalAmount)),
+    row(mt(lang, "rowCode"), `<span style="font-family:monospace;font-size:15px;">${esc(r.code)}</span>`),
+    row(mt(lang, "rowCheckin"), fmtDate(r.checkInDate)),
+    row(mt(lang, "rowCheckout"), fmtDate(r.checkOutDate)),
+    row(mt(lang, "rowNights"), String(r.nights)),
+    row(mt(lang, "rowUnit"), esc(unitLabel(r, lang))),
+    row(mt(lang, "rowGuests"), guests),
+    row(mt(lang, "rowTotal"), money(r.totalAmount)),
   ].join("");
 }
 
@@ -141,38 +142,37 @@ const guestUrl = (code: string) =>
 export async function sendReservationCreated(reservationId: string): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
-  const g = r.primaryGuest;
-  const intro = `Dobrý den, ${esc(g.firstName)},<br>děkujeme za vaši rezervaci v <b>${esc(r.property.name)}</b>. Níže najdete její shrnutí. Těšíme se na vaši návštěvu!`;
+  const lang = mailLang(r.primaryGuest?.language);
+  const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
   const link = guestUrl(r.code);
-  const html = layout(r.property, "Potvrzení rezervace", intro, stayRows(r),
-    link ? "Spravovat rezervaci" : undefined, link ?? undefined,
-    link ? `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">Přes odkaz níže můžete kdykoli zobrazit detaily a zadávat požadavky během pobytu.</p>` : "");
-  await deliver(r, "created", `Potvrzení rezervace ${r.code} — ${r.property.name}`, html);
+  const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), stayRows(r, lang),
+    link ? mt(lang, "ctaManage") : undefined, link ?? undefined,
+    link ? `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
+  await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html);
 }
 
 /** Uvítací e-mail po check-inu. */
 export async function sendCheckIn(reservationId: string): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
-  const g = r.primaryGuest;
-  const intro = `Dobrý den, ${esc(g.firstName)},<br>vítáme vás v <b>${esc(r.property.name)}</b>! Váš pobyt byl zahájen, přejeme příjemné ubytování.`;
+  const lang = mailLang(r.primaryGuest?.language);
+  const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
   const info = r.property.infoText
-    ? `<div style="margin:20px 0 0;padding:16px 18px;background:#f6f8fa;border-radius:10px;font-size:13px;line-height:1.7;color:#3a4856;"><div style="font-weight:600;margin-bottom:6px;color:#243240;">Užitečné informace</div>${esc(r.property.infoText).replace(/\n/g, "<br>")}</div>`
+    ? `<div style="margin:20px 0 0;padding:16px 18px;background:#f6f8fa;border-radius:10px;font-size:13px;line-height:1.7;color:#3a4856;"><div style="font-weight:600;margin-bottom:6px;color:#243240;">${esc(mt(lang, "infoHeading"))}</div>${esc(r.property.infoText).replace(/\n/g, "<br>")}</div>`
     : "";
-  const checkoutNote = `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">Odjezd (check-out) máte naplánovaný na <b>${fmtDate(r.checkOutDate)}</b>.</p>`;
+  const checkoutNote = `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">${mt(lang, "checkoutNote", { date: fmtDate(r.checkOutDate) })}</p>`;
   const link = guestUrl(r.code);
-  const html = layout(r.property, "Vítejte!", intro,
-    [row("Ubytování", esc(unitLabel(r))), row("Příjezd", fmtDate(r.checkInDate)), row("Odjezd", fmtDate(r.checkOutDate))].join(""),
-    link ? "Požadavky během pobytu" : undefined, link ?? undefined, info + checkoutNote);
-  await deliver(r, "checkin", `Vítejte v ${r.property.name}`, html);
+  const html = layout(lang, r.property, mt(lang, "titleCheckin"), mt(lang, "introCheckin", vars),
+    [row(mt(lang, "rowUnit"), esc(unitLabel(r, lang))), row(mt(lang, "rowCheckin"), fmtDate(r.checkInDate)), row(mt(lang, "rowCheckout"), fmtDate(r.checkOutDate))].join(""),
+    link ? mt(lang, "ctaRequests") : undefined, link ?? undefined, info + checkoutNote);
+  await deliver(r, "checkin", mt(lang, "subjCheckin", { property: r.property.name }), html);
 }
 
 /** Poděkování + souhrn po check-outu. */
 export async function sendCheckOut(reservationId: string): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
-  const g = r.primaryGuest;
-  // Souhrn účtu (bez závislosti na reservations.ts): náklady = ubytování + položky, uhrazeno = platby.
+  const lang = mailLang(r.primaryGuest?.language);
   const full = await prisma.reservation.findUnique({ where: { id: reservationId }, include: { payments: true, charges: true } });
   let extra = new Prisma.Decimal(0);
   for (const c of full?.charges ?? []) extra = extra.add(c.amount);
@@ -182,27 +182,27 @@ export async function sendCheckOut(reservationId: string): Promise<void> {
     if (([PaymentType.deposit, PaymentType.balance, PaymentType.city_tax, PaymentType.refund] as PaymentType[]).includes(p.type)) paid = paid.add(p.amount);
   }
   const charges = r.totalAmount.add(extra);
-  const intro = `Dobrý den, ${esc(g.firstName)},<br>děkujeme, že jste si vybrali <b>${esc(r.property.name)}</b>. Doufáme, že jste byli spokojeni, a budeme se těšit na vaši příští návštěvu.`;
+  const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
   const rows = [
-    row("Rezervační kód", `<span style="font-family:monospace;">${esc(r.code)}</span>`),
-    row("Pobyt", `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)} (${r.nights} nocí)`),
-    row("Náklady celkem", money(charges)),
-    row("Uhrazeno", money(paid)),
+    row(mt(lang, "rowCode"), `<span style="font-family:monospace;">${esc(r.code)}</span>`),
+    row(mt(lang, "rowStay"), `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)} (${r.nights} ${mt(lang, "nightsWord")})`),
+    row(mt(lang, "rowCosts"), money(charges)),
+    row(mt(lang, "rowPaid"), money(paid)),
   ].join("");
-  const html = layout(r.property, "Děkujeme za návštěvu", intro, rows, undefined, undefined,
-    `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">Budeme rádi za vaši zpětnou vazbu. Přejeme šťastnou cestu! 👋</p>`);
-  await deliver(r, "checkout", `Děkujeme za návštěvu — ${r.property.name}`, html);
+  const html = layout(lang, r.property, mt(lang, "titleCheckout"), mt(lang, "introCheckout", vars), rows, undefined, undefined,
+    `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">${esc(mt(lang, "thanksNote"))}</p>`);
+  await deliver(r, "checkout", mt(lang, "subjCheckout", { property: r.property.name }), html);
 }
 
 /** Potvrzení zrušení rezervace. */
 export async function sendCancellation(reservationId: string): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
-  const g = r.primaryGuest;
-  const intro = `Dobrý den, ${esc(g.firstName)},<br>vaše rezervace v <b>${esc(r.property.name)}</b> byla zrušena. Pokud jste o zrušení nežádali, kontaktujte nás prosím.`;
-  const html = layout(r.property, "Zrušení rezervace", intro,
-    [row("Rezervační kód", `<span style="font-family:monospace;">${esc(r.code)}</span>`), row("Původní termín", `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)}`)].join(""));
-  await deliver(r, "cancellation", `Zrušení rezervace ${r.code} — ${r.property.name}`, html);
+  const lang = mailLang(r.primaryGuest?.language);
+  const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
+  const html = layout(lang, r.property, mt(lang, "titleCancel"), mt(lang, "introCancel", vars),
+    [row(mt(lang, "rowCode"), `<span style="font-family:monospace;">${esc(r.code)}</span>`), row(mt(lang, "rowOrigTerm"), `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)}`)].join(""));
+  await deliver(r, "cancellation", mt(lang, "subjCancel", { code: r.code, property: r.property.name }), html);
 }
 
 // ── Přehled odeslaných e-mailů + znovuodeslání ───────────────

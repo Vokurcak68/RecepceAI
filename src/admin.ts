@@ -52,14 +52,14 @@ export async function listReservations(propertyId: string, filter: { status?: st
 
 export async function createReservation(input: {
   propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number;
-  guest: { firstName: string; lastName: string; email?: string; phone?: string };
+  guest: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
   billingCompany?: string; billingIco?: string; billingDic?: string;
 }) {
   const { propertyId, roomTypeId, from, to, adults, children = 0, guest } = input;
   const nights = nightsBetween(from, to);
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
   const price = await getStayPrice(roomTypeId, from, to, adults);
-  const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone } });
+  const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language } });
   const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
