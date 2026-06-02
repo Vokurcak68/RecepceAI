@@ -15,6 +15,8 @@ build/
 **/.env
 !**/.env.example
 pat.txt
+github.txt
+postgre.txt.txt
 
 # WhatsApp Web session (přihlášení — citlivé)
 .wwebjs_auth/
