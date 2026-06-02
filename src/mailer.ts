@@ -98,10 +98,24 @@ async function load(reservationId: string): Promise<ResForMail | null> {
   });
 }
 
-async function deliver(r: ResForMail, subject: string, html: string): Promise<void> {
+/** Lidské popisy typů e-mailů (pro přehled v adminu). */
+export const EMAIL_TYPES: Record<string, string> = {
+  created: "Potvrzení rezervace",
+  checkin: "Uvítání (check-in)",
+  checkout: "Poděkování (check-out)",
+  cancellation: "Zrušení rezervace",
+};
+
+async function logEmail(reservationId: string, type: string, recipient: string, subject: string, status: string, error?: string) {
+  try { await prisma.emailLog.create({ data: { reservationId, type, recipient, subject, status, error } }); }
+  catch (e) { console.error(`📧 [mail] nelze zapsat EmailLog: ${(e as Error).message}`); }
+}
+
+async function deliver(r: ResForMail, type: string, subject: string, html: string): Promise<void> {
   const t = getTransport();
   const to = r.primaryGuest?.email;
-  if (!t || !to) return; // bez SMTP nebo bez e-mailu hosta tiše přeskoč
+  if (!to) return;                                  // host nemá e-mail → nelze poslat, nezaznamenáváme
+  if (!t) { await logEmail(r.id, type, to, subject, "skipped", "SMTP není nakonfigurováno"); return; }
   try {
     await t.sendMail({
       from: `"${r.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
@@ -111,8 +125,11 @@ async function deliver(r: ResForMail, subject: string, html: string): Promise<vo
       html,
     });
     console.log(`📧 [mail] odesláno "${subject}" → ${to} (${r.code})`);
+    await logEmail(r.id, type, to, subject, "sent");
   } catch (e) {
-    console.error(`📧 [mail] CHYBA při odeslání "${subject}" → ${to}: ${(e as Error).message}`);
+    const msg = (e as Error).message;
+    console.error(`📧 [mail] CHYBA při odeslání "${subject}" → ${to}: ${msg}`);
+    await logEmail(r.id, type, to, subject, "failed", msg);
   }
 }
 
@@ -130,7 +147,7 @@ export async function sendReservationCreated(reservationId: string): Promise<voi
   const html = layout(r.property, "Potvrzení rezervace", intro, stayRows(r),
     link ? "Spravovat rezervaci" : undefined, link ?? undefined,
     link ? `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">Přes odkaz níže můžete kdykoli zobrazit detaily a zadávat požadavky během pobytu.</p>` : "");
-  await deliver(r, `Potvrzení rezervace ${r.code} — ${r.property.name}`, html);
+  await deliver(r, "created", `Potvrzení rezervace ${r.code} — ${r.property.name}`, html);
 }
 
 /** Uvítací e-mail po check-inu. */
@@ -147,7 +164,7 @@ export async function sendCheckIn(reservationId: string): Promise<void> {
   const html = layout(r.property, "Vítejte!", intro,
     [row("Ubytování", esc(unitLabel(r))), row("Příjezd", fmtDate(r.checkInDate)), row("Odjezd", fmtDate(r.checkOutDate))].join(""),
     link ? "Požadavky během pobytu" : undefined, link ?? undefined, info + checkoutNote);
-  await deliver(r, `Vítejte v ${r.property.name}`, html);
+  await deliver(r, "checkin", `Vítejte v ${r.property.name}`, html);
 }
 
 /** Poděkování + souhrn po check-outu. */
@@ -174,7 +191,7 @@ export async function sendCheckOut(reservationId: string): Promise<void> {
   ].join("");
   const html = layout(r.property, "Děkujeme za návštěvu", intro, rows, undefined, undefined,
     `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">Budeme rádi za vaši zpětnou vazbu. Přejeme šťastnou cestu! 👋</p>`);
-  await deliver(r, `Děkujeme za návštěvu — ${r.property.name}`, html);
+  await deliver(r, "checkout", `Děkujeme za návštěvu — ${r.property.name}`, html);
 }
 
 /** Potvrzení zrušení rezervace. */
@@ -185,7 +202,22 @@ export async function sendCancellation(reservationId: string): Promise<void> {
   const intro = `Dobrý den, ${esc(g.firstName)},<br>vaše rezervace v <b>${esc(r.property.name)}</b> byla zrušena. Pokud jste o zrušení nežádali, kontaktujte nás prosím.`;
   const html = layout(r.property, "Zrušení rezervace", intro,
     [row("Rezervační kód", `<span style="font-family:monospace;">${esc(r.code)}</span>`), row("Původní termín", `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)}`)].join(""));
-  await deliver(r, `Zrušení rezervace ${r.code} — ${r.property.name}`, html);
+  await deliver(r, "cancellation", `Zrušení rezervace ${r.code} — ${r.property.name}`, html);
+}
+
+// ── Přehled odeslaných e-mailů + znovuodeslání ───────────────
+export const listEmails = (reservationId: string) =>
+  prisma.emailLog.findMany({ where: { reservationId }, orderBy: { createdAt: "desc" } });
+
+/** Znovu odešle e-mail daného typu pro rezervaci. */
+export async function resend(reservationId: string, type: string): Promise<void> {
+  switch (type) {
+    case "created": return sendReservationCreated(reservationId);
+    case "checkin": return sendCheckIn(reservationId);
+    case "checkout": return sendCheckOut(reservationId);
+    case "cancellation": return sendCancellation(reservationId);
+    default: throw new Error("Neznámý typ e-mailu.");
+  }
 }
 
 /** Testovací e-mail pro ověření SMTP. */

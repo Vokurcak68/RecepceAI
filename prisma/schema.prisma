@@ -379,12 +379,29 @@ model Reservation {
   registrationEntries RegistrationEntry[]
   serviceRequests     ServiceRequest[]
   documents           DocumentReservation[]
+  emailLogs           EmailLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([propertyId, checkInDate, checkOutDate])
   @@index([propertyId, status])
+}
+
+/// Záznam o odeslaném (nebo neúspěšném) e-mailu hostovi — pro přehled v detailu
+/// rezervace a možnost znovuodeslání.
+model EmailLog {
+  id            String      @id @default(uuid())
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
+  type          String // created | checkin | checkout | cancellation
+  recipient     String
+  subject       String
+  status        String // sent | failed | skipped
+  error         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([reservationId, createdAt])
 }
 
 model ReservationGuest {

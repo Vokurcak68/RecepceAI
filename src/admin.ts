@@ -120,6 +120,19 @@ export async function adminDeleteCharge(propertyId: string, chargeId: string) {
   return { ok: true };
 }
 
+// ── E-maily hostovi: přehled + znovuodeslání (scopováno) ─────
+export async function adminListEmails(propertyId: string, id: string) {
+  await assertInProperty(propertyId, id);
+  return mailer.listEmails(id);
+}
+export async function adminResendEmail(propertyId: string, id: string, type: string) {
+  await assertInProperty(propertyId, id);
+  const r = await prisma.reservation.findUnique({ where: { id }, include: { primaryGuest: true } });
+  if (!r?.primaryGuest?.email) throw new Error("Host nemá vyplněný e-mail — nelze odeslat.");
+  await mailer.resend(id, type);
+  return mailer.listEmails(id);
+}
+
 // ── Obsazení (kdo je v jakém pokoji + zůstatek účtu) ─────────
 export async function occupancy(propertyId: string) {
   const inHouse = await prisma.reservation.findMany({

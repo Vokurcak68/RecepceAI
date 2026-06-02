@@ -47,6 +47,8 @@ export type OccupancyRow = { id: string; code: string; unit: string; roomType: s
 export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null } };
 export type ServiceItem = { id: string; name: string; category: string; price: Money; vatRate: Money; active: boolean };
 export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
+export type EmailLog = { id: string; type: string; recipient: string; subject: string; status: string; error: string | null; createdAt: string };
+export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace" };
 
 // Počeštění všech stavů (rezervace, požadavky, doklady, platby, pokoje).
 export const STATUS_LABEL: Record<string, string> = {
@@ -193,6 +195,8 @@ export const api = {
   // obsazení + hosté na pokoji
   occupancy: () => req<OccupancyRow[]>(`/admin/occupancy`),
   resGuests: (id: string) => req<ResGuest[]>(`/admin/reservations/${id}/guests`),
+  reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
+  resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),
   updateResGuest: (rgId: string, b: unknown) => req<ResGuest>(`/admin/reservation-guests/${rgId}`, { method: "PATCH", body: JSON.stringify(b) }),
   removeResGuest: (id: string) => req(`/admin/reservation-guests/${id}`, { method: "DELETE" }),

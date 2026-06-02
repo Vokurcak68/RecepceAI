@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL,
+  type EmailLog,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
@@ -1034,6 +1035,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
+  const [emailsOpen, setEmailsOpen] = useState(false);
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
@@ -1091,6 +1093,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
+          <button className="btn ghost" onClick={() => setEmailsOpen(true)}>📧 E-maily</button>
         </div>
       </div>
 
@@ -1167,7 +1170,81 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       {issuedDoc && <DocumentOverlay doc={issuedDoc} onClose={() => setIssuedDoc(null)} />}
       {receipt && <ReceiptOverlay rec={receipt} onClose={() => setReceipt(null)} />}
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
+      {emailsOpen && <EmailsOverlay id={id} guestEmail={r.primaryGuest?.email ?? null} onClose={() => setEmailsOpen(false)} />}
     </>
+  );
+}
+
+const EmailStatus = ({ s }: { s: string }) => {
+  const map: Record<string, [string, string]> = { sent: ["odesláno", "var(--ok)"], failed: ["selhalo", "#c0392b"], skipped: ["přeskočeno", "var(--warn)"] };
+  const [label, color] = map[s] ?? [s, "inherit"];
+  return <span style={{ color, fontWeight: 600, fontSize: 13 }}>{label}</span>;
+};
+
+// Popup z detailu rezervace: přehled odeslaných e-mailů + znovuodeslání.
+function EmailsOverlay({ id, guestEmail, onClose }: { id: string; guestEmail: string | null; onClose: () => void }) {
+  const { data, error, reload } = useAsync<EmailLog[]>(() => api.reservationEmails(id), [id]);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const logs = data ?? [];
+  const lastByType = (t: string) => logs.find((l) => l.type === t); // logy jsou desc → první = nejnovější
+  const fmt = (s: string) => { const dt = new Date(s); return `${d(s)} ${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`; };
+  const resend = async (type: string) => {
+    setBusy(type); setMsg(""); setErr("");
+    try { await api.resendEmail(id, type); setMsg(`Odesláno: ${EMAIL_TYPE_LABEL[type] ?? type}`); reload(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(""); }
+  };
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div>
+            <h2 style={{ margin: 0 }}>E-maily hostovi</h2>
+            <div className="muted" style={{ marginTop: 4 }}>{guestEmail ? <>Adresát: <b>{guestEmail}</b></> : "Host nemá vyplněný e-mail — nelze odesílat."}</div>
+          </div>
+          <button className="linkx" onClick={onClose}>zavřít</button>
+        </div>
+        {error && <div className="error">{error}</div>}
+        {err && <div className="error">{err}</div>}
+        {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+
+        <table style={{ marginTop: 8 }}>
+          <thead><tr><th>Typ e-mailu</th><th>Naposledy</th><th>Stav</th><th className="right"></th></tr></thead>
+          <tbody>
+            {Object.entries(EMAIL_TYPE_LABEL).map(([type, label]) => {
+              const last = lastByType(type);
+              return (
+                <tr key={type}>
+                  <td>{label}</td>
+                  <td className="muted">{last ? fmt(last.createdAt) : "—"}</td>
+                  <td>{last ? <EmailStatus s={last.status} /> : <span className="muted">neodesláno</span>}</td>
+                  <td className="right"><button className="btn sm ghost" disabled={!guestEmail || busy === type} onClick={() => resend(type)}>{busy === type ? "Odesílám…" : last ? "Odeslat znovu" : "Odeslat"}</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {logs.length > 0 && (
+          <>
+            <h3 style={{ borderTop: "1px solid #e6eaee", marginTop: 18, paddingTop: 14 }}>Historie odeslání ({logs.length})</h3>
+            <table>
+              <thead><tr><th>Čas</th><th>Typ</th><th>Předmět</th><th>Stav</th></tr></thead>
+              <tbody>{logs.map((l) => (
+                <tr key={l.id}>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{fmt(l.createdAt)}</td>
+                  <td>{EMAIL_TYPE_LABEL[l.type] ?? l.type}</td>
+                  <td className="muted" style={{ fontSize: 13 }}>{l.subject}{l.error ? ` — ${l.error}` : ""}</td>
+                  <td><EmailStatus s={l.status} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

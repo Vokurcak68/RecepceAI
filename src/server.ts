@@ -344,6 +344,8 @@ adminRouter.delete("/charges/:id", h((req, res) => admin.adminDeleteCharge(pid(r
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/receipt", h((req, res) => admin.buildStayReceipt(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/cancel", h((req, res) => admin.cancelReservation(pid(res), req.params.id)));
+adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 
 adminRouter.get("/rooms", h((_req, res) => admin.listRooms(pid(res))));
 adminRouter.post("/rooms", h((req, res) => { const b = z.object({ roomTypeId: z.string().uuid(), number: z.string().min(1), floor: z.number().int(), lockType: z.nativeEnum(LockType).optional() }).parse(req.body); return admin.createRoom(pid(res), b); }));
