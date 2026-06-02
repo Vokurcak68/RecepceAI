@@ -26,7 +26,7 @@ import * as callsStore from "./calls";
 import { isJaasConfigured, mintJaasToken } from "./jaas";
 import * as billing from "./billing";
 import * as cash from "./cashregister";
-import { initWhatsApp, whatsappStatus, sendWhatsApp } from "./whatsapp";
+import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -142,8 +142,10 @@ app.post("/call/notify", h(async (req) => {
   // vracíme HNED. Kiosek callId potřebuje, aby po připojení mohl zvoneček zhasnout
   // (jinak join-eventy proběhnou dřív, než callId dorazí, a zvoneček zůstane viset).
   const staff = process.env.STAFF_WHATSAPP || "420724239572";
+  console.log(`[calls] NOTIFY callId=${call.id} property=${propName} @ ${new Date().toISOString()}`);
   sendWhatsApp(staff, `🛎️ Host volá z recepce ${propName}. Připojte se k videohovoru: ${b.joinUrl}`)
-    .catch(() => { /* zvoneček v adminu funguje i bez WhatsAppu */ });
+    .then(() => console.log(`[calls] whatsapp SENT for callId=${call.id} @ ${new Date().toISOString()}`))
+    .catch((e) => console.log(`[calls] whatsapp FAIL for callId=${call.id}: ${(e as Error).message} @ ${new Date().toISOString()}`));
 
   return { sent: true, callId: call.id };
 }));
@@ -155,7 +157,9 @@ app.get("/call/token", h(async () => (isJaasConfigured() ? { jwt: mintJaasToken(
 // ── Vyřešení hovoru z kiosku (někdo se připojil / hovor skončil) → zhasne zvoneček ──
 app.post("/call/resolve", h(async (req) => {
   const b = z.object({ callId: z.string().min(1) }).parse(req.body);
-  return { resolved: callsStore.resolveCall(b.callId) };
+  const resolved = callsStore.resolveCall(b.callId);
+  console.log(`[calls] RESOLVE callId=${b.callId} resolved=${resolved} @ ${new Date().toISOString()}`);
+  return { resolved };
 }));
 
 // ── AI recepční (kiosek, scopováno na provozovnu) ────────────
@@ -577,6 +581,25 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 if (require.main === module) {
   const port = Number(process.env.PORT ?? 4000);
-  app.listen(port, () => console.log(`🛎️  Hotelový systém API běží na http://localhost:${port}`));
+  const server = app.listen(port, () => console.log(`🛎️  Hotelový systém API běží na http://localhost:${port}`));
   initWhatsApp(); // připojení k WhatsAppu (session se drží v .wwebjs_auth)
+
+  // Graceful shutdown — při zastavení služby (NSSM posílá Ctrl-C → SIGINT/SIGBREAK,
+  // resp. SIGTERM) korektně zavřeme headless Chrome, aby se WhatsApp session uložila
+  // a profil neuzamkl. Bez toho se po restartu vyžaduje nové naskenování QR.
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`⏹  ${signal} — ukončuji, zavírám WhatsApp/Chrome…`);
+    const t = setTimeout(() => { console.error("Shutdown timeout — force exit."); process.exit(0); }, 20000);
+    try { server.close(); } catch { /* */ }
+    try { await destroyWhatsApp(); } catch { /* */ }
+    clearTimeout(t);
+    console.log("✅ Ukončeno čistě.");
+    process.exit(0);
+  };
+  for (const sig of ["SIGINT", "SIGTERM", "SIGBREAK"] as const) {
+    process.on(sig, () => { void gracefulShutdown(sig); });
+  }
 }
