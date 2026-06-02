@@ -7,6 +7,7 @@ import { prisma } from "./prisma";
 import { findFreeRoom, findFreeBed } from "./availability";
 import { getStayPrice } from "./pricing";
 import { addDays, nightsBetween, toDateOnly } from "./dates";
+import * as mailer from "./mailer";
 
 const HOLD_MINUTES = 15;
 const REGISTRATION_RETENTION_YEARS = 6;
@@ -83,10 +84,12 @@ export async function createWalkInHold(input: WalkInInput) {
 }
 
 export async function confirmReservation(reservationId: string) {
-  return prisma.reservation.update({
+  const r = await prisma.reservation.update({
     where: { id: reservationId },
     data: { status: ReservationStatus.confirmed, holdExpiresAt: null },
   });
+  void mailer.sendReservationCreated(reservationId); // potvrzovací e-mail hostovi (best-effort)
+  return r;
 }
 
 // ── Check-in (přiřadí pokoj nebo lůžko) ──────────────────────
@@ -104,7 +107,7 @@ export async function checkIn(reservationId: string) {
     if (!roomId) throw new Error("Není volný pokoj k přiřazení pro check-in.");
   }
 
-  return prisma.reservation.update({
+  const updated = await prisma.reservation.update({
     where: { id: reservationId },
     data: {
       status: ReservationStatus.checked_in, holdExpiresAt: null,
@@ -113,6 +116,8 @@ export async function checkIn(reservationId: string) {
     },
     include: RES_INCLUDE,
   });
+  void mailer.sendCheckIn(reservationId); // uvítací e-mail (best-effort)
+  return updated;
 }
 
 // ── Ohlašovací povinnost ─────────────────────────────────────
@@ -199,6 +204,7 @@ export async function checkOut(reservationId: string) {
   await prisma.serviceRequest.create({
     data: { propertyId: res.propertyId, reservationId: res.id, roomId: res.roomId, bedId: res.bedId, type: "cleaning", domain: "housekeeping", description: "Úklid po odhlášení", fromGuest: false },
   });
+  void mailer.sendCheckOut(reservationId); // poděkování + souhrn (best-effort)
   return { reservation: res, folio };
 }
 

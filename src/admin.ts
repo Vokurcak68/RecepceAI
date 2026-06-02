@@ -5,6 +5,7 @@ import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
+import * as mailer from "./mailer";
 
 // ── Dashboard ────────────────────────────────────────────────
 export async function dashboard(propertyId: string, date: Date) {
@@ -59,7 +60,7 @@ export async function createReservation(input: {
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
   const price = await getStayPrice(roomTypeId, from, to, adults);
   const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone } });
-  return prisma.reservation.create({
+  const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
       primaryGuest: { connect: { id: g.id } }, roomType: { connect: { id: roomTypeId } },
@@ -71,6 +72,8 @@ export async function createReservation(input: {
     },
     include: { primaryGuest: true, roomType: true },
   });
+  void mailer.sendReservationCreated(created.id); // potvrzovací e-mail hostovi (best-effort)
+  return created;
 }
 
 // ── Detail rezervace + operace (scopováno) ───────────────────
@@ -206,9 +209,10 @@ export async function updateReservationNote(propertyId: string, id: string, note
 }
 
 export async function cancelReservation(propertyId: string, id: string) {
-  await prisma.reservation.updateMany({
+  const { count } = await prisma.reservation.updateMany({
     where: { id, propertyId }, data: { status: ReservationStatus.cancelled, holdExpiresAt: null },
   });
+  if (count) void mailer.sendCancellation(id); // potvrzení storna hostovi (best-effort)
   return { ok: true };
 }
 

@@ -27,6 +27,7 @@ import { isJaasConfigured, mintJaasToken } from "./jaas";
 import * as billing from "./billing";
 import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
+import * as mailer from "./mailer";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -225,6 +226,10 @@ centralRouter.patch("/properties/:id", h((req) => {
 }));
 
 centralRouter.get("/whatsapp/status", h(async () => whatsappStatus()));
+
+// E-mailové notifikace — ověření SMTP + testovací zpráva (diagnostika).
+centralRouter.get("/mail/status", h(async () => ({ configured: mailer.isMailConfigured(), ...(await mailer.verifyMail()) })));
+centralRouter.post("/mail/test", h(async (req) => mailer.sendTestMail(z.object({ to: z.string().email() }).parse(req.body).to)));
 
 centralRouter.get("/users", h(() => central.listUsers()));
 centralRouter.post("/users", h((req) => {
