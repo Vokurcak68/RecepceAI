@@ -5,7 +5,7 @@ type Request = { id: string; type: string; status: string; description: string |
 type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
 type Data = { reservation: Reservation; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
 
-const inputStyle: CSSProperties = { width: "100%", padding: "11px 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit" };
+const inputStyle: CSSProperties = { width: "100%", minWidth: 0, height: 44, padding: "0 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
 
 const TYPES: { id: string; label: string; icon: string }[] = [
   { id: "cleaning", label: "Úklid", icon: "🧹" },
