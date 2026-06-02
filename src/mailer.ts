@@ -15,11 +15,15 @@ export function isMailConfigured(): boolean {
 function getTransport(): Transporter | null {
   if (!isMailConfigured()) return null;
   if (!transporter) {
+    // EHLO jméno = doména odesílatele (rozlišitelná v DNS) místo názvu serveru —
+    // přísní příjemci jinak odmítají „Sender IP/HELO must resolve".
+    const ehlo = process.env.SMTP_EHLO || (process.env.SMTP_FROM || process.env.SMTP_USER || "").split("@")[1] || undefined;
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT ?? 465),
       secure: (process.env.SMTP_SECURE ?? "true") !== "false", // 465 = SSL
       auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
+      ...(ehlo ? { name: ehlo } : {}),
     });
   }
   return transporter;
