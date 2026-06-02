@@ -8,6 +8,7 @@ export function getProperty() { return localStorage.getItem("propertyId") ?? "";
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch("/api" + path, {
     headers: { "Content-Type": "application/json", "x-admin-token": token(), "x-property-id": getProperty() },
+    cache: "no-store", // API je dynamické, nikdy necachovat (proxy/prohlížeč)
     ...init,
   });
   if (!r.ok) {
@@ -214,7 +215,7 @@ export const api = {
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
 
   // přivolání člověka z kiosku — zvoneček pro manažery
-  callsPending: () => req<PendingCall[]>(`/calls/pending`),
+  callsPending: () => req<PendingCall[]>(`/calls/pending?_=${Date.now()}`), // cache-bust: proxy jinak servíruje starý stav ~1 min
   claimCall: (id: string) => req<{ ok: boolean; alreadyClaimedBy?: string | null }>(`/calls/${id}/claim`, { method: "POST" }),
 
   // kontrolní agent (fáze 4) — compliance / billing / inventář

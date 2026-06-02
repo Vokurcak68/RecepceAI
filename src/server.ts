@@ -33,6 +33,12 @@ import { createToken, readToken, verifyPassword } from "./auth";
 export const app = express();
 app.use(express.json());
 
+// Dynamické API — nic se nesmí cachovat. Bez toho upstream proxy (nginx/ARR) cachuje
+// GET odpovědi (~1 min) a admin pak vidí zastaralý stav (zvoneček „visel" minutu po
+// odbavení hovoru). no-store na všech odpovědích + vypnutý ETag = vždy čerstvá data.
+app.set("etag", false);
+app.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate"); next(); });
+
 // ── Pomocníci ────────────────────────────────────────────────
 const h = (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) =>
