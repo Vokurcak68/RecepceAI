@@ -120,6 +120,39 @@ export async function checkIn(reservationId: string) {
   return updated;
 }
 
+// ── Online check-in (portál hosta, jen self-checkin provozovny) ─
+export function onlineCheckinInfo(
+  res: { status: ReservationStatus; checkInDate: Date; checkOutDate: Date; onlineCheckinAt: Date | null },
+  property: { selfCheckin: boolean; onlineCheckinHours: number },
+) {
+  const now = new Date();
+  const opensAt = new Date(res.checkInDate.getTime() - property.onlineCheckinHours * 3_600_000);
+  const closesAt = addDays(res.checkOutDate, 1); // do konce dne odjezdu
+  const enabled = property.selfCheckin;
+  const done = !!res.onlineCheckinAt;
+  const available = enabled && res.status === ReservationStatus.confirmed && now >= opensAt && now < closesAt && !done;
+  return { enabled, available, done, opensAt: opensAt.toISOString() };
+}
+
+export type OnlineCheckinInput = {
+  fullName: string; dateOfBirth: Date; nationality: string;
+  documentType: DocumentType; documentNumber: string; homeAddress: string;
+};
+
+export async function completeOnlineCheckin(reservationId: string, reg: OnlineCheckinInput) {
+  const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { property: true } });
+  const info = onlineCheckinInfo(res, res.property);
+  if (!info.enabled) throw new Error("Online check-in není pro tuto provozovnu zapnutý.");
+  if (info.done) throw new Error("Online check-in už byl dokončen.");
+  if (!info.available) throw new Error("Online check-in zatím není dostupný.");
+  await addRegistrationEntry({
+    reservationId, guestId: res.primaryGuestId, fullName: reg.fullName, dateOfBirth: reg.dateOfBirth,
+    nationality: reg.nationality, documentType: reg.documentType, documentNumber: reg.documentNumber,
+    homeAddress: reg.homeAddress, stayFrom: res.checkInDate, stayTo: res.checkOutDate,
+  });
+  return prisma.reservation.update({ where: { id: reservationId }, data: { onlineCheckinAt: new Date() } });
+}
+
 // ── Ohlašovací povinnost ─────────────────────────────────────
 export type RegistrationInput = {
   reservationId: string; guestId: string; fullName: string; dateOfBirth: Date; nationality: string;

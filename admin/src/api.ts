@@ -26,7 +26,7 @@ export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
   street: string | null; city: string | null; country: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; vatPayer: boolean; active: boolean; infoText: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money;
-  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean;
+  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number;
   _count?: { rooms: number; beds: number; reservations: number };
 };
 export type UserRole = "super_admin" | "manager" | "housekeeping" | "maintenance";
@@ -102,6 +102,7 @@ export type CashState = { register: { id: string; name: string }; session: CashS
 export type Folio = { charges: Money; paid: Money; balance: Money };
 export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null; note: string | null;
+  onlineCheckinAt: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
 };
 export type Invoice = {

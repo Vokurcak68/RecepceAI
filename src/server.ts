@@ -10,7 +10,7 @@ import { prisma } from "./prisma";
 import {
   getAvailability, createWalkInHold, confirmReservation, findReservationByCode, findReservationsByLastName,
   checkIn, addRegistrationEntry, addPayment, computeFolio, checkOut, releaseExpiredHolds, purgeExpiredRegistrations,
-  addCharge, listCharges, deleteCharge,
+  addCharge, listCharges, deleteCharge, onlineCheckinInfo, completeOnlineCheckin,
 } from "./index";
 import { serialize } from "./serialize";
 import * as admin from "./admin";
@@ -221,6 +221,7 @@ centralRouter.patch("/properties/:id", h((req) => {
     name: z.string().optional(), identifier: z.string().optional(), type: z.nativeEnum(PropertyType).optional(), street: z.string().optional(), city: z.string().optional(), country: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
+    onlineCheckinHours: z.number().int().min(0).optional(),
   }).parse(req.body);
   return central.updateProperty(req.params.id, b);
 }));
@@ -528,6 +529,7 @@ app.get("/guest/:code", h(async (req) => {
   const r = await service.loadReservationByCode(req.params.code);
   if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
   const requests = await service.listRequestsForReservation(r.id);
+  const inHouse = r.status === "checked_in";
   return {
     reservation: {
       code: r.code, propertyName: r.property.name,
@@ -535,13 +537,29 @@ app.get("/guest/:code", h(async (req) => {
       unit: r.room ? `pokoj ${r.room.number}` : r.bed ? `lůžko ${r.bed.label}` : null,
       checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, status: r.status,
     },
+    onlineCheckin: onlineCheckinInfo(r, r.property),
+    // Požadavky (úklid apod.) až po ubytování; před příjezdem jen „Jiné".
+    canRequestAll: inHouse,
     requests,
   };
+}));
+app.post("/guest/:code/checkin", h(async (req) => {
+  const r = await service.loadReservationByCode(req.params.code);
+  if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const b = z.object({
+    fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2),
+    documentType: z.nativeEnum(DocumentType), documentNumber: z.string().min(1), homeAddress: z.string().min(3),
+  }).parse(req.body);
+  await completeOnlineCheckin(r.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });
+  return { ok: true };
 }));
 app.post("/guest/:code/requests", h(async (req) => {
   const r = await service.loadReservationByCode(req.params.code);
   if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
   const b = z.object({ type: z.nativeEnum(ServiceType), description: z.string().optional() }).parse(req.body);
+  // Před ubytováním (host ještě nedorazil) povolíme jen obecný požadavek „Jiné".
+  if (r.status !== "checked_in" && b.type !== ServiceType.other)
+    throw new Error("Tento typ požadavku bude dostupný po vašem příjezdu. Nyní můžete poslat jen obecný požadavek (Jiné).");
   return service.createRequest({ propertyId: r.propertyId, reservationId: r.id, roomId: r.roomId, bedId: r.bedId, type: b.type, description: b.description, fromGuest: true });
 }));
 

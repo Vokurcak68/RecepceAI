@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 type Reservation = { code: string; propertyName: string; guestName: string; unit: string | null; checkInDate: string; checkOutDate: string; status: string };
 type Request = { id: string; type: string; status: string; description: string | null; createdAt: string };
-type Data = { reservation: Reservation; requests: Request[] };
+type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
+type Data = { reservation: Reservation; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
+
+const inputStyle: CSSProperties = { width: "100%", padding: "11px 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit" };
 
 const TYPES: { id: string; label: string; icon: string }[] = [
   { id: "cleaning", label: "Úklid", icon: "🧹" },
@@ -33,6 +36,9 @@ export function App() {
   const [picked, setPicked] = useState("");
   const [desc, setDesc] = useState("");
   const [sent, setSent] = useState(false);
+  const [ci, setCi] = useState({ fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
+  const [ciBusy, setCiBusy] = useState(false);
+  const [ciErr, setCiErr] = useState("");
 
   // Tiché načtení (polling na pozadí) bez busy/error blikání a bez mazání dat při výpadku.
   const refresh = async (c: string) => {
@@ -58,6 +64,22 @@ export function App() {
     const t = setInterval(() => refresh(code), 15000);
     return () => clearInterval(t);
   }, [data, code]); // eslint-disable-line
+
+  // Předvyplň jméno z rezervace, jakmile je online check-in dostupný.
+  useEffect(() => {
+    if (data?.onlineCheckin?.available && !ci.fullName) setCi((c) => ({ ...c, fullName: data.reservation.guestName }));
+  }, [data]); // eslint-disable-line
+
+  const ciValid = ci.fullName.trim().length > 1 && ci.dateOfBirth && ci.nationality.trim() && ci.documentNumber.trim() && ci.homeAddress.trim().length > 2;
+  const submitCheckin = async () => {
+    if (!ciValid) return;
+    setCiBusy(true); setCiErr("");
+    try {
+      await api(`/guest/${encodeURIComponent(code.trim())}/checkin`, { method: "POST", body: JSON.stringify(ci) });
+      await load(code);
+    } catch (e) { setCiErr(e instanceof Error ? e.message : "Nepodařilo se odeslat."); }
+    finally { setCiBusy(false); }
+  };
 
   const send = async () => {
     if (!picked) return;
@@ -86,6 +108,8 @@ export function App() {
   }
 
   const r = data.reservation;
+  const oc = data.onlineCheckin;
+  const reqTypes = data.canRequestAll ? TYPES : TYPES.filter((t) => t.id === "other");
   return (
     <div className="wrap">
       <div className="header">
@@ -93,10 +117,35 @@ export function App() {
         <div className="muted">{r.guestName}{r.unit ? ` · ${r.unit}` : ""} · {d(r.checkInDate)}–{d(r.checkOutDate)}</div>
       </div>
 
+      {oc?.done && (
+        <div className="card"><div className="ok-msg" style={{ margin: 0 }}>✓ Online check-in dokončen. Na recepci už jen vyzvednete klíč.</div></div>
+      )}
+
+      {oc?.available && (
+        <div className="card">
+          <h2>Online check-in</h2>
+          <p className="muted">Vyplňte prosím údaje k ubytování — na recepci pak bude odbavení rychlejší.</p>
+          <input style={inputStyle} placeholder="Jméno a příjmení" value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
+          <label className="muted" style={{ display: "block", marginTop: 10, fontSize: 13 }}>Datum narození
+            <input style={inputStyle} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
+          </label>
+          <input style={inputStyle} placeholder="Státní příslušnost" value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
+          <select style={inputStyle} value={ci.documentType} onChange={(e) => setCi({ ...ci, documentType: e.target.value })}>
+            <option value="id_card">Občanský průkaz</option>
+            <option value="passport">Cestovní pas</option>
+          </select>
+          <input style={inputStyle} placeholder="Číslo dokladu" value={ci.documentNumber} onChange={(e) => setCi({ ...ci, documentNumber: e.target.value })} />
+          <input style={inputStyle} placeholder="Adresa trvalého bydliště" value={ci.homeAddress} onChange={(e) => setCi({ ...ci, homeAddress: e.target.value })} />
+          {ciErr && <div className="error">{ciErr}</div>}
+          <button className="btn block" disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? "Odesílám…" : "Dokončit check-in"}</button>
+        </div>
+      )}
+
       <div className="card">
         <h2>Nový požadavek</h2>
+        {!data.canRequestAll && <p className="muted">Před příjezdem můžete poslat jen obecný požadavek či dotaz. Úklid, údržbu apod. zadáte po ubytování.</p>}
         <div className="types">
-          {TYPES.map((t) => (
+          {reqTypes.map((t) => (
             <button key={t.id} className={`type ${picked === t.id ? "on" : ""}`} onClick={() => setPicked(t.id)}>
               <span className="ico">{t.icon}</span>{t.label}
             </button>

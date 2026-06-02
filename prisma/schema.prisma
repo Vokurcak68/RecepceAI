@@ -187,6 +187,7 @@ model Property {
   allowLongTerm         Boolean       @default(false) // ubytovna: pobyty na týdny/měsíce
   selfCheckin           Boolean       @default(false) // ubytovna: plně samoobslužné
   breakfastIncluded     Boolean       @default(false)
+  onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
   rooms        Room[]
   beds         Bed[]
@@ -372,6 +373,8 @@ model Reservation {
   billingDic     String?
 
   holdExpiresAt DateTime?
+
+  onlineCheckinAt DateTime? // host dokončil online check-in (vyplnil registrační údaje); recepce finalizuje příjezd
 
   reservationGuests   ReservationGuest[]
   payments            Payment[]

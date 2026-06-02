@@ -827,6 +827,7 @@ type PropEdit = {
   ico: string; dic: string; iban: string; vatPayer: boolean;
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; active: boolean; infoText: string;
+  onlineCheckinHours: string;
 };
 
 function PropertiesView() {
@@ -845,11 +846,12 @@ function PropertiesView() {
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, active: p.active, infoText: p.infoText ?? "",
+      onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
     });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
-    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight) });
+    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), onlineCheckinHours: Number(ef.onlineCheckinHours) });
     setMsg("Provozovna uložena."); setEditId(null); setEf(null); reload();
   };
 
@@ -904,6 +906,7 @@ function PropertiesView() {
           <div className="toolbar">
             <label className="row"><input type="checkbox" checked={ef.allowLongTerm} onChange={(e) => setEf({ ...ef, allowLongTerm: e.target.checked })} /> Dlouhodobé pobyty</label>
             <label className="row"><input type="checkbox" checked={ef.selfCheckin} onChange={(e) => setEf({ ...ef, selfCheckin: e.target.checked })} /> Self check-in</label>
+            <label className="row">Online check-in (h před příj.) <input style={{ width: 70 }} value={ef.onlineCheckinHours} onChange={(e) => setEf({ ...ef, onlineCheckinHours: e.target.value })} disabled={!ef.selfCheckin} /></label>
             <label className="row"><input type="checkbox" checked={ef.breakfastIncluded} onChange={(e) => setEf({ ...ef, breakfastIncluded: e.target.checked })} /> Snídaně v ceně</label>
             <label className="row"><input type="checkbox" checked={ef.active} onChange={(e) => setEf({ ...ef, active: e.target.checked })} /> Aktivní</label>
           </div>
@@ -1072,6 +1075,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Kontakt</span><span>{r.primaryGuest?.email ?? "—"} · {r.primaryGuest?.phone ?? "—"}</span></div>
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>
+          {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
         </div></div>
         <div className="panel"><h3>Vyúčtování</h3><div style={{ padding: 16 }}>
