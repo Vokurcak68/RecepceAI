@@ -301,7 +301,7 @@ export function App() {
 
           {/* Avatar je vždy na stejném místě (pod topbarem) na všech obrazovkách.
               Na hustém rozcestníku je menší, ať se vejdou všechna tlačítka. */}
-          <Avatar speaking={speaking} line={line} variant={AVATAR} size={screen === "home" ? 90 : 230} />
+          <Avatar speaking={speaking} line={line} variant={AVATAR} size={90} />
 
           <div className="content">
             {screen === "home" && (
