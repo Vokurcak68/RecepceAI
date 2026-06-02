@@ -126,9 +126,8 @@ export function App() {
           <h2>Online check-in</h2>
           <p className="muted">Vyplňte prosím údaje k ubytování — na recepci pak bude odbavení rychlejší.</p>
           <input style={inputStyle} placeholder="Jméno a příjmení" value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
-          <label className="muted" style={{ display: "block", marginTop: 10, fontSize: 13 }}>Datum narození
-            <input style={inputStyle} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
-          </label>
+          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>Datum narození</div>
+          <input style={{ ...inputStyle, marginTop: 4 }} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
           <input style={inputStyle} placeholder="Státní příslušnost" value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
           <select style={inputStyle} value={ci.documentType} onChange={(e) => setCi({ ...ci, documentType: e.target.value })}>
             <option value="id_card">Občanský průkaz</option>
@@ -137,7 +136,7 @@ export function App() {
           <input style={inputStyle} placeholder="Číslo dokladu" value={ci.documentNumber} onChange={(e) => setCi({ ...ci, documentNumber: e.target.value })} />
           <input style={inputStyle} placeholder="Adresa trvalého bydliště" value={ci.homeAddress} onChange={(e) => setCi({ ...ci, homeAddress: e.target.value })} />
           {ciErr && <div className="error">{ciErr}</div>}
-          <button className="btn block" disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? "Odesílám…" : "Dokončit check-in"}</button>
+          <button className="btn block" style={{ marginTop: 16 }} disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? "Odesílám…" : "Dokončit check-in"}</button>
         </div>
       )}
 
