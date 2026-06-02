@@ -6,6 +6,9 @@ type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; open
 type Data = { reservation: Reservation; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
 
 const inputStyle: CSSProperties = { width: "100%", minWidth: 0, height: 44, padding: "0 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
+// Date input: nativní vykreslení (Chrome) ignoruje height/width → appearance:none ho srovná
+// na ostatní pole. Aplikovat JEN na date (na <select> by to sebralo šipku).
+const dateStyle: CSSProperties = { ...inputStyle, marginTop: 4, appearance: "none", WebkitAppearance: "none" };
 
 const TYPES: { id: string; label: string; icon: string }[] = [
   { id: "cleaning", label: "Úklid", icon: "🧹" },
@@ -127,7 +130,7 @@ export function App() {
           <p className="muted">Vyplňte prosím údaje k ubytování — na recepci pak bude odbavení rychlejší.</p>
           <input style={inputStyle} placeholder="Jméno a příjmení" value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
           <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>Datum narození</div>
-          <input style={{ ...inputStyle, marginTop: 4 }} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
+          <input style={dateStyle} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
           <input style={inputStyle} placeholder="Státní příslušnost" value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
           <select style={inputStyle} value={ci.documentType} onChange={(e) => setCi({ ...ci, documentType: e.target.value })}>
             <option value="id_card">Občanský průkaz</option>
