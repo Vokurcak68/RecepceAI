@@ -4,7 +4,7 @@ import {
   Prisma, ReservationStatus, PaymentType, PaymentMethod, PaymentStatus, DocumentType, InventoryUnit, RoomStatus, ChargeCategory,
 } from "@prisma/client";
 import { prisma } from "./prisma";
-import { findFreeRoom, findFreeBed } from "./availability";
+import { findFreeRoom, findFreeBed, freeUnitsForType } from "./availability";
 import { getStayPrice } from "./pricing";
 import { addDays, nightsBetween, toDateOnly } from "./dates";
 import * as mailer from "./mailer";
@@ -55,6 +55,7 @@ export async function createWalkInHold(input: WalkInInput) {
   const property = await prisma.property.findUniqueOrThrow({ where: { id: propertyId } });
   const useBed = property.inventoryUnit === InventoryUnit.bed;
 
+  if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0) throw new Error("Pro zvolený termín už není volná jednotka tohoto typu.");
   const roomId = useBed ? null : await findFreeRoom(propertyId, roomTypeId, from, to);
   const bedId = useBed ? await findFreeBed(propertyId, roomTypeId, from, to) : null;
   if (useBed ? !bedId : !roomId) throw new Error("Pro zvolený termín už není volná jednotka tohoto typu.");

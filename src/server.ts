@@ -10,7 +10,7 @@ import { prisma } from "./prisma";
 import {
   getAvailability, createWalkInHold, confirmReservation, findReservationByCode, findReservationsByLastName,
   checkIn, addRegistrationEntry, addPayment, computeFolio, checkOut, releaseExpiredHolds, purgeExpiredRegistrations,
-  addCharge, listCharges, deleteCharge, onlineCheckinInfo, completeOnlineCheckin,
+  addCharge, listCharges, deleteCharge, onlineCheckinInfo, completeOnlineCheckin, occupancyCalendar,
 } from "./index";
 import { serialize } from "./serialize";
 import * as admin from "./admin";
@@ -345,6 +345,10 @@ adminRouter.delete("/charges/:id", h((req, res) => admin.adminDeleteCharge(pid(r
 adminRouter.get("/reservations/:id/invoice", h((req, res) => admin.buildInvoice(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/receipt", h((req, res) => admin.buildStayReceipt(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/cancel", h((req, res) => admin.cancelReservation(pid(res), req.params.id)));
+adminRouter.get("/calendar", h((req, res) => {
+  const q = z.object({ from: dateStr.optional(), days: z.coerce.number().int().min(1).max(60).optional() }).parse(req.query);
+  return occupancyCalendar(pid(res), q.from ? new Date(q.from) : new Date(), q.days ?? 21);
+}));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 

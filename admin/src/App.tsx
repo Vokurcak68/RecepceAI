@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode, type CSSProperties } from "react";
 import QRCode from "qrcode";
 import {
   api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL,
@@ -7,7 +7,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -63,6 +63,7 @@ export function App() {
   ];
   const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
     { label: "Hosté", icon: "🛎️", items: [
+      { id: "calendar", label: "Kalendář obsazení" },
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
       { id: "book", label: "Kniha hostů" },
@@ -145,6 +146,7 @@ export function App() {
       <main className="main">
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
+        {prop && tab === "calendar" && <CalendarView selId={selId} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
@@ -465,6 +467,53 @@ function DashboardView({ selId }: { selId: string }) {
 
 // ── Reservations ─────────────────────────────────────────────
 // ── Obsazení: kdo je v jakém pokoji + zůstatek účtu ──────────
+function CalendarView({ selId }: { selId: string }) {
+  const [days, setDays] = useState(21);
+  const [from, setFrom] = useState(todayIso());
+  const { data, error } = useAsync<OccupancyCalendar>(() => api.calendar(from, days), [selId, from, days]);
+  const DOW = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+  const day = (iso: string) => { const dt = new Date(iso); return { dom: dt.getUTCDate(), mon: dt.getUTCMonth() + 1, we: [0, 6].includes(dt.getUTCDay()), dow: DOW[dt.getUTCDay()] }; };
+  const color = (free: number, total: number) => free <= 0 ? { background: "#fde2e0", color: "#c0392b" } : free <= Math.max(1, Math.round(total * 0.25)) ? { background: "#fff4e0", color: "#9a6b00" } : { background: "#e9f7ef", color: "#1a7f4b" };
+  const th: CSSProperties = { border: "1px solid #e6eaee", padding: "5px 7px", fontSize: 12, textAlign: "center", fontWeight: 600 };
+  const td: CSSProperties = { border: "1px solid #e6eaee", padding: "6px 8px", fontSize: 13, textAlign: "center", fontWeight: 700, minWidth: 34 };
+  const firstCol: CSSProperties = { position: "sticky", left: 0, background: "#fff", textAlign: "left", minWidth: 170, zIndex: 1 };
+
+  return (
+    <>
+      <div className="h1">Kalendář obsazení</div>
+      <div className="toolbar">
+        <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="row">Dní <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={14}>14</option><option value={21}>21</option><option value={31}>31</option></select></label>
+        <span className="muted">číslo = volných jednotek na noc · <b style={{ color: "#1a7f4b" }}>zelená</b> dost · <b style={{ color: "#9a6b00" }}>oranžová</b> málo · <b style={{ color: "#c0392b" }}>červená</b> plno/přebookováno</span>
+      </div>
+      {error && <div className="error">{error}</div>}
+      {!data ? <div className="muted" style={{ padding: 20 }}>Načítám…</div> : (
+        <div className="panel" style={{ overflowX: "auto", padding: 0 }}>
+          <table style={{ borderCollapse: "collapse", whiteSpace: "nowrap" }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, ...firstCol, background: "#f6f8fa" }}>Typ <span className="muted">(celkem)</span></th>
+                {data.dates.map((iso) => { const f = day(iso); return <th key={iso} style={{ ...th, background: f.we ? "#eef1f4" : "#f6f8fa" }}>{f.dow}<br />{f.dom}.{f.mon}.</th>; })}
+              </tr>
+            </thead>
+            <tbody>
+              {data.types.map((t) => (
+                <tr key={t.roomTypeId}>
+                  <td style={{ ...td, ...firstCol, fontWeight: 600 }}>{t.name} <span className="muted">({t.total})</span></td>
+                  {t.cells.map((c, i) => (
+                    <td key={i} style={{ ...td, ...color(c.free, t.total) }} title={`volných ${c.free} z ${t.total} · obsazeno ${c.booked}`}>{c.free}</td>
+                  ))}
+                </tr>
+              ))}
+              {data.types.length === 0 && <tr><td className="muted" style={{ padding: 16 }} colSpan={data.dates.length + 1}>Žádné typy pokojů — nejdřív je založ v „Typy &amp; ceny".</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
   const { data, error, reload } = useAsync<OccupancyRow[]>(() => api.occupancy(), [selId]);
   const [detailId, setDetailId] = useState<string | null>(null);

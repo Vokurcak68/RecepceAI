@@ -3,7 +3,25 @@
 import { Prisma, ReservationStatus, InventoryUnit } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getStayPrice } from "./pricing";
-import { nightsBetween, toDateOnly } from "./dates";
+import { nightsBetween, toDateOnly, addDays } from "./dates";
+
+/** Kolik jednotek daného typu je obsazeno v termínu = počet překrývajících se blokujících
+ * rezervací typu (i bez přiřazeného pokoje/lůžka). Tím se brání přebookování. */
+async function bookedByType(propertyId: string, from: Date, to: Date): Promise<Record<string, number>> {
+  const grouped = await prisma.reservation.groupBy({
+    by: ["roomTypeId"],
+    where: { propertyId, ...overlapWhere(from, to) },
+    _count: { _all: true },
+  });
+  const m: Record<string, number> = {};
+  for (const g of grouped) m[g.roomTypeId] = g._count._all;
+  return m;
+}
+
+/** Počet celkových jednotek (pokojů/lůžek) typu — dle režimu provozovny. */
+function totalUnits(rt: { rooms: { beds: { id: string }[] }[] }, unit: InventoryUnit): number {
+  return unit === InventoryUnit.bed ? rt.rooms.reduce((n, r) => n + r.beds.length, 0) : rt.rooms.length;
+}
 
 export const BLOCKING_STATUSES: ReservationStatus[] = [
   ReservationStatus.hold,
@@ -47,25 +65,20 @@ export async function getAvailability(
 }
 
 async function roomAvailability(propertyId: string, from: Date, to: Date, guests: number): Promise<AvailableUnit[]> {
-  const occupied = await prisma.reservation.findMany({
-    where: { propertyId, ...overlapWhere(from, to), roomId: { not: null } },
-    select: { roomId: true },
-  });
-  const taken = new Set(occupied.map((r) => r.roomId!));
-
+  const booked = await bookedByType(propertyId, from, to);
   const roomTypes = await prisma.roomType.findMany({
     where: { propertyId, capacityAdults: { gte: guests } },
-    include: { rooms: { where: { status: { not: "out_of_service" } } } },
+    include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: true } } },
   });
 
   const out: AvailableUnit[] = [];
   for (const rt of roomTypes) {
-    const free = rt.rooms.filter((r) => !taken.has(r.id));
-    if (!free.length) continue;
+    const free = totalUnits(rt, InventoryUnit.room) - (booked[rt.id] ?? 0);
+    if (free <= 0) continue;
     const price = await getStayPrice(rt.id, from, to, guests);
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
-      unit: InventoryUnit.room, freeUnits: free.length,
+      unit: InventoryUnit.room, freeUnits: free,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }
@@ -73,12 +86,7 @@ async function roomAvailability(propertyId: string, from: Date, to: Date, guests
 }
 
 async function bedAvailability(propertyId: string, from: Date, to: Date): Promise<AvailableUnit[]> {
-  const occupied = await prisma.reservation.findMany({
-    where: { propertyId, ...overlapWhere(from, to), bedId: { not: null } },
-    select: { bedId: true },
-  });
-  const taken = new Set(occupied.map((r) => r.bedId!));
-
+  const booked = await bookedByType(propertyId, from, to);
   const roomTypes = await prisma.roomType.findMany({
     where: { propertyId },
     include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: { where: { status: { not: "out_of_service" } } } } } },
@@ -86,17 +94,57 @@ async function bedAvailability(propertyId: string, from: Date, to: Date): Promis
 
   const out: AvailableUnit[] = [];
   for (const rt of roomTypes) {
-    const beds = rt.rooms.flatMap((r) => r.beds);
-    const free = beds.filter((b) => !taken.has(b.id));
-    if (!free.length) continue;
+    const free = totalUnits(rt, InventoryUnit.bed) - (booked[rt.id] ?? 0);
+    if (free <= 0) continue;
     const price = await getStayPrice(rt.id, from, to, 1); // cena za jedno lůžko
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
-      unit: InventoryUnit.bed, freeUnits: free.length,
+      unit: InventoryUnit.bed, freeUnits: free,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }
   return out;
+}
+
+/** Volných jednotek daného typu pro termín (pojistka při zakládání rezervace). */
+export async function freeUnitsForType(propertyId: string, roomTypeId: string, from: Date, to: Date): Promise<number> {
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { inventoryUnit: true } });
+  const rt = await prisma.roomType.findUniqueOrThrow({
+    where: { id: roomTypeId },
+    include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: { where: { status: { not: "out_of_service" } } } } } },
+  });
+  const booked = await prisma.reservation.count({ where: { propertyId, roomTypeId, ...overlapWhere(from, to) } });
+  return totalUnits(rt, property.inventoryUnit) - booked;
+}
+
+/** Kalendář obsazenosti: pro každý typ pokoje/lůžka počet obsazeno/volno po dnech. */
+export async function occupancyCalendar(propertyId: string, from: Date, days: number) {
+  const start = toDateOnly(from);
+  const end = addDays(start, days);
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { inventoryUnit: true } });
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId },
+    include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: { where: { status: { not: "out_of_service" } } } } } },
+    orderBy: { name: "asc" },
+  });
+  const reservations = await prisma.reservation.findMany({
+    where: { propertyId, status: { in: BLOCKING_STATUSES }, checkInDate: { lt: end }, checkOutDate: { gt: start } },
+    select: { roomTypeId: true, checkInDate: true, checkOutDate: true },
+  });
+  const dates: string[] = [];
+  for (let i = 0; i < days; i++) dates.push(toDateOnly(addDays(start, i)).toISOString());
+
+  const types = roomTypes.map((rt) => {
+    const total = totalUnits(rt, property.inventoryUnit);
+    const cells = [];
+    for (let i = 0; i < days; i++) {
+      const day = toDateOnly(addDays(start, i)).getTime();
+      const bookedCount = reservations.filter((r) => r.roomTypeId === rt.id && r.checkInDate.getTime() <= day && r.checkOutDate.getTime() > day).length;
+      cells.push({ booked: bookedCount, free: total - bookedCount });
+    }
+    return { roomTypeId: rt.id, name: rt.name, total, cells };
+  });
+  return { from: start.toISOString(), days, unit: property.inventoryUnit, dates, types };
 }
 
 /** Najde volný pokoj daného typu pro termín (hotel/penzion). */

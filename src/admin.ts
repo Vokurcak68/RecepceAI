@@ -3,6 +3,7 @@ import { Prisma, ReservationStatus, RoomStatus, LockType, PaymentType, PaymentMe
 import { prisma } from "./prisma";
 import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
+import { freeUnitsForType } from "./availability";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
@@ -58,6 +59,8 @@ export async function createReservation(input: {
   const { propertyId, roomTypeId, from, to, adults, children = 0, guest } = input;
   const nights = nightsBetween(from, to);
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
+  if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0)
+    throw new Error("Pro zvolený termín už není volná jednotka tohoto typu (předešlo se přebookování).");
   const price = await getStayPrice(roomTypeId, from, to, adults);
   const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language } });
   const created = await prisma.reservation.create({
