@@ -495,7 +495,7 @@ export function App() {
                   {children > 0 && (
                     <div className="row" style={{ flexWrap: "wrap", justifyContent: "center", gap: 10, marginTop: 12 }}>
                       {childAges.map((age, i) => (
-                        <div key={i}><label className="muted">{t("childAge")} {i + 1}</label><input type="number" min={0} max={17} className="input" style={{ width: 96 }} value={age} onChange={(e) => { const a = [...childAges]; a[i] = Math.max(0, Number(e.target.value) || 0); setChildAges(a); }} /></div>
+                        <div key={i}><label className="muted" style={{ display: "block", marginBottom: 8 }}>{t("childAge")} {i + 1}</label><input type="number" min={0} max={17} className="input" style={{ width: 96 }} value={age} onChange={(e) => { const a = [...childAges]; a[i] = Math.max(0, Number(e.target.value) || 0); setChildAges(a); }} /></div>
                       ))}
                     </div>
                   )}
