@@ -124,7 +124,11 @@ svg.av * { transform-box: fill-box; }
 @keyframes wave { from { transform: scaleY(0.4); } to { transform: scaleY(2.4); } }
 
 /* Content */
-.content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 22px; }
+.content { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 4px 2px; }
+/* Centrovat, když je místo; jinak scrollovat (bez překryvu avatara/tlačítek).
+   Asistenta necentrujeme — má vyplnit celou plochu (flex:1). */
+.content > :first-child:not(.assistant) { margin-top: auto; }
+.content > :last-child:not(.assistant) { margin-bottom: auto; }
 .screen-title { font-size: 30px; font-weight: 700; text-align: center; }
 .screen-hint { font-size: 19px; color: var(--muted); text-align: center; margin-top: -8px; }
 
