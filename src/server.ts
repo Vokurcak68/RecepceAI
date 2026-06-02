@@ -206,7 +206,7 @@ centralRouter.post("/properties", h((req) => {
 }));
 centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
-    name: z.string().optional(), identifier: z.string().optional(), street: z.string().optional(), city: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
+    name: z.string().optional(), identifier: z.string().optional(), type: z.nativeEnum(PropertyType).optional(), street: z.string().optional(), city: z.string().optional(), country: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
   }).parse(req.body);

@@ -821,7 +821,12 @@ function BookView({ selId }: { selId: string }) {
 }
 
 // ── CENTRÁLA: Provozovny ─────────────────────────────────────
-type PropEdit = { name: string; identifier: string; street: string; city: string; phone: string; email: string; ico: string; dic: string; iban: string; cityTaxPerPersonNight: string; inventoryUnit: string; infoText: string };
+type PropEdit = {
+  name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
+  ico: string; dic: string; iban: string; vatPayer: boolean;
+  inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string;
+  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; active: boolean; infoText: string;
+};
 
 function PropertiesView() {
   const { data, error, reload } = useAsync<Property[]>(() => api.centralProperties(), []);
@@ -834,7 +839,12 @@ function PropertiesView() {
   const toggle = async (p: Property, field: "cityTaxEnabled" | "allowLongTerm" | "selfCheckin" | "breakfastIncluded" | "active") => { await api.updateProperty(p.id, { [field]: !p[field] }); reload(); };
   const startEdit = (p: Property) => {
     setEditId(p.id);
-    setEf({ name: p.name, identifier: p.identifier, street: p.street ?? "", city: p.city ?? "", phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), inventoryUnit: p.inventoryUnit, infoText: p.infoText ?? "" });
+    setEf({
+      name: p.name, identifier: p.identifier, type: p.type, street: p.street ?? "", city: p.city ?? "", country: p.country ?? "CZ",
+      phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
+      inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(),
+      allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, active: p.active, infoText: p.infoText ?? "",
+    });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
@@ -866,10 +876,12 @@ function PropertiesView() {
           <div className="toolbar">
             <label className="row">Název <input value={ef.name} onChange={(e) => setEf({ ...ef, name: e.target.value })} /></label>
             <label className="row">Identifikátor <input value={ef.identifier} onChange={(e) => setEf({ ...ef, identifier: e.target.value })} /></label>
+            <label className="row">Typ <select value={ef.type} onChange={(e) => setEf({ ...ef, type: e.target.value })}><option value="hotel">Hotel</option><option value="penzion">Penzion</option><option value="ubytovna">Ubytovna</option></select></label>
           </div>
           <div className="toolbar">
             <input placeholder="Ulice" value={ef.street} onChange={(e) => setEf({ ...ef, street: e.target.value })} />
             <input placeholder="Město" value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} />
+            <input placeholder="Země" style={{ width: 80 }} value={ef.country} onChange={(e) => setEf({ ...ef, country: e.target.value })} />
             <input placeholder="Telefon" value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} />
             <input placeholder="E-mail" value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} />
           </div>
@@ -877,14 +889,24 @@ function PropertiesView() {
             <input placeholder="IČO (na dokladech)" value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} />
             <input placeholder="DIČ" value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} />
             <input placeholder="IBAN (QR platba)" style={{ minWidth: 240 }} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} />
+            <label className="row"><input type="checkbox" checked={ef.vatPayer} onChange={(e) => setEf({ ...ef, vatPayer: e.target.checked })} /> Plátce DPH</label>
           </div>
           <div style={{ padding: "4px 0 10px" }}>
             <div className="muted" style={{ marginBottom: 6 }}>Informace pro AI asistenta (FAQ — wifi, snídaně, parkování, pravidla, okolí…):</div>
             <textarea style={{ width: "100%", minHeight: 100, resize: "vertical" }} value={ef.infoText} onChange={(e) => setEf({ ...ef, infoText: e.target.value })} placeholder="Např.: Wi-Fi heslo je 'vitejte'. Snídaně 7–10 v přízemí. Parkování zdarma na dvoře. Check-in od 14:00, check-out do 10:00. Domácí mazlíčci povoleni." />
           </div>
           <div className="toolbar">
-            <label className="row">Pobytový poplatek / os. / noc <input style={{ width: 90 }} value={ef.cityTaxPerPersonNight} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} /> Kč</label>
             <label className="row">Jednotka <select value={ef.inventoryUnit} onChange={(e) => setEf({ ...ef, inventoryUnit: e.target.value })}><option value="room">pokoj</option><option value="bed">lůžko</option></select></label>
+            <label className="row"><input type="checkbox" checked={ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxEnabled: e.target.checked })} /> Pobytový poplatek</label>
+            <label className="row">/ os. / noc <input style={{ width: 80 }} value={ef.cityTaxPerPersonNight} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} disabled={!ef.cityTaxEnabled} /> Kč</label>
+          </div>
+          <div className="toolbar">
+            <label className="row"><input type="checkbox" checked={ef.allowLongTerm} onChange={(e) => setEf({ ...ef, allowLongTerm: e.target.checked })} /> Dlouhodobé pobyty</label>
+            <label className="row"><input type="checkbox" checked={ef.selfCheckin} onChange={(e) => setEf({ ...ef, selfCheckin: e.target.checked })} /> Self check-in</label>
+            <label className="row"><input type="checkbox" checked={ef.breakfastIncluded} onChange={(e) => setEf({ ...ef, breakfastIncluded: e.target.checked })} /> Snídaně v ceně</label>
+            <label className="row"><input type="checkbox" checked={ef.active} onChange={(e) => setEf({ ...ef, active: e.target.checked })} /> Aktivní</label>
+          </div>
+          <div className="toolbar">
             <button className="btn" onClick={saveEdit}>Uložit</button>
             <button className="btn ghost" onClick={() => { setEditId(null); setEf(null); }}>Zrušit</button>
           </div>
