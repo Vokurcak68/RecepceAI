@@ -94,13 +94,13 @@ app.get("/reservations/lookup", h(async (req) => {
 // ── Veřejné (kiosek): walk-in ────────────────────────────────
 const walkInBody = z.object({
   roomTypeId: z.string().uuid(), from: dateStr, to: dateStr,
-  adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(),
+  adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(),
   guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }),
 });
 app.post("/reservations/walkin", h(async (req) => {
   const propertyId = await resolvePropertyId(req);
   const b = walkInBody.parse(req.body);
-  return createWalkInHold({ propertyId, roomTypeId: b.roomTypeId, from: new Date(b.from), to: new Date(b.to), adults: b.adults, children: b.children, guest: b.guest });
+  return createWalkInHold({ propertyId, roomTypeId: b.roomTypeId, from: new Date(b.from), to: new Date(b.to), adults: b.adults, children: b.children, childAges: b.childAges, guest: b.guest });
 }));
 
 // ── Veřejné (kiosek): operace nad rezervací (id-based) ───────

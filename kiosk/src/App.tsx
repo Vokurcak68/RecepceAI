@@ -42,6 +42,9 @@ export function App() {
   const [from, setFrom] = useState(todayISO());
   const [to, setTo] = useState(plusDaysISO(todayISO(), 1));
   const [guests, setGuests] = useState(2);
+  const [children, setChildren] = useState(0);
+  const [childAges, setChildAges] = useState<number[]>([]);
+  const setChildrenCount = (n: number) => { const c = Math.max(0, Math.min(6, n)); setChildren(c); setChildAges((prev) => Array.from({ length: c }, (_, i) => prev[i] ?? 8)); };
   const [offers, setOffers] = useState<Available[]>([]);
   const [picked, setPicked] = useState<Available | null>(null);
 
@@ -262,7 +265,7 @@ export function App() {
     if (!picked || !g.firstName || !g.lastName) { setError("Vyplňte jméno a příjmení."); return; }
     const r = await run(() =>
       api.walkin({
-        roomTypeId: picked.roomTypeId, from, to, adults: guests,
+        roomTypeId: picked.roomTypeId, from, to, adults: guests, childAges,
         guest: { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: lang },
       }),
     );
@@ -464,6 +467,21 @@ export function App() {
                     <span className="val">{guests}</span>
                     <button onClick={() => setGuests((n) => Math.min(8, n + 1))}>+</button>
                   </div>
+                </div>
+                <div>
+                  <div className="muted" style={{ textAlign: "center", margin: "14px 0 10px" }}>{t("numChildren")}</div>
+                  <div className="stepper">
+                    <button onClick={() => setChildrenCount(children - 1)}>−</button>
+                    <span className="val">{children}</span>
+                    <button onClick={() => setChildrenCount(children + 1)}>+</button>
+                  </div>
+                  {children > 0 && (
+                    <div className="row" style={{ flexWrap: "wrap", justifyContent: "center", gap: 10, marginTop: 12 }}>
+                      {childAges.map((age, i) => (
+                        <div key={i}><label className="muted">{t("childAge")} {i + 1}</label><input type="number" min={0} max={17} className="input" style={{ width: 96 }} value={age} onChange={(e) => { const a = [...childAges]; a[i] = Math.max(0, Number(e.target.value) || 0); setChildAges(a); }} /></div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button className="btn" disabled={busy} onClick={searchRooms}>{t("findRooms")}</button>
               </>

@@ -44,11 +44,13 @@ export function findReservationsByLastName(propertyId: string, lastName: string)
 // ── Walk-in ──────────────────────────────────────────────────
 export type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
 export type WalkInInput = {
-  propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; guest: GuestInput;
+  propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; childAges?: number[]; guest: GuestInput;
 };
 
 export async function createWalkInHold(input: WalkInInput) {
-  const { propertyId, roomTypeId, from, to, adults, children = 0, guest } = input;
+  const { propertyId, roomTypeId, from, to, adults, guest } = input;
+  const childAges = (input.childAges ?? []).filter((a) => Number.isFinite(a));
+  const children = childAges.length || (input.children ?? 0);
   const nights = nightsBetween(from, to);
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
 
@@ -60,7 +62,7 @@ export async function createWalkInHold(input: WalkInInput) {
   const bedId = useBed ? await findFreeBed(propertyId, roomTypeId, from, to) : null;
   if (useBed ? !bedId : !roomId) throw new Error("Pro zvolený termín už není volná jednotka tohoto typu.");
 
-  const price = await getStayPrice(roomTypeId, from, to, adults);
+  const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
   const newGuest = await prisma.guest.create({
     data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language },
   });
@@ -73,7 +75,7 @@ export async function createWalkInHold(input: WalkInInput) {
       roomType: { connect: { id: roomTypeId } },
       ...(roomId ? { room: { connect: { id: roomId } } } : {}),
       ...(bedId ? { bed: { connect: { id: bedId } } } : {}),
-      checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children,
+      checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children, childAges,
       status: ReservationStatus.hold, source: "kiosk_walkin",
       billingCycle: price.billingCycle,
       totalAmount: price.total, cityTax: price.cityTax,
