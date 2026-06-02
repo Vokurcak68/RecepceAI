@@ -83,7 +83,8 @@ export function App() {
 
   useEffect(() => {
     if (showGallery) return;
-    const id = new URLSearchParams(window.location.search).get("property") || "HOTEL-PRAHA-01";
+    const id = new URLSearchParams(window.location.search).get("property");
+    if (!id) { setPropErr("Není zadána provozovna. Otevři kiosek s parametrem ?property=IDENTIFIKATOR."); return; }
     loadProperty(id).then(setProperty).catch((e) => setPropErr(e instanceof Error ? e.message : String(e)));
   }, []); // eslint-disable-line
 
