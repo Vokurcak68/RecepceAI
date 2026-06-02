@@ -474,8 +474,8 @@ export function App() {
               <>
                 <div className="screen-title">{t("searchStayTitle")}</div>
                 <div className="row">
-                  <div><label className="muted">{t("arrival")}</label><input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-                  <div><label className="muted">{t("departure")}</label><input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+                  <DatePicker label={t("arrival")} value={from} min={todayISO()} lang={lang} onChange={(v) => { setFrom(v); if (to <= v) setTo(plusDaysISO(v, 1)); }} />
+                  <DatePicker label={t("departure")} value={to} min={plusDaysISO(from, 1)} lang={lang} onChange={setTo} />
                 </div>
                 <div>
                   <div className="muted" style={{ textAlign: "center", marginBottom: 10 }}>{t("numGuests")}</div>
@@ -581,6 +581,47 @@ export function App() {
 
       {/* Přivolání člověka — zvonění + okno v rohu, kiosek zůstává ovladatelný. */}
       {call && <StaffCall room={call} propertyName={property?.name ?? ""} whatsapp={STAFF_WHATSAPP} onClose={() => setCall(null)} />}
+    </div>
+  );
+}
+
+// ── Velký dotykový výběr data (nativní kalendář je na kiosku moc malý) ──
+const dpISO = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+function DatePicker({ value, onChange, min, lang, label }: { value: string; onChange: (v: string) => void; min?: string; lang: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const init = value ? value.split("-").map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1, 1];
+  const [vy, setVy] = useState(init[0]);
+  const [vm, setVm] = useState(init[1] - 1); // 0-based
+  const fld = value ? new Intl.DateTimeFormat(lang, { day: "numeric", month: "long", year: "numeric" }).format(new Date(value + "T00:00:00")) : "—";
+  const monthName = new Intl.DateTimeFormat(lang, { month: "long", year: "numeric" }).format(new Date(vy, vm, 1));
+  const dows = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(lang, { weekday: "short" }).format(new Date(2024, 0, 1 + i))); // 2024-01-01 = pondělí
+  const startDow = (new Date(vy, vm, 1).getDay() + 6) % 7; // pondělí = 0
+  const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+  const cells: ({ d: number; iso: string; disabled: boolean } | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) { const iso = dpISO(vy, vm, d); cells.push({ d, iso, disabled: !!min && iso < min }); }
+  const step = (dir: number) => { let m = vm + dir, y = vy; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } setVm(m); setVy(y); };
+  return (
+    <div>
+      <label className="muted" style={{ display: "block", marginBottom: 8 }}>{label}</label>
+      <button className="input dp-field" onClick={() => setOpen(true)}>{fld}</button>
+      {open && (
+        <div className="dp-overlay" onClick={() => setOpen(false)}>
+          <div className="dp-cal" onClick={(e) => e.stopPropagation()}>
+            <div className="dp-head">
+              <button onClick={() => step(-1)}>‹</button>
+              <div className="dp-month">{monthName}</div>
+              <button onClick={() => step(1)}>›</button>
+            </div>
+            <div className="dp-dow">{dows.map((w, i) => <div key={i}>{w}</div>)}</div>
+            <div className="dp-grid">
+              {cells.map((c, i) => c === null ? <div key={i} /> : (
+                <button key={i} className={`dp-day${c.iso === value ? " sel" : ""}`} disabled={c.disabled} onClick={() => { onChange(c.iso); setOpen(false); }}>{c.d}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

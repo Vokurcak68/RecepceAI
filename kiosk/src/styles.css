@@ -130,6 +130,20 @@ svg.av * { transform-box: fill-box; }
    Asistenta necentrujeme — má vyplnit celou plochu (flex:1). */
 .content > :first-child:not(.assistant) { margin-top: auto; }
 .content > :last-child:not(.assistant) { margin-bottom: auto; }
+
+/* Velký dotykový výběr data */
+.dp-field { cursor: pointer; text-align: left; }
+.dp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: grid; place-items: center; z-index: 200; padding: 16px; }
+.dp-cal { background: var(--card); border: 1px solid #2b3760; border-radius: 22px; padding: 22px; width: min(94vw, 560px); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.dp-head button { font-size: 34px; width: 66px; height: 66px; border-radius: 16px; border: none; background: var(--bg2); color: var(--text); cursor: pointer; line-height: 1; }
+.dp-month { font-size: 26px; font-weight: 700; text-transform: capitalize; }
+.dp-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
+.dp-dow div { text-align: center; color: var(--muted); font-size: 17px; text-transform: capitalize; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.dp-day { aspect-ratio: 1; min-height: 58px; font-size: 23px; border: none; border-radius: 14px; background: var(--bg2); color: var(--text); cursor: pointer; }
+.dp-day:disabled { opacity: 0.2; }
+.dp-day.sel { background: var(--accent); color: #fff; font-weight: 700; }
 .screen-title { font-size: 30px; font-weight: 700; text-align: center; }
 .screen-hint { font-size: 19px; color: var(--muted); text-align: center; margin-top: -8px; }
 
