@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, type ReactNode, type CSSProperties } from "react";
 import QRCode from "qrcode";
+import { useConfirm } from "./confirm";
 import {
   api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL,
   type EmailLog,
@@ -424,8 +425,9 @@ function BriefingCard({ selId }: { selId: string }) {
 
 function DashboardView({ selId }: { selId: string }) {
   const today = todayIso();
+  const confirm = useConfirm();
   const { data, error, reload } = useAsync<Dashboard>(() => api.dashboard(today), [selId]);
-  const doCheckin = async (id: string) => { if (!confirm("Provést check-in této rezervace?")) return; await api.checkin(id); reload(); };
+  const doCheckin = async (id: string) => { if (!(await confirm({ title: "Check-in", message: "Provést check-in této rezervace?", confirmLabel: "Check-in" }))) return; await api.checkin(id); reload(); };
   const doClean = async (id: string) => { await api.cleanRoom(id); reload(); };
   return (
     <>
@@ -629,6 +631,7 @@ function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
 }
 
 function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
+  const confirm = useConfirm();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const { data, error, reload } = useAsync<Reservation[]>(() => api.reservations(q, status), [selId, status]);
@@ -643,7 +646,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
   const bulk = async () => { setFormErr(""); try { setBulkDoc(await api.bulkInvoice([...sel])); setSel(new Set()); } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); } };
 
-  const cancel = async (id: string) => { if (confirm("Zrušit rezervaci?")) { await api.cancel(id); reload(); } };
+  const cancel = async (id: string) => { if (await confirm({ title: "Zrušit rezervaci", message: "Opravdu zrušit tuto rezervaci?", confirmLabel: "Zrušit rezervaci", danger: true })) { await api.cancel(id); reload(); } };
   const create = async () => {
     setFormErr("");
     if (!f.roomTypeId || !f.firstName || !f.lastName) { setFormErr("Vyplň typ, jméno a příjmení."); return; }
@@ -1162,6 +1165,7 @@ function UsersView({ currentUserId }: { currentUserId: string }) {
 
 // ── Detail rezervace ─────────────────────────────────────────
 function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Property; onBack: () => void }) {
+  const confirm = useConfirm();
   const { data, error, reload } = useAsync<ReservationDetail>(() => api.reservation(id), [id]);
   const folioA = useAsync<Folio>(() => api.resFolio(id), [id]);
   const chargesA = useAsync<Charge[]>(() => api.charges(id), [id]);
@@ -1228,10 +1232,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       <div className="panel" style={{ padding: 16 }}>
         <h3 style={{ border: "none", padding: 0, marginBottom: 12 }}>Akce</h3>
         <div className="toolbar">
-          {canCheckIn && <button className="btn ok" disabled={busy} onClick={() => { if (confirm(`Provést check-in rezervace ${r.code} (${r.primaryGuest?.firstName} ${r.primaryGuest?.lastName})?`)) run(() => api.checkin(id)); }}>Check-in</button>}
-          {canCheckOut && <button className="btn" disabled={busy} onClick={() => { if (confirm(`Provést check-out rezervace ${r.code}? Účet musí být vyrovnaný.`)) run(async () => { const x = await api.checkout(id); if (x.document) setIssuedDoc(x.document); }); }}>Check-out</button>}
-          {bal > 0 && <button className="btn" disabled={busy} onClick={() => { if (confirm(`Zaúčtovat úhradu ${money(bal)} kartou?`)) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" })); }}>Doplatit {money(bal)} kartou</button>}
-          {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={() => { if (confirm(`Označit ${money(bal)} jako zaplaceno fakturou?`)) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` })); }}>Zaplaceno fakturou</button>}
+          {canCheckIn && <button className="btn ok" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{r.code}</b> ({r.primaryGuest?.firstName} {r.primaryGuest?.lastName})?</>, confirmLabel: "Check-in" })) run(() => api.checkin(id)); }}>Check-in</button>}
+          {canCheckOut && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{r.code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(id); if (x.document) setIssuedDoc(x.document); }); }}>Check-out</button>}
+          {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Úhrada kartou", message: <>Zaúčtovat úhradu <b>{money(bal)}</b> kartou?</>, confirmLabel: "Zaúčtovat" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" })); }}>Doplatit {money(bal)} kartou</button>}
+          {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={async () => { if (await confirm({ title: "Platba fakturou", message: <>Označit <b>{money(bal)}</b> jako zaplaceno fakturou?</>, confirmLabel: "Označit zaplaceno" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` })); }}>Zaplaceno fakturou</button>}
           <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>
           <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "receipt"))}>🧾 Vystavit účtenku</button>
           <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>
@@ -1506,11 +1510,12 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
 function DocumentsView({ selId }: { selId: string }) {
+  const confirm = useConfirm();
   const [type, setType] = useState("");
   const { data, error, reload } = useAsync<Doc[]>(() => api.documents(type ? `?type=${type}` : ""), [selId, type]);
   const [doc, setDoc] = useState<Doc | null>(null);
   const open = async (id: string) => { try { setDoc(await api.document(id)); } catch { /* */ } };
-  const cancel = async (id: string) => { if (!confirm("Opravdu stornovat doklad?")) return; await api.cancelDocument(id); reload(); };
+  const cancel = async (id: string) => { if (!(await confirm({ title: "Stornovat doklad", message: "Opravdu stornovat tento doklad?", confirmLabel: "Stornovat", danger: true }))) return; await api.cancelDocument(id); reload(); };
   const exportCsv = async () => {
     try {
       const csv = await api.documentsCsv(type ? `?type=${type}` : "");
@@ -1552,6 +1557,7 @@ function DocumentsView({ selId }: { selId: string }) {
 }
 
 function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
+  const confirm = useConfirm();
   const [cur, setCur] = useState<Doc>(doc);
   const [busy, setBusy] = useState(false);
   const [perr, setPerr] = useState("");
@@ -1559,7 +1565,7 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
   useEffect(() => { if (cur.qrPayment) QRCode.toDataURL(cur.qrPayment, { margin: 1, width: 150 }).then(setQrImg).catch(() => setQrImg("")); else setQrImg(""); }, [cur.qrPayment]);
   const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
   const pay = async (method: "cash" | "card_terminal") => {
-    if (!confirm(`Označit doklad jako zaplacený ${method === "cash" ? "hotově" : "kartou"} (${money(due)})?`)) return;
+    if (!(await confirm({ title: "Zaplacení dokladu", message: <>Označit doklad jako zaplacený <b>{method === "cash" ? "hotově" : "kartou"}</b> ({money(due)})?</>, confirmLabel: "Zaplaceno" }))) return;
     setBusy(true); setPerr("");
     try { setCur(await api.payDocument(cur.id, method)); }
     catch (e) { setPerr(e instanceof Error ? e.message : String(e)); }
