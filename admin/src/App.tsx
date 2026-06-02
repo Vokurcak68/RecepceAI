@@ -640,7 +640,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formErr, setFormErr] = useState("");
-  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
+  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [bulkDoc, setBulkDoc] = useState<Doc | null>(null);
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
@@ -651,10 +651,10 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
     setFormErr("");
     if (!f.roomTypeId || !f.firstName || !f.lastName) { setFormErr("Vyplň typ, jméno a příjmení."); return; }
     try {
-      await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults),
+      await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults), children: Number(f.children),
         guest: { firstName: f.firstName, lastName: f.lastName, email: f.email || undefined, phone: f.phone || undefined, language: f.language },
         billingCompany: f.billingCompany || undefined, billingIco: f.billingIco || undefined });
-      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" }); reload();
+      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" }); reload();
     } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -675,7 +675,8 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
             </select>
             <label className="row">Příjezd <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
             <label className="row">Odjezd <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
-            <label className="row">Osob <input type="number" min={1} style={{ width: 70 }} value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></label>
+            <label className="row">Dospělých <input type="number" min={1} style={{ width: 64 }} value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></label>
+            <label className="row">Dětí <input type="number" min={0} style={{ width: 64 }} value={f.children} onChange={(e) => setF({ ...f, children: Number(e.target.value) })} /></label>
           </div>
           <div className="toolbar">
             <input placeholder="Jméno" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} />
@@ -968,7 +969,7 @@ function BookView({ selId }: { selId: string }) {
 type PropEdit = {
   name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
   ico: string; dic: string; iban: string; vatPayer: boolean;
-  inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string;
+  inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; active: boolean; infoText: string;
   onlineCheckinHours: string;
 };
@@ -987,14 +988,14 @@ function PropertiesView() {
     setEf({
       name: p.name, identifier: p.identifier, type: p.type, street: p.street ?? "", city: p.city ?? "", country: p.country ?? "CZ",
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
-      inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(),
+      inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, active: p.active, infoText: p.infoText ?? "",
       onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
     });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
-    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), onlineCheckinHours: Number(ef.onlineCheckinHours) });
+    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), cityTaxFreeAge: Number(ef.cityTaxFreeAge), onlineCheckinHours: Number(ef.onlineCheckinHours) });
     setMsg("Provozovna uložena."); setEditId(null); setEf(null); reload();
   };
 
@@ -1045,6 +1046,7 @@ function PropertiesView() {
             <label className="row">Jednotka <select value={ef.inventoryUnit} onChange={(e) => setEf({ ...ef, inventoryUnit: e.target.value })}><option value="room">pokoj</option><option value="bed">lůžko</option></select></label>
             <label className="row"><input type="checkbox" checked={ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxEnabled: e.target.checked })} /> Pobytový poplatek</label>
             <label className="row">/ os. / noc <input style={{ width: 80 }} value={ef.cityTaxPerPersonNight} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} disabled={!ef.cityTaxEnabled} /> Kč</label>
+            <label className="row">děti do <input style={{ width: 56 }} value={ef.cityTaxFreeAge} onChange={(e) => setEf({ ...ef, cityTaxFreeAge: e.target.value })} disabled={!ef.cityTaxEnabled} /> let neplatí</label>
           </div>
           <div className="toolbar">
             <label className="row"><input type="checkbox" checked={ef.allowLongTerm} onChange={(e) => setEf({ ...ef, allowLongTerm: e.target.checked })} /> Dlouhodobé pobyty</label>
@@ -1218,6 +1220,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Host</span><b>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</b></div>
           <div className="kvline"><span className="muted">Kontakt</span><span>{r.primaryGuest?.email ?? "—"} · {r.primaryGuest?.phone ?? "—"}</span></div>
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
+          <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}

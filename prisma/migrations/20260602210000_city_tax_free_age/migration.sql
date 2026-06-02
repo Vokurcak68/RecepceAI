@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Property" ADD COLUMN "cityTaxFreeAge" INTEGER NOT NULL DEFAULT 18;

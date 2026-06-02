@@ -184,6 +184,7 @@ model Property {
   inventoryUnit         InventoryUnit @default(room)
   cityTaxEnabled        Boolean       @default(true)  // hotel/penzion ano, ubytovna typicky ne
   cityTaxPerPersonNight Decimal       @default(50) @db.Decimal(10, 2)
+  cityTaxFreeAge        Int           @default(18) // děti do tohoto věku pobytový poplatek neplatí
   allowLongTerm         Boolean       @default(false) // ubytovna: pobyty na týdny/měsíce
   selfCheckin           Boolean       @default(false) // ubytovna: plně samoobslužné
   breakfastIncluded     Boolean       @default(false)
