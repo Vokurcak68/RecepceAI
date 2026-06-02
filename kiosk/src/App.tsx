@@ -318,7 +318,7 @@ export function App() {
               Na hustém rozcestníku je menší, ať se vejdou všechna tlačítka. */}
           {/* Větu pod avatarem ukazujeme jen na úvodu — na ostatních obrazovkách
               by duplikovala jejich vlastní nadpis (avatar ji ale stále vysloví). */}
-          <Avatar speaking={speaking} line={screen === "home" ? line : ""} variant={AVATAR} size={screen === "home" ? 90 : 120} />
+          <Avatar speaking={speaking} line={screen === "home" ? line : ""} variant={AVATAR} size={120} />
 
           <div className="content">
             {screen === "home" && (
