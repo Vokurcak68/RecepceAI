@@ -138,13 +138,14 @@ app.post("/call/notify", h(async (req) => {
   // Zvoneček pro manažery (vznikne vždy, i kdyby WhatsApp selhal).
   const call = callsStore.addCall({ propertyId, propertyName: propName, joinUrl: b.joinUrl });
 
-  // WhatsApp je best-effort — když není připojený, zvoneček stačí.
+  // WhatsApp je best-effort a může být POMALÉ (puppeteer) — posíláme NA POZADÍ a callId
+  // vracíme HNED. Kiosek callId potřebuje, aby po připojení mohl zvoneček zhasnout
+  // (jinak join-eventy proběhnou dřív, než callId dorazí, a zvoneček zůstane viset).
   const staff = process.env.STAFF_WHATSAPP || "420724239572";
-  let sent = false;
-  try { await sendWhatsApp(staff, `🛎️ Host volá z recepce ${propName}. Připojte se k videohovoru: ${b.joinUrl}`); sent = true; }
-  catch { /* zvoneček v adminu funguje i bez WhatsAppu */ }
+  sendWhatsApp(staff, `🛎️ Host volá z recepce ${propName}. Připojte se k videohovoru: ${b.joinUrl}`)
+    .catch(() => { /* zvoneček v adminu funguje i bez WhatsAppu */ });
 
-  return { sent, callId: call.id };
+  return { sent: true, callId: call.id };
 }));
 
 // ── Jitsi/JaaS token pro videohovor (kiosek) — odstraní 5min limit i hlášku ──

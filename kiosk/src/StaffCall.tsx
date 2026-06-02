@@ -34,8 +34,10 @@ export function StaffCall({ room, propertyName, onClose }: {
   // Zhasnutí zvonečku v adminu — když se někdo připojí nebo se okno zavře.
   const callIdRef = useRef<string | null>(null);
   const resolvedRef = useRef(false);
+  const wantResolveRef = useRef(false);
   const resolveBell = () => {
-    if (resolvedRef.current || !callIdRef.current) return;
+    if (resolvedRef.current) return;
+    if (!callIdRef.current) { wantResolveRef.current = true; return; } // callId ještě nedorazil → zhasni hned, jak přijde
     resolvedRef.current = true;
     api.resolveCall(callIdRef.current).catch(() => {});
   };
@@ -43,7 +45,7 @@ export function StaffCall({ room, propertyName, onClose }: {
   const ring = (url = joinUrl) => {
     setNotify("sending");
     api.notifyStaff(url, propertyName)
-      .then((r) => { setNotify("sent"); if (r.callId) callIdRef.current = r.callId; })
+      .then((r) => { setNotify("sent"); if (r.callId) { callIdRef.current = r.callId; if (wantResolveRef.current) resolveBell(); } })
       .catch(() => setNotify("error"));
   };
 
