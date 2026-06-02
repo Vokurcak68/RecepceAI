@@ -358,6 +358,7 @@ model Reservation {
   nights       Int
   adults       Int      @default(1)
   children     Int      @default(0)
+  childAges    Int[]    @default([]) // věk jednotlivých dětí — pro výpočet osvobození od pobytového poplatku
 
   status       ReservationStatus @default(pending)
   source       ReservationSource @default(manual)

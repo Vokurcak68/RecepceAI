@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Reservation" ADD COLUMN "childAges" INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[];

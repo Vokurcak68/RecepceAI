@@ -53,22 +53,24 @@ export async function listReservations(propertyId: string, filter: { status?: st
 }
 
 export async function createReservation(input: {
-  propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number;
+  propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; childAges?: number[];
   guest: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
   billingCompany?: string; billingIco?: string; billingDic?: string;
 }) {
-  const { propertyId, roomTypeId, from, to, adults, children = 0, guest } = input;
+  const { propertyId, roomTypeId, from, to, adults, guest } = input;
+  const childAges = (input.childAges ?? []).filter((a) => Number.isFinite(a));
+  const children = childAges.length || (input.children ?? 0);
   const nights = nightsBetween(from, to);
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
   if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0)
     throw new Error("Pro zvolený termín už není volná jednotka tohoto typu (předešlo se přebookování).");
-  const price = await getStayPrice(roomTypeId, from, to, adults);
+  const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
   const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language } });
   const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
       primaryGuest: { connect: { id: g.id } }, roomType: { connect: { id: roomTypeId } },
-      checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children,
+      checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children, childAges,
       status: ReservationStatus.confirmed, source: "manual", billingCycle: price.billingCycle,
       totalAmount: price.total, cityTax: price.cityTax,
       billingCompany: input.billingCompany, billingIco: input.billingIco, billingDic: input.billingDic,

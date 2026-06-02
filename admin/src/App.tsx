@@ -640,7 +640,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formErr, setFormErr] = useState("");
-  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
+  const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, childAges: [] as number[], firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [bulkDoc, setBulkDoc] = useState<Doc | null>(null);
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
@@ -651,10 +651,10 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
     setFormErr("");
     if (!f.roomTypeId || !f.firstName || !f.lastName) { setFormErr("Vyplň typ, jméno a příjmení."); return; }
     try {
-      await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults), children: Number(f.children),
+      await api.createReservation({ roomTypeId: f.roomTypeId, from: f.from, to: f.to, adults: Number(f.adults), childAges: f.childAges,
         guest: { firstName: f.firstName, lastName: f.lastName, email: f.email || undefined, phone: f.phone || undefined, language: f.language },
         billingCompany: f.billingCompany || undefined, billingIco: f.billingIco || undefined });
-      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" }); reload();
+      setShowForm(false); setF({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, childAges: [] as number[], firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" }); reload();
     } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -676,8 +676,16 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
             <label className="row">Příjezd <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
             <label className="row">Odjezd <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
             <label className="row">Dospělých <input type="number" min={1} style={{ width: 64 }} value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></label>
-            <label className="row">Dětí <input type="number" min={0} style={{ width: 64 }} value={f.children} onChange={(e) => setF({ ...f, children: Number(e.target.value) })} /></label>
+            <label className="row">Dětí <input type="number" min={0} max={10} style={{ width: 64 }} value={f.children} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setF({ ...f, children: n, childAges: Array.from({ length: n }, (_, i) => f.childAges[i] ?? 8) }); }} /></label>
           </div>
+          {f.children > 0 && (
+            <div className="toolbar">
+              {f.childAges.map((age, i) => (
+                <label key={i} className="row">Věk dítěte {i + 1} <input type="number" min={0} max={25} style={{ width: 56 }} value={age} onChange={(e) => { const a = [...f.childAges]; a[i] = Math.max(0, Number(e.target.value) || 0); setF({ ...f, childAges: a }); }} /></label>
+              ))}
+              <span className="muted">poplatek platí děti od věku osvobození provozovny</span>
+            </div>
+          )}
           <div className="toolbar">
             <input placeholder="Jméno" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} />
             <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} />
@@ -1220,7 +1228,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Host</span><b>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</b></div>
           <div className="kvline"><span className="muted">Kontakt</span><span>{r.primaryGuest?.email ?? "—"} · {r.primaryGuest?.phone ?? "—"}</span></div>
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
-          <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}</span></div>
+          <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}

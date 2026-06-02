@@ -20,6 +20,7 @@ export async function getStayPrice(
   from: Date,
   to: Date,
   guests: number,
+  childAges?: number[],
 ): Promise<StayPrice> {
   const roomType = await prisma.roomType.findUniqueOrThrow({
     where: { id: roomTypeId },
@@ -49,10 +50,13 @@ export async function getStayPrice(
   }
 
   // Pobytový poplatek — jen pokud zapnutý; ČR: max 60 po sobě jdoucích nocí.
+  // Platí dospělí + děti s věkem >= cityTaxFreeAge (mladší jsou osvobozené).
   let cityTax = new Prisma.Decimal(0);
   if (property.cityTaxEnabled) {
     const taxableNights = Math.min(nights, 60);
-    cityTax = property.cityTaxPerPersonNight.mul(guests).mul(taxableNights);
+    const payingChildren = (childAges ?? []).filter((a) => a >= property.cityTaxFreeAge).length;
+    const payers = guests + payingChildren;
+    cityTax = property.cityTaxPerPersonNight.mul(payers).mul(taxableNights);
   }
 
   return { roomTotal, cityTax, total: roomTotal.add(cityTax), billingCycle };

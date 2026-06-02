@@ -37,7 +37,7 @@ export type Bed = { id: string; label: string; status: string; room?: { number: 
 export type Room = { id: string; number: string; floor: number; status: string; lockType: string; roomType?: RoomType; beds?: Bed[] };
 export type Reservation = {
   id: string; code: string; status: string; checkInDate: string; checkOutDate: string;
-  nights: number; adults: number; children?: number; totalAmount: Money; cityTax: Money; billingCycle?: string;
+  nights: number; adults: number; children?: number; childAges?: number[]; totalAmount: Money; cityTax: Money; billingCycle?: string;
   primaryGuest?: Guest; roomType?: RoomType; room?: Room | null; bed?: Bed | null;
 };
 export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string; stayFrom: string; stayTo: string };
