@@ -147,6 +147,8 @@ export function App() {
 
   // Probuzení z idle (dotyk na „Dotkněte se pro start") — uvítá i hlasem.
   function wake() { resetAll(); setScreen("home"); const w = t("welcome"); setLine(w); speak(w); }
+  // Návrat na úvodní rozcestník (z podobrazovek) — uvítací větu zobrazí, ale UŽ NEPŘEDČÍTÁ.
+  function home() { resetAll(); setScreen("home"); setLine(t("welcome")); }
   function startHumanCall() {
     const room = `recepce-${property?.identifier ?? "kiosek"}-${Math.random().toString(36).slice(2, 8)}`.toLowerCase();
     setCall(room);
@@ -571,7 +573,7 @@ export function App() {
           </div>
 
           <div className="footer">
-            <button className="btn ghost" onClick={idle}>← {t("back")}</button>
+            <button className="btn ghost" onClick={() => (screen === "home" ? idle() : home())}>← {t("back")}</button>
             <button className="btn ghost" onClick={startHumanCall}>🙋 {t("needHuman")}</button>
           </div>
         </>
