@@ -107,6 +107,18 @@ export function App() {
 
   useEffect(() => { chatBoxRef.current?.scrollTo({ top: chatBoxRef.current.scrollHeight }); }, [chatMessages, chatBusy]);
 
+  // Po nečinnosti zpět na úvodní „Dotkněte se pro start" (mimo idle a probíhající hovor).
+  // Časovač se resetuje při jakékoli interakci.
+  useEffect(() => {
+    if (screen === "idle" || call) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => { clearTimeout(timer); timer = setTimeout(() => idle(), 120000); };
+    const evs: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "touchstart"];
+    reset();
+    evs.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    return () => { clearTimeout(timer); evs.forEach((e) => window.removeEventListener(e, reset)); };
+  }, [screen, call]); // eslint-disable-line
+
   if (showGallery) return <AvatarGallery lang={lang} />;
   if (propErr) return (
     <div className="kiosk"><div className="content">
@@ -133,7 +145,10 @@ export function App() {
     setReg({ fullName: "", dob: "", nationality: "CZ", documentType: "id_card", documentNumber: "", homeAddress: "", gdpr: false });
   }
 
-  function home() { resetAll(); go("home", "welcome"); }
+  // Probuzení z idle (dotyk na „Dotkněte se pro start") — uvítá i hlasem.
+  function wake() { resetAll(); setScreen("home"); const w = t("welcome"); setLine(w); speak(w); }
+  // Návrat na úvod (tlačítko Zpět) — uvítací větu zobrazí, ale UŽ NEPŘEDČÍTÁ.
+  function home() { resetAll(); setScreen("home"); setLine(t("welcome")); }
   function startHumanCall() {
     const room = `recepce-${property?.identifier ?? "kiosek"}-${Math.random().toString(36).slice(2, 8)}`.toLowerCase();
     setCall(room);
@@ -281,7 +296,7 @@ export function App() {
   return (
     <div className="kiosk">
       {screen === "idle" ? (
-        <div className="idle" onClick={home}>
+        <div className="idle" onClick={wake}>
           <Avatar speaking={false} line="" variant={AVATAR} size={180} />
           <div className="screen-title">Recepce</div>
           <div className="pulse">{t("tapToStart")}</div>
