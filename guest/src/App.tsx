@@ -2,7 +2,9 @@ import { useEffect, useState, type CSSProperties } from "react";
 import "flag-icons/css/flag-icons.min.css";
 import { makeT, detectLang, LANGS, type Lang } from "./i18n";
 
-type Reservation = { code: string; propertyName: string; guestName: string; unit: string | null; checkInDate: string; checkOutDate: string; status: string };
+type Reservation = { code: string; propertyName: string; guestName: string; unit: string | null; checkInDate: string; checkOutDate: string; status: string; adults?: number; children?: number };
+type Person = { fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string };
+const emptyPerson = (): Person => ({ fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
 type Request = { id: string; type: string; status: string; description: string | null; createdAt: string };
 type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
 type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
@@ -41,7 +43,7 @@ export function App() {
   const [picked, setPicked] = useState("");
   const [desc, setDesc] = useState("");
   const [sent, setSent] = useState(false);
-  const [ci, setCi] = useState({ fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
+  const [persons, setPersons] = useState<Person[]>([emptyPerson()]);
   const [ciBusy, setCiBusy] = useState(false);
   const [ciErr, setCiErr] = useState("");
 
@@ -77,16 +79,21 @@ export function App() {
     if (data) api(`/guest/${encodeURIComponent(code.trim())}/language`, { method: "POST", body: JSON.stringify({ lang: l }) }).catch(() => {});
   };
 
+  // Inicializace osob dle počtu na rezervaci (dospělí + děti), 1. = primární host.
   useEffect(() => {
-    if (data?.onlineCheckin?.available && !ci.fullName) setCi((c) => ({ ...c, fullName: data.reservation.guestName }));
+    if (data?.onlineCheckin?.available && persons.length === 1 && !persons[0].fullName) {
+      const total = Math.max(1, (data.reservation.adults ?? 1) + (data.reservation.children ?? 0));
+      setPersons(Array.from({ length: total }, (_, i) => (i === 0 ? { ...emptyPerson(), fullName: data.reservation.guestName } : emptyPerson())));
+    }
   }, [data]); // eslint-disable-line
 
-  const ciValid = ci.fullName.trim().length > 1 && ci.dateOfBirth && ci.nationality.trim() && ci.documentNumber.trim() && ci.homeAddress.trim().length > 2;
+  const updPerson = (i: number, patch: Partial<Person>) => setPersons((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  const personsValid = persons.length > 0 && persons.every((p) => p.fullName.trim().length > 1 && !!p.dateOfBirth && !!p.nationality.trim());
   const submitCheckin = async () => {
-    if (!ciValid) return;
+    if (!personsValid) return;
     setCiBusy(true); setCiErr("");
     try {
-      await api(`/guest/${encodeURIComponent(code.trim())}/checkin`, { method: "POST", body: JSON.stringify(ci) });
+      await api(`/guest/${encodeURIComponent(code.trim())}/checkin`, { method: "POST", body: JSON.stringify({ persons }) });
       await load(code);
     } catch (e) { setCiErr(e instanceof Error ? e.message : t("reqFail")); }
     finally { setCiBusy(false); }
@@ -148,18 +155,27 @@ export function App() {
         <div className="card">
           <h2>{t("ocTitle")}</h2>
           <p className="muted">{t("ocHint")}</p>
-          <input style={inputStyle} placeholder={t("ocName")} value={ci.fullName} onChange={(e) => setCi({ ...ci, fullName: e.target.value })} />
-          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>{t("ocDob")}</div>
-          <input style={dateStyle} type="date" value={ci.dateOfBirth} onChange={(e) => setCi({ ...ci, dateOfBirth: e.target.value })} />
-          <input style={inputStyle} placeholder={t("ocNat")} value={ci.nationality} onChange={(e) => setCi({ ...ci, nationality: e.target.value })} />
-          <select style={inputStyle} value={ci.documentType} onChange={(e) => setCi({ ...ci, documentType: e.target.value })}>
-            <option value="id_card">{t("ocDocId")}</option>
-            <option value="passport">{t("ocDocPassport")}</option>
-          </select>
-          <input style={inputStyle} placeholder={t("ocDocNum")} value={ci.documentNumber} onChange={(e) => setCi({ ...ci, documentNumber: e.target.value })} />
-          <input style={inputStyle} placeholder={t("ocAddress")} value={ci.homeAddress} onChange={(e) => setCi({ ...ci, homeAddress: e.target.value })} />
-          {ciErr && <div className="error">{ciErr}</div>}
-          <button className="btn block" style={{ marginTop: 16 }} disabled={ciBusy || !ciValid} onClick={submitCheckin}>{ciBusy ? t("ocSending") : t("ocSubmit")}</button>
+          {persons.map((p, i) => (
+            <div key={i} style={{ paddingTop: i ? 14 : 0, marginTop: i ? 14 : 0, borderTop: i ? "1px solid #e2e8f4" : undefined }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <b style={{ fontSize: 14 }}>{t("ocPerson")} {i + 1}{i === 0 ? "" : ""}</b>
+                {i > 0 && <button className="linkx" style={{ color: "var(--danger)" }} onClick={() => setPersons((ps) => ps.filter((_, idx) => idx !== i))}>✕</button>}
+              </div>
+              <input style={inputStyle} placeholder={t("ocName")} value={p.fullName} onChange={(e) => updPerson(i, { fullName: e.target.value })} />
+              <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>{t("ocDob")}</div>
+              <input style={dateStyle} type="date" value={p.dateOfBirth} onChange={(e) => updPerson(i, { dateOfBirth: e.target.value })} />
+              <input style={inputStyle} placeholder={t("ocNat")} value={p.nationality} onChange={(e) => updPerson(i, { nationality: e.target.value })} />
+              <select style={inputStyle} value={p.documentType} onChange={(e) => updPerson(i, { documentType: e.target.value })}>
+                <option value="id_card">{t("ocDocId")}</option>
+                <option value="passport">{t("ocDocPassport")}</option>
+              </select>
+              <input style={inputStyle} placeholder={t("ocDocNum")} value={p.documentNumber} onChange={(e) => updPerson(i, { documentNumber: e.target.value })} />
+              <input style={inputStyle} placeholder={t("ocAddress")} value={p.homeAddress} onChange={(e) => updPerson(i, { homeAddress: e.target.value })} />
+            </div>
+          ))}
+          <button className="btn ghost block" style={{ marginTop: 12 }} onClick={() => setPersons((ps) => [...ps, emptyPerson()])}>+ {t("ocPerson")}</button>
+          {ciErr && <div className="error" style={{ marginTop: 12 }}>{ciErr}</div>}
+          <button className="btn block" style={{ marginTop: 12 }} disabled={ciBusy || !personsValid} onClick={submitCheckin}>{ciBusy ? t("ocSending") : t("ocSubmit")}</button>
         </div>
       )}
 

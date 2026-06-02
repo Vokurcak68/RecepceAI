@@ -545,6 +545,7 @@ app.get("/guest/:code", h(async (req) => {
       guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`,
       unit: r.room ? `pokoj ${r.room.number}` : r.bed ? `lůžko ${r.bed.label}` : null,
       checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, status: r.status,
+      adults: r.adults, children: r.children,
     },
     lang: r.primaryGuest.language,
     onlineCheckin: onlineCheckinInfo(r, r.property),
@@ -563,11 +564,12 @@ app.post("/guest/:code/language", h(async (req) => {
 app.post("/guest/:code/checkin", h(async (req) => {
   const r = await service.loadReservationByCode(req.params.code);
   if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
-  const b = z.object({
+  const person = z.object({
     fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2),
-    documentType: z.nativeEnum(DocumentType), documentNumber: z.string().min(1), homeAddress: z.string().min(3),
-  }).parse(req.body);
-  await completeOnlineCheckin(r.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });
+    documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional(),
+  });
+  const b = z.object({ persons: z.array(person).min(1) }).parse(req.body);
+  await completeOnlineCheckin(r.id, b.persons.map((p) => ({ ...p, dateOfBirth: new Date(p.dateOfBirth) })));
   return { ok: true };
 }));
 app.post("/guest/:code/requests", h(async (req) => {

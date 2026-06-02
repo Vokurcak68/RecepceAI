@@ -139,20 +139,37 @@ export function onlineCheckinInfo(
 
 export type OnlineCheckinInput = {
   fullName: string; dateOfBirth: Date; nationality: string;
-  documentType: DocumentType; documentNumber: string; homeAddress: string;
+  documentType?: DocumentType; documentNumber?: string; homeAddress?: string;
 };
 
-export async function completeOnlineCheckin(reservationId: string, reg: OnlineCheckinInput) {
+/** Online check-in pro VŠECHNY ubytované osoby. 1. osoba = primární host,
+ * další se založí jako spolubydlící (ReservationGuest) + registrační záznam. */
+export async function completeOnlineCheckin(reservationId: string, persons: OnlineCheckinInput[]) {
   const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { property: true } });
   const info = onlineCheckinInfo(res, res.property);
   if (!info.enabled) throw new Error("Online check-in není pro tuto provozovnu zapnutý.");
   if (info.done) throw new Error("Online check-in už byl dokončen.");
   if (!info.available) throw new Error("Online check-in zatím není dostupný.");
-  await addRegistrationEntry({
-    reservationId, guestId: res.primaryGuestId, fullName: reg.fullName, dateOfBirth: reg.dateOfBirth,
-    nationality: reg.nationality, documentType: reg.documentType, documentNumber: reg.documentNumber,
-    homeAddress: reg.homeAddress, stayFrom: res.checkInDate, stayTo: res.checkOutDate,
+  if (!persons.length) throw new Error("Vyplňte prosím alespoň jednu osobu.");
+
+  const reg = (guestId: string, p: OnlineCheckinInput) => addRegistrationEntry({
+    reservationId, guestId, fullName: p.fullName, dateOfBirth: p.dateOfBirth, nationality: p.nationality,
+    documentType: p.documentType ?? DocumentType.id_card, documentNumber: p.documentNumber ?? "", homeAddress: p.homeAddress ?? "",
+    stayFrom: res.checkInDate, stayTo: res.checkOutDate,
   });
+
+  await reg(res.primaryGuestId, persons[0]);
+  for (const p of persons.slice(1)) {
+    const parts = p.fullName.trim().split(/\s+/);
+    const g = await prisma.guest.create({
+      data: { firstName: parts[0] ?? p.fullName, lastName: parts.slice(1).join(" ") || "—", address: p.homeAddress, documentType: p.documentType ?? null, documentNumber: p.documentNumber },
+    });
+    await prisma.reservationGuest.upsert({
+      where: { reservationId_guestId: { reservationId, guestId: g.id } },
+      create: { reservationId, guestId: g.id, isPrimary: false }, update: {},
+    });
+    await reg(g.id, p);
+  }
   return prisma.reservation.update({ where: { id: reservationId }, data: { onlineCheckinAt: new Date() } });
 }
 
