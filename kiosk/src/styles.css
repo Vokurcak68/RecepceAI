@@ -124,7 +124,8 @@ svg.av * { transform-box: fill-box; }
 @keyframes wave { from { transform: scaleY(0.4); } to { transform: scaleY(2.4); } }
 
 /* Content */
-.content { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 4px 2px; }
+.content { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 4px 2px; scrollbar-width: none; }
+.content::-webkit-scrollbar { display: none; } /* skrytý scrollbar (dotykový kiosek), scroll funguje tahem */
 /* Centrovat, když je místo; jinak scrollovat (bez překryvu avatara/tlačítek).
    Asistenta necentrujeme — má vyplnit celou plochu (flex:1). */
 .content > :first-child:not(.assistant) { margin-top: auto; }
