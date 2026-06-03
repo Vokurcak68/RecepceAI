@@ -956,6 +956,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const saveRoom = () => { if (ef) run(() => api.updateRoom(roomId, { number: ef.number, floor: Number(ef.floor), lockType: ef.lockType, notes: ef.notes }), "Pokoj uložen."); };
   const checkin = async (rid: string, code: string) => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{code}</b>?</>, confirmLabel: "Check-in" })) run(() => api.checkin(rid), "Check-in proveden."); };
   const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
+  const pay = async (rid: string, method: string, amount: number) => { if (amount <= 0) return; if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) run(() => api.addPayment(rid, { type: "balance", amount, method }), "Doplatek zaúčtován."); };
 
   if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
@@ -978,6 +979,10 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
             <div className="kvline"><span className="muted">Zůstatek</span><b style={{ color: Number(data.occupantBalance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(data.occupantBalance ?? 0)}</b></div>
             <div className="req-actions" style={{ marginTop: 10 }}>
               <button className="btn sm" onClick={() => setResId(occ.id)}>Detail rezervace</button>
+              {Number(data.occupantBalance) > 0 && <>
+                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "card_terminal", Number(data.occupantBalance))}>Doplatit kartou</button>
+                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "cash", Number(data.occupantBalance))}>Doplatit hotově</button>
+              </>}
               <button className="btn sm ok" disabled={busy} onClick={() => checkout(occ.id, occ.code)}>Check-out</button>
               <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit</button>
             </div>
