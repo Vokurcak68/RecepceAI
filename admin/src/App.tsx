@@ -894,7 +894,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 // ── Rooms ────────────────────────────────────────────────────
 // Přehled pokojů = čistý seznam výsledných stavů; klik na řádek → detail pokoje
 // (centrální ovládání: stav, přehazování hostů, rezervace, požadavky, vlastnosti).
-const ROOM_STATES: [string, string][] = [["clean", "Uklizeno"], ["dirty", "K úklidu"], ["inspected", "Zkontrolováno"], ["out_of_service", "Mimo"]];
+const ROOM_STATES: [string, string][] = [["clean", "Uklizeno"], ["dirty", "K úklidu"], ["to_inspect", "Zkontrolovat"], ["inspected", "Zkontrolováno"], ["out_of_service", "Mimo"]];
 const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{ROOM_STATUS_LABEL[s] ?? s}</span>;
 
 function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
@@ -1638,7 +1638,7 @@ type PropEdit = {
   name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
   ico: string; dic: string; iban: string; vatPayer: boolean;
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
-  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; active: boolean; infoText: string;
+  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; dailyCleaning: boolean; active: boolean; infoText: string;
   onlineCheckinHours: string;
   freeCancelDays: string; cancelFeePct: string; depositPct: string; reminderHours: string; noShowHours: string;
 };
@@ -1658,7 +1658,7 @@ function PropertiesView() {
       name: p.name, identifier: p.identifier, type: p.type, street: p.street ?? "", city: p.city ?? "", country: p.country ?? "CZ",
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
-      allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, active: p.active, infoText: p.infoText ?? "",
+      allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
       onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
       freeCancelDays: String(p.freeCancelDays ?? 0), cancelFeePct: String(p.cancelFeePct ?? 0), depositPct: String(p.depositPct ?? 0), reminderHours: String(p.reminderHours ?? 0), noShowHours: String(p.noShowHours ?? 0),
     });
@@ -1734,6 +1734,7 @@ function PropertiesView() {
               <Chk label="Dlouhodobé pobyty" checked={ef.allowLongTerm} onChange={(v) => setEf({ ...ef, allowLongTerm: v })} />
               <Chk label="Self check-in" checked={ef.selfCheckin} onChange={(v) => setEf({ ...ef, selfCheckin: v })} />
               <Chk label="Snídaně v ceně" checked={ef.breakfastIncluded} onChange={(v) => setEf({ ...ef, breakfastIncluded: v })} />
+              <Chk label="Úklid každý den" checked={ef.dailyCleaning} onChange={(v) => setEf({ ...ef, dailyCleaning: v })} />
               <Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} />
             </div>
           </FormSection>

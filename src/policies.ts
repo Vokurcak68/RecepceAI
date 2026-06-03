@@ -62,6 +62,33 @@ export async function sendReminders(): Promise<number> {
   return sent;
 }
 
+/** Denní úklid: na provozovnách s `dailyCleaning` označí obsazené pokoje bez
+ * dnešního odjezdu jako „Zkontrolovat" (to_inspect). 1× denně na pokoj (dedup
+ * přes `dailyServiceDate`); nepřepisuje dirty/out_of_service. */
+export async function processDailyService(): Promise<number> {
+  const today = toDateOnly(new Date());
+  const props = await prisma.property.findMany({ where: { dailyCleaning: true }, select: { id: true } });
+  if (!props.length) return 0;
+  const occ = await prisma.reservation.findMany({
+    where: { propertyId: { in: props.map((p) => p.id) }, status: ReservationStatus.checked_in, roomId: { not: null }, checkOutDate: { gt: today } },
+    select: { roomId: true },
+  });
+  const roomIds = [...new Set(occ.map((r) => r.roomId!))];
+  if (!roomIds.length) return 0;
+  const rooms = await prisma.room.findMany({
+    where: { id: { in: roomIds }, OR: [{ dailyServiceDate: null }, { dailyServiceDate: { lt: today } }] },
+    select: { id: true, status: true },
+  });
+  let n = 0;
+  for (const r of rooms) {
+    const ready = r.status === "clean" || r.status === "inspected";
+    await prisma.room.update({ where: { id: r.id }, data: { dailyServiceDate: today, ...(ready ? { status: "to_inspect" } : {}) } });
+    if (ready) n++;
+  }
+  if (n) console.log(`[policies] denní úklid: ${n} pokojů → Zkontrolovat`);
+  return n;
+}
+
 // ── Scheduler (in-process, hodinový) ─────────────────────────
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -70,7 +97,7 @@ export function startPolicyScheduler() {
   const run = async () => {
     if (running) return;
     running = true;
-    try { await processNoShows(); await sendReminders(); }
+    try { await processNoShows(); await sendReminders(); await processDailyService(); }
     catch (e) { console.error(`[policies] chyba: ${(e as Error).message}`); }
     finally { running = false; }
   };

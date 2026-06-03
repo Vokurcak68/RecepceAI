@@ -176,12 +176,14 @@ tr.row-high { box-shadow: inset 3px 0 0 var(--warn); }
 .room-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; border-left: 4px solid var(--line); }
 .room-card.rs-clean { border-left-color: var(--ok); }
 .room-card.rs-dirty { border-left-color: var(--warn); }
+.room-card.rs-to_inspect { border-left-color: #8b6fe6; }
 .room-card.rs-inspected { border-left-color: var(--accent); }
 .room-card.rs-out_of_service { border-left-color: var(--danger); }
 .room-h { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
 .room-status { font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
 .room-status.rs-clean { color: var(--ok); }
 .room-status.rs-dirty { color: var(--warn); }
+.room-status.rs-to_inspect { color: #8b6fe6; }
 .room-status.rs-inspected { color: var(--accent); }
 .room-status.rs-out_of_service { color: var(--danger); }
 .rb-line { display: block; width: 100%; text-align: left; background: none; border: none; padding: 3px 0; font-size: 14px; cursor: default; color: var(--text); }
@@ -199,6 +201,7 @@ tr.row-click:hover td { background: #f3f6ff; }
 .rs-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .rs-pill.rs-clean { background: #e6f7ee; color: var(--ok); }
 .rs-pill.rs-dirty { background: #fff5e6; color: var(--warn); }
+.rs-pill.rs-to_inspect { background: #efeaff; color: #7c5cff; }
 .rs-pill.rs-inspected { background: #eef2ff; color: var(--accent); }
 .rs-pill.rs-out_of_service { background: #fdeceb; color: var(--danger); }
 

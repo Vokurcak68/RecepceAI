@@ -69,6 +69,7 @@ enum BillingCycle {
 enum RoomStatus {
   clean
   dirty
+  to_inspect // ke kontrole / dennímu úklidu (obsazený pokoj bez dnešního odjezdu)
   inspected // uklizeno a zkontrolováno
   out_of_service
 }
@@ -193,6 +194,7 @@ model Property {
   allowLongTerm         Boolean       @default(false) // ubytovna: pobyty na týdny/měsíce
   selfCheckin           Boolean       @default(false) // ubytovna: plně samoobslužné
   breakfastIncluded     Boolean       @default(false)
+  dailyCleaning         Boolean       @default(false) // hotel: denní úklid → obsazené pokoje bez odjezdu se ráno označí „Zkontrolovat"
   onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
   // Storno / zálohové politiky + automatika (0 = vypnuto).
@@ -291,6 +293,7 @@ model Room {
   status   RoomStatus @default(clean)
   lockType LockType   @default(physical_key)
   notes    String?
+  dailyServiceDate DateTime? @db.Date // den, kdy byl naposledy automaticky označen „Zkontrolovat" (dedup denní automatiky)
 
   beds         Bed[]
   reservations Reservation[]

@@ -26,7 +26,7 @@ export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
   street: string | null; city: string | null; country: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; vatPayer: boolean; active: boolean; infoText: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money; cityTaxFreeAge: number;
-  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number;
+  allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number; dailyCleaning: boolean;
   freeCancelDays: number; cancelFeePct: number; depositPct: number; reminderHours: number; noShowHours: number;
   _count?: { rooms: number; beds: number; reservations: number };
 };
@@ -348,7 +348,7 @@ export type RoomReqItem = { id: string; type: string; domain: string; status: st
 export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; reservations: RoomResItem[]; requests: RoomReqItem[] };
 export type RoomCandidate = { id: string; number: string; floor: number; free: boolean; current: boolean };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };
-export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Uklizeno", dirty: "K úklidu", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
+export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Uklizeno", dirty: "K úklidu", to_inspect: "Zkontrolovat", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };
 export const SERVICE_ICON: Record<string, string> = { cleaning: "🧹", maintenance: "🔧", laundry: "🧺", ironing: "👔", minibar: "🥤", other: "📌" };
 
