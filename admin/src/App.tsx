@@ -100,6 +100,7 @@ export function App() {
       { id: "documents", label: "Doklady" },
     ] },
     { label: "Provoz", icon: "🧹", items: [
+      { id: "roomstatus", label: "Stav pokojů" },
       { id: "housekeeping", label: "Dispečink úklidu" },
       { id: "maintenance", label: "Dispečink údržby" },
       { id: "requests", label: "Požadavky" },
@@ -185,6 +186,7 @@ export function App() {
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
+        {prop && tab === "roomstatus" && <RoomStatusBoardView selId={selId} />}
         {prop && tab === "housekeeping" && <HousekeepingView selId={selId} />}
         {prop && tab === "maintenance" && <MaintenanceView selId={selId} />}
         {prop && tab === "checks" && <ChecksView selId={selId} />}
@@ -889,6 +891,38 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 }
 
 // ── Rooms ────────────────────────────────────────────────────
+// Ucelený přehled stavů pokojů (manažer) — barevný board s rychlým přepnutím.
+const ROOM_STATES: [string, string][] = [["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]];
+function RoomStatusBoardView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<Room[]>(() => api.rooms(), [selId]);
+  const [busy, setBusy] = useState("");
+  const set = async (id: string, s: string) => { setBusy(id); try { await api.updateRoom(id, { status: s }); reload(); } finally { setBusy(""); } };
+  const rooms = data ?? [];
+  const count = (s: string) => rooms.filter((r) => r.status === s).length;
+  return (
+    <>
+      <div className="h1"><span>Stav pokojů</span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ gap: 14, flexWrap: "wrap" }}>
+        {ROOM_STATES.map(([s, l]) => <span key={s} className={`room-status rs-${s}`} style={{ margin: 0 }}>{l}: <b>{count(s)}</b></span>)}
+      </div>
+      {rooms.length === 0 ? <div className="panel muted" style={{ padding: 20 }}>Žádné pokoje (provozovna na lůžka?).</div> : (
+        <div className="staff-rooms" style={{ padding: 0 }}>
+          {rooms.map((r) => (
+            <div key={r.id} className={`room-card rs-${r.status}`}>
+              <div className="room-h"><b>Pokoj {r.number}</b> <span className="muted">{r.roomType?.name ?? ""}</span></div>
+              <div className={`room-status rs-${r.status}`}>{ROOM_STATUS_LABEL[r.status] ?? r.status}</div>
+              <div className="req-actions">
+                {ROOM_STATES.map(([s, l]) => <button key={s} className={`btn sm ${r.status === s ? "" : "ghost"}`} disabled={busy === r.id || r.status === s} onClick={() => set(r.id, s)}>{l}</button>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function RoomsView({ selId }: { selId: string }) {
   const { data, error, reload } = useAsync<Room[]>(() => api.rooms(), [selId]);
   const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
@@ -909,7 +943,7 @@ function RoomsView({ selId }: { selId: string }) {
       </div>
       <div className="panel">
         <Table cols={["Číslo", "Typ", "Patro", "Zámek", "Stav", ""]} rows={data ?? []} empty="Žádné pokoje"
-          render={(r: Room) => (<tr key={r.id}><td><b>{r.number}</b></td><td>{r.roomType?.name}</td><td>{r.floor}.</td><td className="muted">{r.lockType === "smart_code" ? "🔢 kód" : "🔑 klíč"}</td><td><select value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>{["clean", "dirty", "out_of_service"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}</select></td><td className="right"><button className="btn sm danger" onClick={() => del(r.id)}>Smazat</button></td></tr>)} />
+          render={(r: Room) => (<tr key={r.id}><td><b>{r.number}</b></td><td>{r.roomType?.name}</td><td>{r.floor}.</td><td className="muted">{r.lockType === "smart_code" ? "🔢 kód" : "🔑 klíč"}</td><td><select value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>{["clean", "dirty", "inspected", "out_of_service"].map((s) => <option key={s} value={s}>{ROOM_STATUS_LABEL[s] ?? s}</option>)}</select></td><td className="right"><button className="btn sm danger" onClick={() => del(r.id)}>Smazat</button></td></tr>)} />
       </div>
     </>
   );
