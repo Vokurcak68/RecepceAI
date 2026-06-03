@@ -14,6 +14,25 @@ import {
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
 
+// ── Sdílené form-prvky (modulová úroveň → vstupy neztrácejí focus při psaní) ──
+const fldLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: "#8a97a3", marginBottom: 4, display: "block" };
+function FieldCol({ label, children, span }: { label: string; children: ReactNode; span?: number }) {
+  return <label style={{ display: "block", minWidth: 0, gridColumn: span ? `span ${span}` : undefined }}><span style={fldLabelStyle}>{label}</span>{children}</label>;
+}
+function FieldRow({ label, children }: { label: string; children: ReactNode }) {
+  return <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}><span className="muted" style={{ width: 110, textAlign: "right", flexShrink: 0 }}>{label}</span>{children}</div>;
+}
+function FormGrid({ children, min = 200 }: { children: ReactNode; min?: number }) {
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12, alignItems: "end" }}>{children}</div>;
+}
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return <div style={{ borderTop: "1px solid #e6eaee", paddingTop: 14, marginTop: 16 }}><div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".05em", color: "#8a97a3", marginBottom: 10 }}>{title}</div>{children}</div>;
+}
+function Chk({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return <label className="row" style={{ gap: 6, opacity: disabled ? 0.5 : 1 }}><input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /> {label}</label>;
+}
+const fullInput: CSSProperties = { width: "100%", boxSizing: "border-box" };
+
 // Adresa portálu hosta (přepsatelné přes VITE_GUEST_URL při buildu).
 const GUEST_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_GUEST_URL || "http://localhost:5175";
 // Jazyky hosta (pro e-maily + výchozí jazyk portálu) — sjednoceno s kioskem/portálem.
@@ -1329,12 +1348,6 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
   if (!data || !f) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
   const fieldInp: CSSProperties = { flex: 1, minWidth: 0 };
-  const Field = ({ label, children }: { label: string; children: ReactNode }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-      <span className="muted" style={{ width: 110, textAlign: "right", flexShrink: 0 }}>{label}</span>
-      {children}
-    </div>
-  );
   return (
     <>
       <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span>
@@ -1351,14 +1364,14 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
       {msg && <div className="error" style={msg === "Uloženo." || msg === "Sloučeno." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
       <div className="grid2">
         <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16, maxWidth: 460 }}>
-          <Field label="Jméno"><input style={fieldInp} value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></Field>
-          <Field label="Příjmení"><input style={fieldInp} value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></Field>
-          <Field label="E-mail"><input style={fieldInp} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></Field>
-          <Field label="Telefon"><input style={fieldInp} value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></Field>
-          <Field label="Jazyk"><input style={{ width: 90 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></Field>
-          <Field label="Adresa"><input style={fieldInp} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></Field>
-          <Field label="Doklad"><select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></Field>
-          <Field label="Číslo dokladu"><input style={fieldInp} value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></Field>
+          <FieldRow label="Jméno"><input style={fieldInp} value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></FieldRow>
+          <FieldRow label="Příjmení"><input style={fieldInp} value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></FieldRow>
+          <FieldRow label="E-mail"><input style={fieldInp} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></FieldRow>
+          <FieldRow label="Telefon"><input style={fieldInp} value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></FieldRow>
+          <FieldRow label="Jazyk"><input style={{ width: 90 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></FieldRow>
+          <FieldRow label="Adresa"><input style={fieldInp} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></FieldRow>
+          <FieldRow label="Doklad"><select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></FieldRow>
+          <FieldRow label="Číslo dokladu"><input style={fieldInp} value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></FieldRow>
         </div></div>
         <div className="panel"><h3>CRM</h3><div style={{ padding: 16 }}>
           <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={f.vip} onChange={(e) => upd({ vip: e.target.checked })} />&nbsp; VIP host</label>
@@ -1490,54 +1503,66 @@ function PropertiesView() {
 
       {editId && ef && (
         <div className="panel" style={{ padding: 18 }}>
-          <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Úprava provozovny</h3>
-          <div className="toolbar">
-            <label className="row">Název <input value={ef.name} onChange={(e) => setEf({ ...ef, name: e.target.value })} /></label>
-            <label className="row">Identifikátor <input value={ef.identifier} onChange={(e) => setEf({ ...ef, identifier: e.target.value })} /></label>
-            <label className="row">Typ <select value={ef.type} onChange={(e) => setEf({ ...ef, type: e.target.value })}><option value="hotel">Hotel</option><option value="penzion">Penzion</option><option value="ubytovna">Ubytovna</option></select></label>
-          </div>
-          <div className="toolbar">
-            <input placeholder="Ulice" value={ef.street} onChange={(e) => setEf({ ...ef, street: e.target.value })} />
-            <input placeholder="Město" value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} />
-            <input placeholder="Země" style={{ width: 80 }} value={ef.country} onChange={(e) => setEf({ ...ef, country: e.target.value })} />
-            <input placeholder="Telefon" value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} />
-            <input placeholder="E-mail" value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} />
-          </div>
-          <div className="toolbar">
-            <input placeholder="IČO (na dokladech)" value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} />
-            <input placeholder="DIČ" value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} />
-            <input placeholder="IBAN (QR platba)" style={{ minWidth: 240 }} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} />
-            <label className="row"><input type="checkbox" checked={ef.vatPayer} onChange={(e) => setEf({ ...ef, vatPayer: e.target.checked })} /> Plátce DPH</label>
-          </div>
-          <div style={{ padding: "4px 0 10px" }}>
-            <div className="muted" style={{ marginBottom: 6 }}>Informace pro AI asistenta (FAQ — wifi, snídaně, parkování, pravidla, okolí…):</div>
-            <textarea style={{ width: "100%", minHeight: 100, resize: "vertical" }} value={ef.infoText} onChange={(e) => setEf({ ...ef, infoText: e.target.value })} placeholder="Např.: Wi-Fi heslo je 'vitejte'. Snídaně 7–10 v přízemí. Parkování zdarma na dvoře. Check-in od 14:00, check-out do 10:00. Domácí mazlíčci povoleni." />
-          </div>
-          <div className="toolbar">
-            <label className="row">Jednotka <select value={ef.inventoryUnit} onChange={(e) => setEf({ ...ef, inventoryUnit: e.target.value })}><option value="room">pokoj</option><option value="bed">lůžko</option></select></label>
-            <label className="row"><input type="checkbox" checked={ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxEnabled: e.target.checked })} /> Pobytový poplatek</label>
-            <label className="row">/ os. / noc <input style={{ width: 80 }} value={ef.cityTaxPerPersonNight} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} disabled={!ef.cityTaxEnabled} /> Kč</label>
-            <label className="row">děti do <input style={{ width: 56 }} value={ef.cityTaxFreeAge} onChange={(e) => setEf({ ...ef, cityTaxFreeAge: e.target.value })} disabled={!ef.cityTaxEnabled} /> let neplatí</label>
-          </div>
-          <div className="toolbar">
-            <label className="row"><input type="checkbox" checked={ef.allowLongTerm} onChange={(e) => setEf({ ...ef, allowLongTerm: e.target.checked })} /> Dlouhodobé pobyty</label>
-            <label className="row"><input type="checkbox" checked={ef.selfCheckin} onChange={(e) => setEf({ ...ef, selfCheckin: e.target.checked })} /> Self check-in</label>
-            <label className="row">Online check-in (h před příj.) <input style={{ width: 70 }} value={ef.onlineCheckinHours} onChange={(e) => setEf({ ...ef, onlineCheckinHours: e.target.value })} disabled={!ef.selfCheckin} /></label>
-            <label className="row"><input type="checkbox" checked={ef.breakfastIncluded} onChange={(e) => setEf({ ...ef, breakfastIncluded: e.target.checked })} /> Snídaně v ceně</label>
-            <label className="row"><input type="checkbox" checked={ef.active} onChange={(e) => setEf({ ...ef, active: e.target.checked })} /> Aktivní</label>
-          </div>
-          <div style={{ padding: "6px 0 2px" }}><div className="muted" style={{ marginBottom: 6 }}>Storno, zálohy a automatika (0 = vypnuto):</div>
-            <div className="toolbar">
-              <label className="row">Bezplatné storno do <input style={{ width: 56 }} value={ef.freeCancelDays} onChange={(e) => setEf({ ...ef, freeCancelDays: e.target.value })} /> dní před příjezdem</label>
-              <label className="row">jinak storno poplatek <input style={{ width: 56 }} value={ef.cancelFeePct} onChange={(e) => setEf({ ...ef, cancelFeePct: e.target.value })} /> % z ceny</label>
-              <label className="row">Požadovaná záloha <input style={{ width: 56 }} value={ef.depositPct} onChange={(e) => setEf({ ...ef, depositPct: e.target.value })} /> %</label>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 4 }}>Úprava provozovny <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {ef.name}</span></h3>
+
+          <FormSection title="Základní údaje">
+            <FormGrid min={220}>
+              <FieldCol label="Název"><input style={fullInput} value={ef.name} onChange={(e) => setEf({ ...ef, name: e.target.value })} /></FieldCol>
+              <FieldCol label="Identifikátor"><input style={fullInput} value={ef.identifier} onChange={(e) => setEf({ ...ef, identifier: e.target.value })} /></FieldCol>
+              <FieldCol label="Typ"><select style={fullInput} value={ef.type} onChange={(e) => setEf({ ...ef, type: e.target.value })}><option value="hotel">Hotel</option><option value="penzion">Penzion</option><option value="ubytovna">Ubytovna</option></select></FieldCol>
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="Kontakt a adresa">
+            <FormGrid min={150}>
+              <FieldCol label="Ulice" span={2}><input style={fullInput} value={ef.street} onChange={(e) => setEf({ ...ef, street: e.target.value })} /></FieldCol>
+              <FieldCol label="Město"><input style={fullInput} value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} /></FieldCol>
+              <FieldCol label="Země"><input style={fullInput} value={ef.country} onChange={(e) => setEf({ ...ef, country: e.target.value })} /></FieldCol>
+              <FieldCol label="Telefon"><input style={fullInput} value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} /></FieldCol>
+              <FieldCol label="E-mail"><input style={fullInput} value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} /></FieldCol>
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="Fakturace">
+            <FormGrid min={180}>
+              <FieldCol label="IČO (na dokladech)"><input style={fullInput} value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} /></FieldCol>
+              <FieldCol label="DIČ"><input style={fullInput} value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} /></FieldCol>
+              <FieldCol label="IBAN (QR platba)" span={2}><input style={fullInput} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} /></FieldCol>
+            </FormGrid>
+            <div style={{ marginTop: 12 }}><Chk label="Plátce DPH" checked={ef.vatPayer} onChange={(v) => setEf({ ...ef, vatPayer: v })} /></div>
+          </FormSection>
+
+          <FormSection title="Informace pro AI asistenta (FAQ)">
+            <textarea style={{ ...fullInput, minHeight: 100, resize: "vertical" }} value={ef.infoText} onChange={(e) => setEf({ ...ef, infoText: e.target.value })} placeholder="Např.: Wi-Fi heslo je 'vitejte'. Snídaně 7–10 v přízemí. Parkování zdarma na dvoře. Check-in od 14:00, check-out do 10:00. Domácí mazlíčci povoleni." />
+          </FormSection>
+
+          <FormSection title="Ubytování a provoz">
+            <FormGrid min={170}>
+              <FieldCol label="Jednotka"><select style={fullInput} value={ef.inventoryUnit} onChange={(e) => setEf({ ...ef, inventoryUnit: e.target.value })}><option value="room">pokoj</option><option value="bed">lůžko</option></select></FieldCol>
+              <FieldCol label="Pobyt. poplatek (Kč / os. / noc)"><input style={fullInput} type="number" min={0} value={ef.cityTaxPerPersonNight} disabled={!ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} /></FieldCol>
+              <FieldCol label="Děti neplatí do (let)"><input style={fullInput} type="number" min={0} value={ef.cityTaxFreeAge} disabled={!ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxFreeAge: e.target.value })} /></FieldCol>
+              <FieldCol label="Online check-in (h před příjezdem)"><input style={fullInput} type="number" min={0} value={ef.onlineCheckinHours} disabled={!ef.selfCheckin} onChange={(e) => setEf({ ...ef, onlineCheckinHours: e.target.value })} /></FieldCol>
+            </FormGrid>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 14 }}>
+              <Chk label="Pobytový poplatek" checked={ef.cityTaxEnabled} onChange={(v) => setEf({ ...ef, cityTaxEnabled: v })} />
+              <Chk label="Dlouhodobé pobyty" checked={ef.allowLongTerm} onChange={(v) => setEf({ ...ef, allowLongTerm: v })} />
+              <Chk label="Self check-in" checked={ef.selfCheckin} onChange={(v) => setEf({ ...ef, selfCheckin: v })} />
+              <Chk label="Snídaně v ceně" checked={ef.breakfastIncluded} onChange={(v) => setEf({ ...ef, breakfastIncluded: v })} />
+              <Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} />
             </div>
-            <div className="toolbar">
-              <label className="row">Připomínka <input style={{ width: 56 }} value={ef.reminderHours} onChange={(e) => setEf({ ...ef, reminderHours: e.target.value })} /> h před příjezdem</label>
-              <label className="row">No-show <input style={{ width: 56 }} value={ef.noShowHours} onChange={(e) => setEf({ ...ef, noShowHours: e.target.value })} /> h po datu příjezdu</label>
-            </div>
-          </div>
-          <div className="toolbar">
+          </FormSection>
+
+          <FormSection title="Storno, zálohy a automatika (0 = vypnuto)">
+            <FormGrid min={150}>
+              <FieldCol label="Bezplatné storno (dní před příjezdem)"><input style={fullInput} type="number" min={0} value={ef.freeCancelDays} onChange={(e) => setEf({ ...ef, freeCancelDays: e.target.value })} /></FieldCol>
+              <FieldCol label="Storno poplatek (% z ceny)"><input style={fullInput} type="number" min={0} max={100} value={ef.cancelFeePct} onChange={(e) => setEf({ ...ef, cancelFeePct: e.target.value })} /></FieldCol>
+              <FieldCol label="Požadovaná záloha (%)"><input style={fullInput} type="number" min={0} max={100} value={ef.depositPct} onChange={(e) => setEf({ ...ef, depositPct: e.target.value })} /></FieldCol>
+              <FieldCol label="Připomínka (h před příjezdem)"><input style={fullInput} type="number" min={0} value={ef.reminderHours} onChange={(e) => setEf({ ...ef, reminderHours: e.target.value })} /></FieldCol>
+              <FieldCol label="No-show (h po příjezdu)"><input style={fullInput} type="number" min={0} value={ef.noShowHours} onChange={(e) => setEf({ ...ef, noShowHours: e.target.value })} /></FieldCol>
+            </FormGrid>
+          </FormSection>
+
+          <div className="toolbar" style={{ marginTop: 18 }}>
             <button className="btn" onClick={saveEdit}>Uložit</button>
             <button className="btn ghost" onClick={() => { setEditId(null); setEf(null); }}>Zrušit</button>
           </div>
