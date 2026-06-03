@@ -15,8 +15,6 @@ build/
 **/.env
 !**/.env.example
 pat.txt
-github.txt
-postgre.txt.txt
 
 # WhatsApp Web session (přihlášení — citlivé)
 .wwebjs_auth/
@@ -35,6 +33,9 @@ jaas.txt
 
 # Claude lokální konfigurace
 .claude/
+
+# Zálohy databáze (necommitovat — mohou obsahovat osobní data)
+backups/
 
 # Logy / OS
 *.log
