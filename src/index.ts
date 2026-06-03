@@ -4,3 +4,4 @@ export * from "./dates";
 export * from "./pricing";
 export * from "./availability";
 export * from "./reservations";
+export * from "./ical";

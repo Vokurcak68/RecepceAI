@@ -86,6 +86,7 @@ export function App() {
       roomsTab,
       { id: "types", label: "Typy & ceny" },
       { id: "equipment", label: "Vybavení" },
+      { id: "ical", label: "iCal export" },
     ] },
   ];
   const navItemsBottom = [{ id: "agents", label: "AI agenti", icon: "🤖" }];
@@ -152,6 +153,7 @@ export function App() {
         {prop && tab === "calendar" && <CalendarView selId={selId} />}
         {prop && tab === "tapechart" && <TapeChartView selId={selId} prop={prop} />}
         {prop && tab === "ubyport" && <UbyportView selId={selId} />}
+        {prop && tab === "ical" && <IcalView selId={selId} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
@@ -602,6 +604,35 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+function IcalView({ selId }: { selId: string }) {
+  const { data, error } = useAsync<{ all: string; perType: { name: string; url: string }[] }>(() => api.icalFeeds(), [selId]);
+  const [copied, setCopied] = useState("");
+  const copy = (u: string) => { navigator.clipboard?.writeText(u).then(() => { setCopied(u); setTimeout(() => setCopied(""), 1500); }).catch(() => {}); };
+  const Row = ({ label, url }: { label: string; url: string }) => (
+    <div className="kvline" style={{ alignItems: "center", gap: 10 }}>
+      <span className="muted" style={{ minWidth: 160 }}>{label}</span>
+      <input readOnly value={url} style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }} onFocus={(e) => e.currentTarget.select()} />
+      <button className="btn sm ghost" onClick={() => copy(url)}>{copied === url ? "✓" : "Kopírovat"}</button>
+    </div>
+  );
+  return (
+    <>
+      <div className="h1">iCal export obsazenosti</div>
+      {error && <div className="error">{error}</div>}
+      <div className="panel" style={{ padding: 16 }}>
+        <p className="muted" style={{ marginTop: 0 }}>Tyto odkazy vlož do Google Kalendáře („Přidat kalendář → Z URL") nebo do Airbnb/Booking („Import iCal"), aby viděly tvoji obsazenost. Feed je read-only a obsahuje jen termíny (bez jmen hostů).</p>
+        {!data ? <div className="muted">Načítám…</div> : (
+          <>
+            <Row label="Celá provozovna" url={data.all} />
+            {data.perType.map((t) => <Row key={t.url} label={t.name} url={t.url} />)}
+          </>
+        )}
+      </div>
+      <div className="muted" style={{ marginTop: 12 }}>Pozn.: Import OTA rezervací (stažení Airbnb/Booking kalendářů do systému jako blokace) je další krok — připraví se samostatně.</div>
     </>
   );
 }

@@ -206,6 +206,7 @@ export const api = {
   calendar: (from?: string, days = 21) => req<OccupancyCalendar>(`/admin/calendar?days=${days}${from ? `&from=${from}` : ""}`),
   tapechart: (from?: string, days = 14) => req<TapeChart>(`/admin/tapechart?days=${days}${from ? `&from=${from}` : ""}`),
   ubyport: (from: string, to: string, all = false) => req<UbyportData>(`/admin/ubyport?from=${from}&to=${to}${all ? "&all=1" : ""}`),
+  icalFeeds: () => req<{ all: string; perType: { name: string; url: string }[] }>(`/admin/ical/feeds`),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),

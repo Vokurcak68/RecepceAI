@@ -28,6 +28,7 @@ import * as billing from "./billing";
 import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
 import * as mailer from "./mailer";
+import { icalToken, buildExportIcs } from "./ical";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -61,6 +62,18 @@ async function resolvePropertyId(req: Request): Promise<string> {
 
 // ── Health ───────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// ── iCal feed obsazenosti (veřejný, chráněný tokenem) ────────
+app.get("/ical/:identifier/:token", asyncWrap(async (req, res) => {
+  const ident = req.params.identifier;
+  if (req.params.token.replace(/\.ics$/i, "") !== icalToken(ident)) return res.status(403).send("forbidden");
+  const p = await prisma.property.findFirst({ where: { OR: [{ identifier: ident }, { id: ident }] }, select: { id: true } });
+  if (!p) return res.status(404).send("not found");
+  const roomType = typeof req.query.roomType === "string" ? req.query.roomType : undefined;
+  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.send(await buildExportIcs(p.id, roomType));
+}));
 
 // ── Veřejné: info o provozovně (pro konfiguraci kiosku) ──────
 app.get("/properties/:identifier", h(async (req) => {
@@ -357,6 +370,14 @@ adminRouter.post("/reservations/:id/assign", h((req, res) => admin.assignUnit(pi
 adminRouter.get("/ubyport", h((req, res) => {
   const q = z.object({ from: dateStr, to: dateStr, all: z.coerce.boolean().optional() }).parse(req.query);
   return admin.ubyportData(pid(res), new Date(q.from), new Date(q.to), !!q.all);
+}));
+adminRouter.get("/ical/feeds", h(async (_req, res) => {
+  const p = await prisma.property.findUniqueOrThrow({ where: { id: pid(res) }, select: { identifier: true } });
+  const base = (process.env.PUBLIC_GUEST_URL || "").replace(/\/$/, "");
+  const tok = icalToken(p.identifier);
+  const url = (rt?: string) => `${base}/api/ical/${encodeURIComponent(p.identifier)}/${tok}.ics${rt ? `?roomType=${rt}` : ""}`;
+  const types = await prisma.roomType.findMany({ where: { propertyId: pid(res) }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+  return { all: url(), perType: types.map((t) => ({ name: t.name, url: url(t.id) })) };
 }));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
