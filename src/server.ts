@@ -694,6 +694,12 @@ staffRouter.post("/requests/:id/photos", h(async (req, res) => {
   const b = z.object({ images: z.array(z.string()).min(1).max(5) }).parse(req.body);
   return service.addRequestImages(req.params.id, b.images);
 }));
+// Ceník služeb + naúčtování praní/žehlení/minibaru na účet hosta (z požadavku)
+staffRouter.get("/service-items", h((_req, res) => admin.listServiceItems(pid(res))));
+staffRouter.post("/requests/:id/charge", h((req, res) => {
+  const b = z.object({ serviceItemId: z.string().uuid(), quantity: z.number().positive() }).parse(req.body);
+  return admin.chargeFromRequest(pid(res), req.params.id, b.serviceItemId, b.quantity);
+}));
 // Pokoje + přepnutí stavu (úklid odbavuje z telefonu)
 staffRouter.get("/rooms", h((_req, res) =>
   prisma.room.findMany({ where: { propertyId: pid(res) }, select: { id: true, number: true, status: true, roomType: { select: { name: true } } }, orderBy: { number: "asc" } })));

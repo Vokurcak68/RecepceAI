@@ -269,6 +269,8 @@ export const api = {
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
   staffRequestPhotos: (id: string, images: string[]) => req<ServiceRequest>(`/staff/requests/${id}/photos`, { method: "POST", body: JSON.stringify({ images }) }),
+  staffServiceItems: () => req<ServiceItem[]>(`/staff/service-items`),
+  staffChargeRequest: (id: string, b: { serviceItemId: string; quantity: number }) => req(`/staff/requests/${id}/charge`, { method: "POST", body: JSON.stringify(b) }),
   staffRooms: () => req<StaffRoom[]>(`/staff/rooms`),
   staffSetRoomStatus: (id: string, status: string) => req<StaffRoom>(`/staff/rooms/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
 

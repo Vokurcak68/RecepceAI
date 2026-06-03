@@ -192,6 +192,7 @@ button.rb-line:hover { text-decoration: underline; }
 .rb-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 .rb-badge.hk { background: #fff5e6; color: var(--warn); }
 .rb-badge.mt { background: #fdeceb; color: var(--danger); }
+.bill-box { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding: 8px; background: #f6f8ff; border-radius: 8px; }
 tr.row-click { cursor: pointer; }
 tr.row-click:hover td { background: #f3f6ff; }
 .rs-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }

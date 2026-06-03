@@ -119,6 +119,20 @@ export async function adminAddCharge(propertyId: string, id: string, input: { ca
   await assertInProperty(propertyId, id);
   return addCharge({ reservationId: id, ...input });
 }
+/** Naúčtuje položku z ceníku (ServiceItem) na účet aktuálního hosta pokoje daného
+ * servisního požadavku (praní/žehlení/minibar od personálu). */
+export async function chargeFromRequest(propertyId: string, requestId: string, serviceItemId: string, quantity: number) {
+  const req = await prisma.serviceRequest.findFirst({ where: { id: requestId, propertyId }, select: { roomId: true } });
+  if (!req) throw NOT_FOUND();
+  if (!req.roomId) throw new Error("Požadavek není u konkrétního pokoje — nelze naúčtovat.");
+  const tomorrow = addDays(toDateOnly(new Date()), 1);
+  const occ = await prisma.reservation.findFirst({ where: { propertyId, roomId: req.roomId, status: ReservationStatus.checked_in, checkInDate: { lt: tomorrow } }, orderBy: { checkInDate: "desc" }, select: { id: true } });
+  if (!occ) throw new Error("Pokoj není obsazen — službu nelze naúčtovat.");
+  const item = await prisma.serviceItem.findFirst({ where: { id: serviceItemId, propertyId } });
+  if (!item) throw new Error("Neplatná položka ceníku.");
+  return addCharge({ reservationId: occ.id, category: item.category, description: item.name, quantity, unitPrice: Number(item.price), vatRate: Number(item.vatRate) });
+}
+
 export async function adminListCharges(propertyId: string, id: string) {
   await assertInProperty(propertyId, id);
   return listCharges(id);

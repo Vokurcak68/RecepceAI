@@ -3005,6 +3005,37 @@ function PhotoStrip({ urls, onUpload, busy }: { urls?: string[]; onUpload: (data
   );
 }
 
+// Naúčtování položky z ceníku (praní/žehlení/minibar) na účet hosta z požadavku.
+const BILLABLE = ["laundry", "ironing", "minibar", "other"];
+function BillRequest({ reqId, items, onDone }: { reqId: string; items: ServiceItem[]; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [itemId, setItemId] = useState("");
+  const [qty, setQty] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const act = items.filter((i) => i.active);
+  const submit = async () => {
+    if (!itemId) { setErr("Vyber položku."); return; }
+    setBusy(true); setErr("");
+    try { await api.staffChargeRequest(reqId, { serviceItemId: itemId, quantity: Number(qty.replace(",", ".")) || 1 }); setOpen(false); setItemId(""); setQty("1"); onDone(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Nepodařilo se naúčtovat."); }
+    finally { setBusy(false); }
+  };
+  if (!open) return <button className="btn sm ghost" onClick={() => setOpen(true)}>💵 Naúčtovat</button>;
+  return (
+    <div className="bill-box">
+      <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
+        <option value="">{act.length ? "Položka ceníku…" : "Ceník je prázdný"}</option>
+        {act.map((i) => <option key={i.id} value={i.id}>{i.name} — {money(i.price)}</option>)}
+      </select>
+      <input type="number" min={1} style={{ width: 56 }} value={qty} onChange={(e) => setQty(e.target.value)} title="počet" />
+      <button className="btn sm" disabled={busy} onClick={submit}>Naúčtovat</button>
+      <button className="btn sm ghost" onClick={() => { setOpen(false); setErr(""); }}>✕</button>
+      {err && <span className="muted" style={{ color: "var(--danger)" }}>{err}</span>}
+    </div>
+  );
+}
+
 function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: () => void }) {
   const [selId, setSelId] = useState(getProperty() || session.properties[0]?.id || "");
   useEffect(() => { if (selId) setProperty(selId); }, [selId]);
@@ -3017,6 +3048,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve(emptyHK), [selId]);
   const mplan = useAsync<MaintenancePlan>(() => isMaint ? api.staffMaintPlan() : Promise.resolve(emptyHK as unknown as MaintenancePlan), [selId]);
   const rooms = useAsync<StaffRoom[]>(() => isHK ? api.staffRooms() : Promise.resolve([] as StaffRoom[]), [selId]);
+  const priceList = useAsync<ServiceItem[]>(() => isHK ? api.staffServiceItems() : Promise.resolve([] as ServiceItem[]), [selId]);
   const [showAdd, setShowAdd] = useState(false);
   const [nd, setNd] = useState("");
   const [ndPhotos, setNdPhotos] = useState<string[]>([]);
@@ -3064,7 +3096,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
             brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} onPhoto={addPhotos} photoBusy={photoBusy} />
         ) : (
           <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
-            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} />
         )
       ) : status === "rooms" ? (
         <div className="staff-rooms">
@@ -3093,6 +3125,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
               <div className="req-actions">
                 {r.status === "open" && <button className="btn sm" onClick={() => act(r.id, "in_progress")}>Začít</button>}
                 <button className="btn sm ok" onClick={() => act(r.id, "done")}>Hotovo</button>
+                {isHK && BILLABLE.includes(r.type) && <BillRequest reqId={r.id} items={priceList.data ?? []} onDone={reloadAll} />}
               </div>
             )}
             <PhotoStrip urls={r.imageUrls} onUpload={(d) => addPhotos(r.id, d)} busy={photoBusy === r.id} />
@@ -3105,9 +3138,9 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
 }
 
 // Karty prioritizovaného plánu úklidu (sdílené v portálu uklízečky).
-function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }: {
+function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items }: {
   plan: HousekeepingPlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
-  brief: string; briefing: boolean; onBrief: () => void; onReload: () => void;
+  brief: string; briefing: boolean; onBrief: () => void; onReload: () => void; items: ServiceItem[];
 }) {
   const c = plan?.counts;
   return (
@@ -3135,6 +3168,7 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }
             <div className="req-actions">
               {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
               <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
+              {BILLABLE.includes(i.type) && <BillRequest reqId={i.id} items={items} onDone={onReload} />}
             </div>
           </div>
         ))}
