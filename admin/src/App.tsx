@@ -3055,7 +3055,6 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const emptyHK: HousekeepingPlan = { generatedAt: "", counts: { total: 0, urgent: 0, high: 0, normal: 0 }, items: [] };
   const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve(emptyHK), [selId]);
   const mplan = useAsync<MaintenancePlan>(() => isMaint ? api.staffMaintPlan() : Promise.resolve(emptyHK as unknown as MaintenancePlan), [selId]);
-  const rooms = useAsync<StaffRoom[]>(() => isHK ? api.staffRooms() : Promise.resolve([] as StaffRoom[]), [selId]);
   const priceList = useAsync<ServiceItem[]>(() => isHK ? api.staffServiceItems() : Promise.resolve([] as ServiceItem[]), [selId]);
   const [showAdd, setShowAdd] = useState(false);
   const [nd, setNd] = useState("");
@@ -3063,10 +3062,9 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const [photoBusy, setPhotoBusy] = useState("");
   const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false);
 
-  const reloadAll = () => { reload(); plan.reload(); mplan.reload(); rooms.reload(); };
+  const reloadAll = () => { reload(); plan.reload(); mplan.reload(); };
   const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
   const addPhotos = async (id: string, dataUrls: string[]) => { setPhotoBusy(id); try { await api.staffRequestPhotos(id, dataUrls); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Foto se nepodařilo nahrát."); } finally { setPhotoBusy(""); } };
-  const setRoomStatus = async (id: string, st: string) => { await api.staffSetRoomStatus(id, st); rooms.reload(); };
   const addMaint = async () => {
     if (!nd.trim()) return;
     const r = await api.staffCreateRequest({ type: "maintenance", description: nd });
@@ -3086,7 +3084,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
         </div>
       </div>
       <div className="staff-tabs">
-        {(([...(hasPlan ? [["plan", isHK ? "🧹 Plán" : "🔧 Plán"]] : []), ...(isHK ? [["rooms", "🛏 Pokoje"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
+        {(([...(hasPlan ? [["plan", isHK ? "🧹 Plán" : "🔧 Plán"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
         {isHK && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setShowAdd((s) => !s)}>+ Nahlásit údržbu</button>}
       </div>
       {showAdd && (
@@ -3106,20 +3104,6 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
           <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
             brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} />
         )
-      ) : status === "rooms" ? (
-        <div className="staff-rooms">
-          {(rooms.data ?? []).length === 0 ? <div className="empty">Žádné pokoje</div> : (rooms.data ?? []).map((rm) => (
-            <div key={rm.id} className={`room-card rs-${rm.status}`}>
-              <div className="room-h"><b>Pokoj {rm.number}</b> <span className="muted">{rm.roomType?.name ?? ""}</span></div>
-              <div className={`room-status rs-${rm.status}`}>{ROOM_STATUS_LABEL[rm.status] ?? rm.status}</div>
-              <div className="req-actions">
-                {(([["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]]) as [string, string][]).map(([s, l]) => (
-                  <button key={s} className={`btn sm ${rm.status === s ? "" : "ghost"}`} disabled={rm.status === s} onClick={() => setRoomStatus(rm.id, s)}>{l}</button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
       <div className="staff-list">
         {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
