@@ -214,7 +214,7 @@ export async function roomBoard(propertyId: string) {
   const tomorrow = addDays(today, 1);
   const [rooms, inHouse, arrivals, reqGroups] = await Promise.all([
     prisma.room.findMany({ where: { propertyId }, include: { roomType: { select: { name: true } } }, orderBy: [{ floor: "asc" }, { number: "asc" }] }),
-    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in, roomId: { not: null } }, select: { id: true, roomId: true, checkInDate: true, checkOutDate: true, primaryGuest: { select: { firstName: true, lastName: true } } } }),
+    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in, roomId: { not: null }, checkInDate: { lt: tomorrow } }, select: { id: true, roomId: true, checkInDate: true, checkOutDate: true, primaryGuest: { select: { firstName: true, lastName: true } } }, orderBy: { checkInDate: "asc" } }),
     prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.confirmed, roomId: { not: null }, checkInDate: { gte: today, lt: tomorrow } }, select: { id: true, roomId: true, primaryGuest: { select: { firstName: true, lastName: true } } } }),
     prisma.serviceRequest.groupBy({ by: ["roomId", "domain"], where: { propertyId, roomId: { not: null }, status: { in: ["open", "in_progress"] } }, _count: { _all: true } }),
   ]);
@@ -245,14 +245,17 @@ export async function roomBoard(propertyId: string) {
 export async function roomDetail(propertyId: string, roomId: string) {
   const room = await prisma.room.findFirst({ where: { id: roomId, propertyId }, include: { roomType: { select: { id: true, name: true } } } });
   if (!room) throw NOT_FOUND();
-  const since = addDays(toDateOnly(new Date()), -60);
+  const today = toDateOnly(new Date());
+  const tomorrow = addDays(today, 1);
+  const since = addDays(today, -60);
   const reservations = await prisma.reservation.findMany({
     where: { propertyId, roomId, status: { not: ReservationStatus.cancelled }, checkOutDate: { gte: since } },
     include: { primaryGuest: { select: { firstName: true, lastName: true } } },
     orderBy: { checkInDate: "asc" }, take: 50,
   });
   const requests = await prisma.serviceRequest.findMany({ where: { propertyId, roomId, status: { in: ["open", "in_progress"] } }, orderBy: { createdAt: "desc" } });
-  const occ = reservations.find((r) => r.status === ReservationStatus.checked_in) ?? null;
+  // Aktuální host = ubytovaný, který už přijel; při více se vezme nejpozdější příjezd.
+  const occ = reservations.filter((r) => r.status === ReservationStatus.checked_in && r.checkInDate < tomorrow).sort((a, b) => (a.checkInDate < b.checkInDate ? 1 : -1))[0] ?? null;
   const occupantBalance = occ ? (await computeFolio(occ.id)).balance.toFixed(2) : null;
   return {
     room: { id: room.id, number: room.number, floor: room.floor, status: room.status, lockType: room.lockType, notes: room.notes ?? "", roomType: { id: room.roomType.id, name: room.roomType.name } },
