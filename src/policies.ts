@@ -71,22 +71,30 @@ export async function processDailyService(): Promise<number> {
   if (!props.length) return 0;
   const occ = await prisma.reservation.findMany({
     where: { propertyId: { in: props.map((p) => p.id) }, status: ReservationStatus.checked_in, roomId: { not: null }, checkOutDate: { gt: today } },
-    select: { roomId: true },
+    select: { id: true, roomId: true },
   });
-  const roomIds = [...new Set(occ.map((r) => r.roomId!))];
+  const resByRoom = new Map<string, string>();
+  for (const r of occ) if (!resByRoom.has(r.roomId!)) resByRoom.set(r.roomId!, r.id);
+  const roomIds = [...resByRoom.keys()];
   if (!roomIds.length) return 0;
   const rooms = await prisma.room.findMany({
     where: { id: { in: roomIds }, OR: [{ dailyServiceDate: null }, { dailyServiceDate: { lt: today } }] },
-    select: { id: true, status: true },
+    select: { id: true, status: true, propertyId: true },
   });
-  let n = 0;
+  let tasks = 0;
   for (const r of rooms) {
     const ready = r.status === "clean" || r.status === "inspected";
     await prisma.room.update({ where: { id: r.id }, data: { dailyServiceDate: today, ...(ready ? { status: "to_inspect" } : {}) } });
-    if (ready) n++;
+    if (r.status === "out_of_service") continue; // mimo provoz neuklízíme
+    // úkol denního úklidu do fronty (dedup: jen když není otevřený stejný úkol)
+    const open = await prisma.serviceRequest.count({ where: { roomId: r.id, type: "cleaning", description: "Denní úklid", status: { in: ["open", "in_progress"] } } });
+    if (!open) {
+      await prisma.serviceRequest.create({ data: { propertyId: r.propertyId, reservationId: resByRoom.get(r.id), roomId: r.id, type: "cleaning", domain: "housekeeping", description: "Denní úklid", fromGuest: false } });
+      tasks++;
+    }
   }
-  if (n) console.log(`[policies] denní úklid: ${n} pokojů → Zkontrolovat`);
-  return n;
+  if (tasks) console.log(`[policies] denní úklid: ${tasks} úkolů + pokoje → Zkontrolovat`);
+  return tasks;
 }
 
 // ── Scheduler (in-process, hodinový) ─────────────────────────
