@@ -447,6 +447,7 @@ model ReservationGroup {
   organizerGuestId String?
 
   reservations Reservation[]
+  emailLogs    EmailLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -474,17 +475,20 @@ model IcalFeed {
 /// Záznam o odeslaném (nebo neúspěšném) e-mailu hostovi — pro přehled v detailu
 /// rezervace a možnost znovuodeslání.
 model EmailLog {
-  id            String      @id @default(uuid())
-  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  reservationId String
-  type          String // created | checkin | checkout | cancellation
+  id            String       @id @default(uuid())
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String?
+  group         ReservationGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId       String?
+  type          String // created | checkin | checkout | cancellation | group_summary
   recipient     String
   subject       String
   status        String // sent | failed | skipped
   error         String?
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([reservationId, createdAt])
+  @@index([groupId, createdAt])
 }
 
 model ReservationGuest {

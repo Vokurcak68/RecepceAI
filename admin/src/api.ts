@@ -40,7 +40,7 @@ export type GuestPatch = { firstName?: string; lastName?: string; email?: string
 export type ReviewItem = { id: string; nps: number; comment: string | null; createdAt: string; code: string; checkOutDate: string; guestName: string };
 export type GroupListItem = { id: string; code: string; name: string; note: string | null; createdAt: string; rooms: number; total: number; from: string | null; to: string | null };
 export type GroupMember = { id: string; code: string; status: string; guestName: string; unit: string; roomType: string | null; checkInDate: string; checkOutDate: string; totalAmount: Money; balance: Money };
-export type GroupDetail = { id: string; code: string; name: string; note: string | null; createdAt: string; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money } };
+export type GroupDetail = { id: string; code: string; name: string; note: string | null; createdAt: string; organizer: { firstName: string; lastName: string; email: string | null } | null; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money }; emails: EmailLog[] };
 export type GroupRoomInput = { roomTypeId: string; adults: number; children?: number; childAges?: number[]; firstName?: string; lastName?: string };
 export type BulkResult = { code: string; ok: boolean; error?: string };
 export type ReviewsData = { summary: { count: number; avg: number | null; nps: number | null; promoters: number; passives: number; detractors: number }; reviews: ReviewItem[] };
@@ -68,7 +68,7 @@ export type UbyEntry = { jmeno: string; datumNarozeni: string; narodnost: string
 export type UbyportData = { ubytovatel: { nazev: string; ulice: string; mesto: string; ico: string; dic: string }; pocet: number; entries: UbyEntry[] };
 export type IcalImportFeed = { id: string; url: string; label: string | null; roomTypeId: string; roomType?: { name: string }; lastSyncedAt: string | null; lastError: string | null };
 export type EmailLog = { id: string; type: string; recipient: string; subject: string; status: string; error: string | null; createdAt: string };
-export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace" };
+export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace", group_summary: "Souhrn skupiny" };
 
 // Počeštění všech stavů (rezervace, požadavky, doklady, platby, pokoje).
 export const STATUS_LABEL: Record<string, string> = {

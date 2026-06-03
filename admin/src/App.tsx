@@ -1253,6 +1253,20 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
             </tr>
           )} />
       </div>
+      <div className="panel"><h3>E-maily skupiny</h3><div style={{ padding: 16 }}>
+        {data.organizer && <div className="muted" style={{ marginBottom: 10 }}>Kontakt: <b>{data.organizer.firstName} {data.organizer.lastName}</b>{data.organizer.email ? ` · ${data.organizer.email}` : " · bez e-mailu (souhrn nelze poslat)"}</div>}
+        {data.emails.length === 0 ? <div className="muted">Souhrn zatím neodeslán.</div> : (
+          <Table cols={["Čas", "Typ", "Předmět", "Stav"]} rows={data.emails} empty="—"
+            render={(e: EmailLog) => (
+              <tr key={e.id}>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{e.createdAt.slice(0, 10)} {e.createdAt.slice(11, 16)}</td>
+                <td>{EMAIL_TYPE_LABEL[e.type] ?? e.type}</td>
+                <td className="muted" style={{ fontSize: 13 }}>{e.subject}{e.error ? ` — ${e.error}` : ""}</td>
+                <td><EmailStatus s={e.status} /></td>
+              </tr>
+            )} />
+        )}
+      </div></div>
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
   );

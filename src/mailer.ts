@@ -232,12 +232,16 @@ export async function sendGroupSummary(groupId: string): Promise<void> {
   const rows = row(mt(lang, "rowStay"), `${fmtDate(from)} – ${fmtDate(until)}`) + roomRows + row(mt(lang, "rowTotal"), money(total));
   const vars = { name: esc(group.organizer?.firstName ?? ""), group: esc(group.name), rooms: String(active.length), property: esc(group.property.name) };
   const html = layout(lang, group.property, mt(lang, "titleGroup"), mt(lang, "introGroup", vars), rows);
+  const subject = mt(lang, "subjGroup", { group: group.name, property: group.property.name });
+  const log = (status: string, error?: string) =>
+    prisma.emailLog.create({ data: { groupId, type: "group_summary", recipient: to, subject, status, error } }).catch((e) => console.error(`📧 [mail] EmailLog skupiny: ${(e as Error).message}`));
   const t = getTransport();
-  if (!t) { console.log(`📧 [mail] souhrn skupiny ${group.code} přeskočen (SMTP nenakonfigurováno)`); return; }
+  if (!t) { await log("skipped", "SMTP není nakonfigurováno"); console.log(`📧 [mail] souhrn skupiny ${group.code} přeskočen (SMTP nenakonfigurováno)`); return; }
   try {
-    await t.sendMail({ from: `"${group.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`, to, ...(group.property.email ? { replyTo: group.property.email } : {}), subject: mt(lang, "subjGroup", { group: group.name, property: group.property.name }), html });
+    await t.sendMail({ from: `"${group.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`, to, ...(group.property.email ? { replyTo: group.property.email } : {}), subject, html });
     console.log(`📧 [mail] souhrn skupiny "${group.name}" → ${to} (${group.code})`);
-  } catch (e) { console.error(`📧 [mail] souhrn skupiny CHYBA → ${to}: ${(e as Error).message}`); }
+    await log("sent");
+  } catch (e) { const msg = (e as Error).message; console.error(`📧 [mail] souhrn skupiny CHYBA → ${to}: ${msg}`); await log("failed", msg); }
 }
 
 // ── Přehled odeslaných e-mailů + znovuodeslání ───────────────

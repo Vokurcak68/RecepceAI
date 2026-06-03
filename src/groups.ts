@@ -114,9 +114,12 @@ export async function getGroup(propertyId: string, id: string) {
       totalAmount: r.totalAmount, balance: folio.balance.toFixed(2),
     });
   }
+  const emails = await prisma.emailLog.findMany({ where: { groupId: id }, orderBy: { createdAt: "desc" }, take: 50 });
   return {
     id: group.id, code: group.code, name: group.name, note: group.note, createdAt: group.createdAt,
+    organizer: group.organizerGuestId ? await prisma.guest.findUnique({ where: { id: group.organizerGuestId }, select: { firstName: true, lastName: true, email: true } }) : null,
     members, totals: { charges: charges.toFixed(2), paid: paid.toFixed(2), balance: (charges - paid).toFixed(2) },
+    emails,
   };
 }
 
