@@ -174,6 +174,7 @@ export const api = {
   invoice: (id: string) => req<Invoice>(`/admin/reservations/${id}/invoice`),
 
   rooms: () => req<Room[]>(`/admin/rooms`),
+  roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board`),
   createRoom: (b: unknown) => req<Room>(`/admin/rooms`, { method: "POST", body: JSON.stringify(b) }),
   updateRoom: (id: string, b: unknown) => req<Room>(`/admin/rooms/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   cleanRoom: (id: string) => req(`/admin/rooms/${id}/clean`, { method: "POST" }),
@@ -335,6 +336,7 @@ export type ServiceRequest = {
   room?: { number: string } | null; resolvedBy?: { id: string; name: string } | null;
 };
 export type StaffRoom = { id: string; number: string; status: string; roomType?: { name: string } | null };
+export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
 export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Čisto", dirty: "Špinavo", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };
 export const SERVICE_ICON: Record<string, string> = { cleaning: "🧹", maintenance: "🔧", laundry: "🧺", ironing: "👔", minibar: "🥤", other: "📌" };

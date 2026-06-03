@@ -9,7 +9,7 @@ import {
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
-  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom,
+  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -100,7 +100,7 @@ export function App() {
       { id: "documents", label: "Doklady" },
     ] },
     { label: "Provoz", icon: "🧹", items: [
-      { id: "roomstatus", label: "Stav pokojů" },
+      { id: "roomstatus", label: "Přehled pokojů" },
       { id: "housekeeping", label: "Dispečink úklidu" },
       { id: "maintenance", label: "Dispečink údržby" },
       { id: "requests", label: "Požadavky" },
@@ -186,7 +186,7 @@ export function App() {
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
-        {prop && tab === "roomstatus" && <RoomStatusBoardView selId={selId} />}
+        {prop && tab === "roomstatus" && <RoomBoardView selId={selId} prop={prop} />}
         {prop && tab === "housekeeping" && <HousekeepingView selId={selId} />}
         {prop && tab === "maintenance" && <MaintenanceView selId={selId} />}
         {prop && tab === "checks" && <ChecksView selId={selId} />}
@@ -891,34 +891,59 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 }
 
 // ── Rooms ────────────────────────────────────────────────────
-// Ucelený přehled stavů pokojů (manažer) — barevný board s rychlým přepnutím.
+// Ucelený přehled pokojů („room rack") — stav úklidu, obsazenost, dnešní
+// příjezd/odjezd, otevřené požadavky; proklik do rezervace. Vše na jednom místě.
 const ROOM_STATES: [string, string][] = [["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]];
-function RoomStatusBoardView({ selId }: { selId: string }) {
-  const { data, error, reload } = useAsync<Room[]>(() => api.rooms(), [selId]);
+function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
+  const { data, error, reload } = useAsync<RoomBoardItem[]>(() => api.roomBoard(), [selId]);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
+  const [filter, setFilter] = useState("all");
   const set = async (id: string, s: string) => { setBusy(id); try { await api.updateRoom(id, { status: s }); reload(); } finally { setBusy(""); } };
+  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
   const rooms = data ?? [];
-  const count = (s: string) => rooms.filter((r) => r.status === s).length;
+  const counts = {
+    occupied: rooms.filter((r) => r.occupant).length, free: rooms.filter((r) => !r.occupant).length,
+    dirty: rooms.filter((r) => r.status === "dirty").length, maint: rooms.filter((r) => r.openMaintenance > 0).length,
+    arrivals: rooms.filter((r) => r.arrival).length,
+  };
+  const match = (r: RoomBoardItem) => filter === "all" ? true : filter === "occupied" ? !!r.occupant : filter === "free" ? !r.occupant : filter === "dirty" ? r.status === "dirty" : filter === "arrivals" ? !!r.arrival : filter === "maint" ? r.openMaintenance > 0 : true;
+  const shown = rooms.filter(match);
+  const floors = [...new Set(shown.map((r) => r.floor))].sort((a, b) => a - b);
+  const FILTERS: [string, string][] = [["all", `Vše (${rooms.length})`], ["occupied", `Obsazené (${counts.occupied})`], ["free", `Volné (${counts.free})`], ["arrivals", `Příjezdy dnes (${counts.arrivals})`], ["dirty", `Špinavé (${counts.dirty})`], ["maint", `Údržba (${counts.maint})`]];
   return (
     <>
-      <div className="h1"><span>Stav pokojů</span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
+      <div className="h1"><span>Přehled pokojů</span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
       {error && <div className="error">{error}</div>}
-      <div className="toolbar" style={{ gap: 14, flexWrap: "wrap" }}>
-        {ROOM_STATES.map(([s, l]) => <span key={s} className={`room-status rs-${s}`} style={{ margin: 0 }}>{l}: <b>{count(s)}</b></span>)}
+      <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+        {FILTERS.map(([v, l]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l}</button>)}
       </div>
-      {rooms.length === 0 ? <div className="panel muted" style={{ padding: 20 }}>Žádné pokoje (provozovna na lůžka?).</div> : (
-        <div className="staff-rooms" style={{ padding: 0 }}>
-          {rooms.map((r) => (
-            <div key={r.id} className={`room-card rs-${r.status}`}>
-              <div className="room-h"><b>Pokoj {r.number}</b> <span className="muted">{r.roomType?.name ?? ""}</span></div>
-              <div className={`room-status rs-${r.status}`}>{ROOM_STATUS_LABEL[r.status] ?? r.status}</div>
-              <div className="req-actions">
-                {ROOM_STATES.map(([s, l]) => <button key={s} className={`btn sm ${r.status === s ? "" : "ghost"}`} disabled={busy === r.id || r.status === s} onClick={() => set(r.id, s)}>{l}</button>)}
+      {rooms.length === 0 ? <div className="panel muted" style={{ padding: 20 }}>Žádné pokoje (provozovna na lůžka?).</div> : floors.map((fl) => (
+        <div key={fl} style={{ marginBottom: 16 }}>
+          <div className="muted" style={{ fontWeight: 700, margin: "2px 0 8px" }}>{fl}. patro</div>
+          <div className="staff-rooms" style={{ padding: 0, gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
+            {shown.filter((r) => r.floor === fl).map((r) => (
+              <div key={r.id} className={`room-card rs-${r.status}`}>
+                <div className="room-h"><b>Pokoj {r.number}</b> <span className="muted">{r.roomType ?? ""}</span></div>
+                <div className={`room-status rs-${r.status}`}>{ROOM_STATUS_LABEL[r.status] ?? r.status}</div>
+                {r.occupant ? (
+                  <button className="rb-line rb-occ" onClick={() => setDetailId(r.occupant!.reservationId)}>👤 {r.occupant.name}<span className="muted"> · do {d(r.occupant.checkOutDate)}{r.occupant.departsToday ? " · odjíždí dnes" : ""}</span></button>
+                ) : <div className="rb-line muted">Volný</div>}
+                {r.arrival && <button className="rb-line rb-arr" onClick={() => setDetailId(r.arrival!.reservationId)}>→ Příjezd dnes: {r.arrival.name}</button>}
+                {(r.openHousekeeping > 0 || r.openMaintenance > 0) && (
+                  <div className="rb-badges">
+                    {r.openHousekeeping > 0 && <span className="rb-badge hk">🧹 {r.openHousekeeping}</span>}
+                    {r.openMaintenance > 0 && <span className="rb-badge mt">🔧 {r.openMaintenance}</span>}
+                  </div>
+                )}
+                <div className="req-actions">
+                  {ROOM_STATES.map(([s, l]) => <button key={s} className={`btn sm ${r.status === s ? "" : "ghost"}`} disabled={busy === r.id || r.status === s} onClick={() => set(r.id, s)}>{l}</button>)}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      )}
+      ))}
     </>
   );
 }

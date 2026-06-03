@@ -208,6 +208,36 @@ export async function occupancy(propertyId: string) {
   return rows;
 }
 
+// ── Přehled pokojů („room rack") — vše o pokoji na jednom místě ──
+export async function roomBoard(propertyId: string) {
+  const today = toDateOnly(new Date());
+  const tomorrow = addDays(today, 1);
+  const [rooms, inHouse, arrivals, reqGroups] = await Promise.all([
+    prisma.room.findMany({ where: { propertyId }, include: { roomType: { select: { name: true } } }, orderBy: [{ floor: "asc" }, { number: "asc" }] }),
+    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in, roomId: { not: null } }, select: { id: true, roomId: true, checkInDate: true, checkOutDate: true, primaryGuest: { select: { firstName: true, lastName: true } } } }),
+    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.confirmed, roomId: { not: null }, checkInDate: { gte: today, lt: tomorrow } }, select: { id: true, roomId: true, primaryGuest: { select: { firstName: true, lastName: true } } } }),
+    prisma.serviceRequest.groupBy({ by: ["roomId", "domain"], where: { propertyId, roomId: { not: null }, status: { in: ["open", "in_progress"] } }, _count: { _all: true } }),
+  ]);
+  const occ = new Map(inHouse.map((r) => [r.roomId!, r]));
+  const arr = new Map(arrivals.map((r) => [r.roomId!, r]));
+  const reqs = new Map<string, { housekeeping: number; maintenance: number }>();
+  for (const g of reqGroups) {
+    const m = reqs.get(g.roomId!) ?? { housekeeping: 0, maintenance: 0 };
+    if (g.domain === "maintenance") m.maintenance += g._count._all; else m.housekeeping += g._count._all;
+    reqs.set(g.roomId!, m);
+  }
+  const todayMs = today.getTime();
+  return rooms.map((r) => {
+    const o = occ.get(r.id); const a = arr.get(r.id); const rq = reqs.get(r.id) ?? { housekeeping: 0, maintenance: 0 };
+    return {
+      id: r.id, number: r.number, floor: r.floor, roomType: r.roomType?.name ?? null, status: r.status,
+      occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs } : null,
+      arrival: a ? { reservationId: a.id, name: `${a.primaryGuest.firstName} ${a.primaryGuest.lastName}` } : null,
+      openHousekeeping: rq.housekeeping, openMaintenance: rq.maintenance,
+    };
+  });
+}
+
 // ── Hosté na pokoji (spolubydlící) ───────────────────────────
 export async function listReservationGuests(propertyId: string, id: string) {
   await assertInProperty(propertyId, id);

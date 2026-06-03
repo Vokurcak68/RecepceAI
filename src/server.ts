@@ -314,6 +314,7 @@ adminRouter.use(propertyScope);
 
 adminRouter.get("/dashboard", h((req, res) => admin.dashboard(pid(res), req.query.date ? new Date(String(req.query.date)) : new Date())));
 adminRouter.get("/occupancy", h((_req, res) => admin.occupancy(pid(res))));
+adminRouter.get("/room-board", h((_req, res) => admin.roomBoard(pid(res))));
 
 // Hosté na pokoji (spolubydlící) — vč. adresy a dokladu, editace
 const guestBody = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), documentType: z.nativeEnum(DocumentType).nullable().optional(), documentNumber: z.string().optional() });
