@@ -256,11 +256,12 @@ export async function roomDetail(propertyId: string, roomId: string) {
   const requests = await prisma.serviceRequest.findMany({ where: { propertyId, roomId, status: { in: ["open", "in_progress"] } }, orderBy: { createdAt: "desc" } });
   // Aktuální host = ubytovaný, který už přijel; při více se vezme nejpozdější příjezd.
   const occ = reservations.filter((r) => r.status === ReservationStatus.checked_in && r.checkInDate < tomorrow).sort((a, b) => (a.checkInDate < b.checkInDate ? 1 : -1))[0] ?? null;
-  const occupantBalance = occ ? (await computeFolio(occ.id)).balance.toFixed(2) : null;
+  const balances = new Map<string, string>();
+  await Promise.all(reservations.map(async (r) => { balances.set(r.id, (await computeFolio(r.id)).balance.toFixed(2)); }));
   return {
     room: { id: room.id, number: room.number, floor: room.floor, status: room.status, lockType: room.lockType, notes: room.notes ?? "", roomType: { id: room.roomType.id, name: room.roomType.name } },
-    occupantId: occ?.id ?? null, occupantBalance,
-    reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate })),
+    occupantId: occ?.id ?? null, occupantBalance: occ ? (balances.get(occ.id) ?? null) : null,
+    reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, balance: balances.get(r.id) ?? "0" })),
     requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, createdAt: q.createdAt })),
   };
 }
