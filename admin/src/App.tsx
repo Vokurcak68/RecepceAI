@@ -637,6 +637,7 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
 }
 
 function IcalView({ selId }: { selId: string }) {
+  const confirm = useConfirm();
   const exportA = useAsync<{ all: string; perType: { name: string; url: string }[] }>(() => api.icalFeeds(), [selId]);
   const feeds = useAsync<IcalImportFeed[]>(() => api.icalImportFeeds(), [selId]);
   const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
@@ -693,7 +694,7 @@ function IcalView({ selId }: { selId: string }) {
                     <td>{f.roomType?.name ?? "—"}</td><td>{f.label || "—"}</td>
                     <td className="muted" style={{ fontFamily: "monospace", fontSize: 11, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.url}</td>
                     <td className="muted">{f.lastSyncedAt ? d(f.lastSyncedAt) : "—"}{f.lastError ? <span style={{ color: "var(--danger)" }}> · chyba: {f.lastError}</span> : ""}</td>
-                    <td className="right"><button className="btn sm danger" disabled={busy} onClick={() => run(() => api.deleteIcalImportFeed(f.id), "Feed smazán.")}>Smazat</button></td>
+                    <td className="right"><button className="btn sm danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Smazat iCal feed", message: <>Smazat tento import feed{f.label ? <> „{f.label}"</> : ""}? Smažou se i jeho stažené blokace.</>, confirmLabel: "Smazat", danger: true })) run(() => api.deleteIcalImportFeed(f.id), "Feed smazán."); }}>Smazat</button></td>
                   </tr>
                 )} />
             )}
@@ -1191,10 +1192,11 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
 
 // Ceník služeb (číselník pro připisování na účet pokoje).
 function ServiceCatalog({ selId }: { selId: string }) {
+  const confirm = useConfirm();
   const { data, error, reload } = useAsync<ServiceItem[]>(() => api.serviceItems(), [selId]);
   const [f, setF] = useState({ name: "", category: "minibar", price: "", vatRate: "21" });
   const add = async () => { if (!f.name || !f.price) return; await api.createServiceItem({ name: f.name, category: f.category, price: parseFloat(f.price.replace(",", ".")), vatRate: parseFloat(f.vatRate) || 21 }); setF({ name: "", category: "minibar", price: "", vatRate: "21" }); reload(); };
-  const del = async (id: string) => { await api.deleteServiceItem(id); reload(); };
+  const del = async (id: string, name: string) => { if (await confirm({ title: "Smazat položku ceníku", message: <>Smazat „{name}" z ceníku?</>, confirmLabel: "Smazat", danger: true })) { await api.deleteServiceItem(id); reload(); } };
   return (
     <div className="panel">
       <h3>Ceník služeb <span className="muted" style={{ fontSize: 14 }}>nabídne se při připsání na účet</span></h3>
@@ -1207,7 +1209,7 @@ function ServiceCatalog({ selId }: { selId: string }) {
         <button className="btn" disabled={!f.name || !f.price} onClick={add}>+ Přidat</button>
       </div>
       <Table cols={["Název", "Kategorie", "Cena", "DPH", ""]} rows={data ?? []} empty="Žádné položky ceníku"
-        render={(s: ServiceItem) => (<tr key={s.id}><td><b>{s.name}</b></td><td>{CHARGE_LABEL[s.category] ?? s.category}</td><td>{money(s.price)}</td><td className="muted">{parseFloat(s.vatRate)} %</td><td className="right"><button className="btn sm danger" onClick={() => del(s.id)}>Smazat</button></td></tr>)} />
+        render={(s: ServiceItem) => (<tr key={s.id}><td><b>{s.name}</b></td><td>{CHARGE_LABEL[s.category] ?? s.category}</td><td>{money(s.price)}</td><td className="muted">{parseFloat(s.vatRate)} %</td><td className="right"><button className="btn sm danger" onClick={() => del(s.id, s.name)}>Smazat</button></td></tr>)} />
     </div>
   );
 }
@@ -1969,7 +1971,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
               <td className="muted">{g.guest.documentNumber ? `${DOCTYPE_LABEL[g.guest.documentType ?? ""] ?? ""} ${g.guest.documentNumber}` : "—"}</td>
               <td className="right" style={{ whiteSpace: "nowrap" }}>
                 <button className="btn sm ghost" onClick={() => editGuest(g)}>Upravit</button>{" "}
-                {!g.isPrimary && <button className="btn sm danger" onClick={() => run(() => api.removeResGuest(g.id))}>Odebrat</button>}
+                {!g.isPrimary && <button className="btn sm danger" onClick={async () => { if (await confirm({ title: "Odebrat osobu", message: <>Odebrat <b>{g.guest.firstName} {g.guest.lastName}</b> z pokoje?</>, confirmLabel: "Odebrat", danger: true })) run(() => api.removeResGuest(g.id)); }}>Odebrat</button>}
               </td>
             </tr>
           )} />
@@ -1998,7 +2000,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
               <td className="muted">{parseFloat(c.quantity)}</td>
               <td className="muted">{money(c.unitPrice)}</td>
               <td>{money(c.amount)}</td>
-              <td className="right"><button className="btn sm danger" onClick={() => run(() => api.deleteCharge(c.id))}>Smazat</button></td>
+              <td className="right"><button className="btn sm danger" onClick={async () => { if (await confirm({ title: "Smazat položku", message: <>Smazat položku <b>{c.description ?? CHARGE_LABEL[c.category] ?? "—"}</b> ({money(c.amount)}) z účtu?</>, confirmLabel: "Smazat", danger: true })) run(() => api.deleteCharge(c.id)); }}>Smazat</button></td>
             </tr>
           )} />
       </div>
