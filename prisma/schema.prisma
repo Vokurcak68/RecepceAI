@@ -69,6 +69,7 @@ enum BillingCycle {
 enum RoomStatus {
   clean
   dirty
+  inspected // uklizeno a zkontrolováno
   out_of_service
 }
 
@@ -661,6 +662,7 @@ model ServiceRequest {
   status      ServiceStatus @default(open)
   description String?
   fromGuest   Boolean       @default(false) // zadal host (vs. personál)
+  imageUrls   String[]      @default([]) // fotky závady (z telefonu personálu)
 
   note         String? // poznámka personálu při řešení
   resolvedBy   User?     @relation("ResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)

@@ -263,6 +263,9 @@ export const api = {
   staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests${status ? `?status=${status}` : ""}`),
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
+  staffRequestPhotos: (id: string, images: string[]) => req<ServiceRequest>(`/staff/requests/${id}/photos`, { method: "POST", body: JSON.stringify({ images }) }),
+  staffRooms: () => req<StaffRoom[]>(`/staff/rooms`),
+  staffSetRoomStatus: (id: string, status: string) => req<StaffRoom>(`/staff/rooms/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
 
   // přivolání člověka z kiosku — zvoneček pro manažery
   callsPending: () => req<PendingCall[]>(`/calls/pending?_=${Date.now()}`), // cache-bust: proxy jinak servíruje starý stav ~1 min
@@ -327,10 +330,12 @@ export const CONDITION_LABEL: Record<string, string> = { ok: "OK", damaged: "po�
 
 export type ServiceRequest = {
   id: string; type: string; domain: string; status: string; description: string | null; fromGuest: boolean;
-  note: string | null; resolvedAt: string | null; createdAt: string;
+  note: string | null; resolvedAt: string | null; createdAt: string; imageUrls?: string[];
   reservation?: { primaryGuest?: { firstName: string; lastName: string } } | null;
   room?: { number: string } | null; resolvedBy?: { id: string; name: string } | null;
 };
+export type StaffRoom = { id: string; number: string; status: string; roomType?: { name: string } | null };
+export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Čisto", dirty: "Špinavo", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };
 export const SERVICE_ICON: Record<string, string> = { cleaning: "🧹", maintenance: "🔧", laundry: "🧺", ironing: "👔", minibar: "🥤", other: "📌" };
 

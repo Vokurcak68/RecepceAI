@@ -1,6 +1,7 @@
 // Servisní požadavky (tikety) — od hostů i personálu.
 import { Prisma, ServiceType, ServiceDomain, ServiceStatus, ReservationStatus } from "@prisma/client";
 import { prisma } from "./prisma";
+import { saveDataUrl } from "./uploads";
 
 /** Typ požadavku → fronta personálu. */
 export const DOMAIN_FOR_TYPE: Record<ServiceType, ServiceDomain> = {
@@ -59,3 +60,9 @@ export function loadReservationByCode(code: string) {
 
 export const listRequestsForReservation = (reservationId: string) =>
   prisma.serviceRequest.findMany({ where: { reservationId }, orderBy: { createdAt: "desc" } });
+
+/** Přidá fotky (data URL) k servisnímu požadavku. */
+export async function addRequestImages(id: string, dataUrls: string[]) {
+  const urls = dataUrls.map(saveDataUrl);
+  return prisma.serviceRequest.update({ where: { id }, data: { imageUrls: { push: urls } }, include: REQ_INCLUDE });
+}

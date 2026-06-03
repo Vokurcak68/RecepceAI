@@ -1,15 +1,15 @@
-import { useEffect, useState, useRef, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useState, useRef, type ReactNode, type CSSProperties, type ChangeEvent } from "react";
 import QRCode from "qrcode";
 import { useConfirm } from "./confirm";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL, ROOM_STATUS_LABEL,
   type EmailLog,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
-  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult,
+  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -2636,7 +2636,7 @@ function RequestsView({ selId }: { selId: string }) {
               <td className="muted">{r.domain === "maintenance" ? "údržba" : "úklid"}</td>
               <td>{r.room?.number ?? "—"}</td>
               <td>{r.reservation?.primaryGuest ? `${r.reservation.primaryGuest.firstName} ${r.reservation.primaryGuest.lastName}` : "—"}</td>
-              <td>{r.description ?? "—"}</td>
+              <td>{r.description ?? "—"}{r.imageUrls && r.imageUrls.length > 0 && <div className="req-photos">{r.imageUrls.map((u) => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="foto" /></a>)}</div>}</td>
               <td><Badge s={r.status} /></td>
               <td className="right">{r.status !== "done" && r.status !== "cancelled" && <button className="btn sm ok" onClick={() => set(r.id, "done")}>Hotovo</button>}</td>
             </tr>
@@ -2803,6 +2803,24 @@ function MaintenanceView({ selId }: { selId: string }) {
 }
 
 // ── Portál personálu (uklízečka / údržbář) ───────────────────
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result as string); fr.onerror = reject; fr.readAsDataURL(file); });
+}
+// Náhledy fotek + tlačítko na pořízení/výběr fotky (z telefonu personálu).
+function PhotoStrip({ urls, onUpload, busy }: { urls?: string[]; onUpload: (dataUrls: string[]) => void; busy?: boolean }) {
+  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).slice(0, 5);
+    if (files.length) onUpload(await Promise.all(files.map(fileToDataUrl)));
+    e.target.value = "";
+  };
+  return (
+    <div className="req-photos">
+      {(urls ?? []).map((u) => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="foto" /></a>)}
+      <label className="btn sm ghost photo-btn">{busy ? "…" : "📷 Foto"}<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={pick} /></label>
+    </div>
+  );
+}
+
 function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: () => void }) {
   const [selId, setSelId] = useState(getProperty() || session.properties[0]?.id || "");
   useEffect(() => { if (selId) setProperty(selId); }, [selId]);
@@ -2814,13 +2832,23 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const emptyHK: HousekeepingPlan = { generatedAt: "", counts: { total: 0, urgent: 0, high: 0, normal: 0 }, items: [] };
   const plan = useAsync<HousekeepingPlan>(() => isHK ? api.staffPlan() : Promise.resolve(emptyHK), [selId]);
   const mplan = useAsync<MaintenancePlan>(() => isMaint ? api.staffMaintPlan() : Promise.resolve(emptyHK as unknown as MaintenancePlan), [selId]);
+  const rooms = useAsync<StaffRoom[]>(() => isHK ? api.staffRooms() : Promise.resolve([] as StaffRoom[]), [selId]);
   const [showAdd, setShowAdd] = useState(false);
   const [nd, setNd] = useState("");
+  const [ndPhotos, setNdPhotos] = useState<string[]>([]);
+  const [photoBusy, setPhotoBusy] = useState("");
   const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false);
 
-  const reloadAll = () => { reload(); plan.reload(); mplan.reload(); };
+  const reloadAll = () => { reload(); plan.reload(); mplan.reload(); rooms.reload(); };
   const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
-  const addMaint = async () => { if (!nd.trim()) return; await api.staffCreateRequest({ type: "maintenance", description: nd }); setNd(""); setShowAdd(false); reloadAll(); };
+  const addPhotos = async (id: string, dataUrls: string[]) => { setPhotoBusy(id); try { await api.staffRequestPhotos(id, dataUrls); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Foto se nepodařilo nahrát."); } finally { setPhotoBusy(""); } };
+  const setRoomStatus = async (id: string, st: string) => { await api.staffSetRoomStatus(id, st); rooms.reload(); };
+  const addMaint = async () => {
+    if (!nd.trim()) return;
+    const r = await api.staffCreateRequest({ type: "maintenance", description: nd });
+    if (ndPhotos.length) await api.staffRequestPhotos(r.id, ndPhotos).catch(() => {});
+    setNd(""); setNdPhotos([]); setShowAdd(false); reloadAll();
+  };
   const aiBrief = async () => { setBriefing(true); setBrief(""); try { const r = isMaint ? await api.staffMaintBrief("cs") : await api.staffBrief("cs"); setBrief(r.brief); } catch (e) { setBrief(e instanceof Error ? e.message : "Chyba AI."); } finally { setBriefing(false); } };
   const items = (data ?? []).filter((r) => status === "active" ? (r.status === "open" || r.status === "in_progress") : status === "done" ? r.status === "done" : true);
 
@@ -2834,20 +2862,40 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
         </div>
       </div>
       <div className="staff-tabs">
-        {(([...(hasPlan ? [["plan", isHK ? "🧹 Plán" : "🔧 Plán"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
+        {(([...(hasPlan ? [["plan", isHK ? "🧹 Plán" : "🔧 Plán"]] : []), ...(isHK ? [["rooms", "🛏 Pokoje"]] : []), ["active", "Aktivní"], ["done", "Hotové"], ["", "Vše"]]) as [string, string][]).map(([v, l]) => <button key={v} className={status === v ? "active" : ""} onClick={() => setStatus(v)}>{l}</button>)}
         {isHK && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setShowAdd((s) => !s)}>+ Nahlásit údržbu</button>}
       </div>
-      {showAdd && <div className="staff-add"><input placeholder="Popis závady…" value={nd} onChange={(e) => setNd(e.target.value)} /><button className="btn" onClick={addMaint}>Odeslat údržbě</button></div>}
+      {showAdd && (
+        <div className="staff-add" style={{ flexWrap: "wrap", gap: 8 }}>
+          <input placeholder="Popis závady…" value={nd} onChange={(e) => setNd(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+          <label className="btn ghost">📷 Foto {ndPhotos.length ? `(${ndPhotos.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={async (e) => { const fs = Array.from(e.target.files ?? []).slice(0, 5); if (fs.length) setNdPhotos(await Promise.all(fs.map(fileToDataUrl))); e.target.value = ""; }} /></label>
+          <button className="btn" onClick={addMaint}>Odeslat údržbě</button>
+        </div>
+      )}
       {error && <div className="error">{error}</div>}
 
       {status === "plan" ? (
         isMaint ? (
           <MaintCards plan={mplan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
-            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} onPhoto={addPhotos} photoBusy={photoBusy} />
         ) : (
           <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
             brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} />
         )
+      ) : status === "rooms" ? (
+        <div className="staff-rooms">
+          {(rooms.data ?? []).length === 0 ? <div className="empty">Žádné pokoje</div> : (rooms.data ?? []).map((rm) => (
+            <div key={rm.id} className={`room-card rs-${rm.status}`}>
+              <div className="room-h"><b>Pokoj {rm.number}</b> <span className="muted">{rm.roomType?.name ?? ""}</span></div>
+              <div className={`room-status rs-${rm.status}`}>{ROOM_STATUS_LABEL[rm.status] ?? rm.status}</div>
+              <div className="req-actions">
+                {(([["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]]) as [string, string][]).map(([s, l]) => (
+                  <button key={s} className={`btn sm ${rm.status === s ? "" : "ghost"}`} disabled={rm.status === s} onClick={() => setRoomStatus(rm.id, s)}>{l}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
       <div className="staff-list">
         {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
@@ -2863,6 +2911,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
                 <button className="btn sm ok" onClick={() => act(r.id, "done")}>Hotovo</button>
               </div>
             )}
+            <PhotoStrip urls={r.imageUrls} onUpload={(d) => addPhotos(r.id, d)} busy={photoBusy === r.id} />
           </div>
         ))}
       </div>
@@ -2911,9 +2960,10 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }
 }
 
 // Karty prioritizované fronty údržby (portál údržbáře).
-function MaintCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload }: {
+function MaintCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, onPhoto, photoBusy }: {
   plan: MaintenancePlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
   brief: string; briefing: boolean; onBrief: () => void; onReload: () => void;
+  onPhoto: (id: string, dataUrls: string[]) => void; photoBusy: string;
 }) {
   const c = plan?.counts;
   return (
@@ -2942,6 +2992,7 @@ function MaintCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload 
               {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
               <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
             </div>
+            <PhotoStrip onUpload={(d) => onPhoto(i.id, d)} busy={photoBusy === i.id} />
           </div>
         ))}
       </div>

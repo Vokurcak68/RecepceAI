@@ -159,7 +159,37 @@ tr.row-high { box-shadow: inset 3px 0 0 var(--warn); }
 .req-type { font-size: 18px; font-weight: 700; }
 .req-loc { color: var(--muted); margin-top: 2px; }
 .req-desc { margin: 8px 0; font-size: 15px; }
-.req-actions { display: flex; gap: 8px; margin-top: 8px; }
+.req-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+/* Fotky závad (z telefonu personálu) */
+.req-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.req-photos img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.photo-btn { cursor: pointer; }
+
+/* Stav pokojů ve staff portálu */
+.staff-rooms { padding: 0 18px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.room-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; border-left: 4px solid var(--line); }
+.room-card.rs-clean { border-left-color: var(--ok); }
+.room-card.rs-dirty { border-left-color: var(--warn); }
+.room-card.rs-inspected { border-left-color: var(--accent); }
+.room-card.rs-out_of_service { border-left-color: var(--danger); }
+.room-h { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.room-status { font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
+.room-status.rs-clean { color: var(--ok); }
+.room-status.rs-dirty { color: var(--warn); }
+.room-status.rs-inspected { color: var(--accent); }
+.room-status.rs-out_of_service { color: var(--danger); }
+
+/* Mobil: větší dotykové prvky pro personál na telefonu */
+@media (max-width: 640px) {
+  .staff-head, .staff-tabs, .staff-add, .staff-list, .staff-rooms { padding-left: 12px; padding-right: 12px; }
+  .staff-tabs { flex-wrap: wrap; }
+  .staff-tabs button { padding: 9px 14px; font-size: 15px; }
+  .staff-rooms { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .req-actions .btn, .photo-btn { padding: 10px 14px; font-size: 15px; }
+  .req-photos img { width: 72px; height: 72px; }
+}
+
 .bulkbar { background: #eef2ff; border-color: var(--accent); }
 .bulkbar .toolbar { align-items: center; }
 

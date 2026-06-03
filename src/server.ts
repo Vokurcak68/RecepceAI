@@ -33,10 +33,12 @@ import { chat as aiChat, type ChatMsg } from "./ai";
 import * as guests from "./guests";
 import * as groups from "./groups";
 import { startPolicyScheduler, stopPolicyScheduler } from "./policies";
+import { UPLOAD_DIR } from "./uploads";
 import { createToken, readToken, verifyPassword } from "./auth";
 
 export const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "12mb" })); // vyšší limit kvůli fotkám (base64) z telefonu personálu
+app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "7d" }));
 
 // Dynamické API — nic se nesmí cachovat. Bez toho upstream proxy (nginx/ARR) cachuje
 // GET odpovědi (~1 min) a admin pak vidí zastaralý stav (zvoneček „visel" minutu po
@@ -674,6 +676,22 @@ staffRouter.post("/requests/:id/status", h(async (req, res) => {
   if (!owned) throw Object.assign(new Error("not_found"), { code: "P2025" });
   const b = z.object({ status: z.nativeEnum(ServiceStatus), note: z.string().optional() }).parse(req.body);
   return service.updateStatus(req.params.id, b.status, b.note, res.locals.user.id);
+}));
+// Fotky závady (data URL base64) k požadavku
+staffRouter.post("/requests/:id/photos", h(async (req, res) => {
+  const owned = await prisma.serviceRequest.findFirst({ where: { id: req.params.id, propertyId: pid(res) }, select: { id: true } });
+  if (!owned) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const b = z.object({ images: z.array(z.string()).min(1).max(5) }).parse(req.body);
+  return service.addRequestImages(req.params.id, b.images);
+}));
+// Pokoje + přepnutí stavu (úklid odbavuje z telefonu)
+staffRouter.get("/rooms", h((_req, res) =>
+  prisma.room.findMany({ where: { propertyId: pid(res) }, select: { id: true, number: true, status: true, roomType: { select: { name: true } } }, orderBy: { number: "asc" } })));
+staffRouter.post("/rooms/:id/status", h(async (req, res) => {
+  const owned = await prisma.room.findFirst({ where: { id: req.params.id, propertyId: pid(res) }, select: { id: true } });
+  if (!owned) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const b = z.object({ status: z.nativeEnum(RoomStatus) }).parse(req.body);
+  return prisma.room.update({ where: { id: req.params.id }, data: { status: b.status }, select: { id: true, number: true, status: true } });
 }));
 
 // Prioritizovaný plán úklidu pro uklízečku (housekeeping dispečer).
