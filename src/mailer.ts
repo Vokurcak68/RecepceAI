@@ -105,6 +105,7 @@ export const EMAIL_TYPES: Record<string, string> = {
   checkin: "Uvítání (check-in)",
   checkout: "Poděkování (check-out)",
   cancellation: "Zrušení rezervace",
+  reminder: "Připomínka před příjezdem",
 };
 
 async function logEmail(reservationId: string, type: string, recipient: string, subject: string, status: string, error?: string) {
@@ -147,9 +148,11 @@ export async function sendReservationCreated(reservationId: string): Promise<voi
   const lang = mailLang(r.primaryGuest?.language);
   const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
   const link = guestUrl(r.code);
+  const deposit = r.property.depositPct > 0 ? Math.round(Number(r.totalAmount) * r.property.depositPct / 100) : 0;
+  const depositHtml = deposit > 0 ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "depositNote", { amount: money(deposit), pct: r.property.depositPct })}</p>` : "";
+  const extra = depositHtml + (link ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
   const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), stayRows(r, lang),
-    link ? mt(lang, "ctaManage") : undefined, link ?? undefined,
-    link ? `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
+    link ? mt(lang, "ctaManage") : undefined, link ?? undefined, extra);
   await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html);
 }
 
@@ -198,15 +201,32 @@ export async function sendCheckOut(reservationId: string): Promise<void> {
   await deliver(r, "checkout", mt(lang, "subjCheckout", { property: r.property.name }), html);
 }
 
-/** Potvrzení zrušení rezervace. */
-export async function sendCancellation(reservationId: string): Promise<void> {
+/** Potvrzení zrušení rezervace (volitelně se storno poplatkem). */
+export async function sendCancellation(reservationId: string, fee?: number): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
   const lang = mailLang(r.primaryGuest?.language);
   const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
+  const feeHtml = fee && fee > 0 ? `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">${mt(lang, "cancelFeeNote", { amount: money(fee) })}</p>` : "";
   const html = layout(lang, r.property, mt(lang, "titleCancel"), mt(lang, "introCancel", vars),
-    [row(mt(lang, "rowCode"), `<span style="font-family:monospace;">${esc(r.code)}</span>`), row(mt(lang, "rowOrigTerm"), `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)}`)].join(""));
+    [row(mt(lang, "rowCode"), `<span style="font-family:monospace;">${esc(r.code)}</span>`), row(mt(lang, "rowOrigTerm"), `${fmtDate(r.checkInDate)} – ${fmtDate(r.checkOutDate)}`)].join(""), undefined, undefined, feeHtml);
   await deliver(r, "cancellation", mt(lang, "subjCancel", { code: r.code, property: r.property.name }), html);
+}
+
+/** Připomínka před příjezdem. */
+export async function sendReminder(reservationId: string): Promise<void> {
+  const r = await load(reservationId);
+  if (!r) return;
+  const lang = mailLang(r.primaryGuest?.language);
+  const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name), date: fmtDate(r.checkInDate) };
+  const info = r.property.infoText
+    ? `<div style="margin:20px 0 0;padding:16px 18px;background:#f6f8fa;border-radius:10px;font-size:13px;line-height:1.7;color:#3a4856;"><div style="font-weight:600;margin-bottom:6px;color:#243240;">${esc(mt(lang, "infoHeading"))}</div>${esc(r.property.infoText).replace(/\n/g, "<br>")}</div>`
+    : "";
+  const link = guestUrl(r.code);
+  const html = layout(lang, r.property, mt(lang, "titleReminder"), mt(lang, "introReminder", vars),
+    [row(mt(lang, "rowCheckin"), fmtDate(r.checkInDate)), row(mt(lang, "rowCheckout"), fmtDate(r.checkOutDate)), row(mt(lang, "rowUnit"), esc(unitLabel(r, lang)))].join(""),
+    link ? mt(lang, "ctaManage") : undefined, link ?? undefined, info);
+  await deliver(r, "reminder", mt(lang, "subjReminder", { property: r.property.name }), html);
 }
 
 /** Souhrnný e-mail organizátorovi skupinové rezervace (jeden za celou skupinu). */
@@ -255,6 +275,7 @@ export async function resend(reservationId: string, type: string): Promise<void>
     case "checkin": return sendCheckIn(reservationId);
     case "checkout": return sendCheckOut(reservationId);
     case "cancellation": return sendCancellation(reservationId);
+    case "reminder": return sendReminder(reservationId);
     default: throw new Error("Neznámý typ e-mailu.");
   }
 }

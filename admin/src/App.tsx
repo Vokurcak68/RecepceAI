@@ -1441,6 +1441,7 @@ type PropEdit = {
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; active: boolean; infoText: string;
   onlineCheckinHours: string;
+  freeCancelDays: string; cancelFeePct: string; depositPct: string; reminderHours: string; noShowHours: string;
 };
 
 function PropertiesView() {
@@ -1460,11 +1461,12 @@ function PropertiesView() {
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, active: p.active, infoText: p.infoText ?? "",
       onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
+      freeCancelDays: String(p.freeCancelDays ?? 0), cancelFeePct: String(p.cancelFeePct ?? 0), depositPct: String(p.depositPct ?? 0), reminderHours: String(p.reminderHours ?? 0), noShowHours: String(p.noShowHours ?? 0),
     });
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
-    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), cityTaxFreeAge: Number(ef.cityTaxFreeAge), onlineCheckinHours: Number(ef.onlineCheckinHours) });
+    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), cityTaxFreeAge: Number(ef.cityTaxFreeAge), onlineCheckinHours: Number(ef.onlineCheckinHours), freeCancelDays: Number(ef.freeCancelDays), cancelFeePct: Number(ef.cancelFeePct), depositPct: Number(ef.depositPct), reminderHours: Number(ef.reminderHours), noShowHours: Number(ef.noShowHours) });
     setMsg("Provozovna uložena."); setEditId(null); setEf(null); reload();
   };
 
@@ -1523,6 +1525,17 @@ function PropertiesView() {
             <label className="row">Online check-in (h před příj.) <input style={{ width: 70 }} value={ef.onlineCheckinHours} onChange={(e) => setEf({ ...ef, onlineCheckinHours: e.target.value })} disabled={!ef.selfCheckin} /></label>
             <label className="row"><input type="checkbox" checked={ef.breakfastIncluded} onChange={(e) => setEf({ ...ef, breakfastIncluded: e.target.checked })} /> Snídaně v ceně</label>
             <label className="row"><input type="checkbox" checked={ef.active} onChange={(e) => setEf({ ...ef, active: e.target.checked })} /> Aktivní</label>
+          </div>
+          <div style={{ padding: "6px 0 2px" }}><div className="muted" style={{ marginBottom: 6 }}>Storno, zálohy a automatika (0 = vypnuto):</div>
+            <div className="toolbar">
+              <label className="row">Bezplatné storno do <input style={{ width: 56 }} value={ef.freeCancelDays} onChange={(e) => setEf({ ...ef, freeCancelDays: e.target.value })} /> dní před příjezdem</label>
+              <label className="row">jinak storno poplatek <input style={{ width: 56 }} value={ef.cancelFeePct} onChange={(e) => setEf({ ...ef, cancelFeePct: e.target.value })} /> % z ceny</label>
+              <label className="row">Požadovaná záloha <input style={{ width: 56 }} value={ef.depositPct} onChange={(e) => setEf({ ...ef, depositPct: e.target.value })} /> %</label>
+            </div>
+            <div className="toolbar">
+              <label className="row">Připomínka <input style={{ width: 56 }} value={ef.reminderHours} onChange={(e) => setEf({ ...ef, reminderHours: e.target.value })} /> h před příjezdem</label>
+              <label className="row">No-show <input style={{ width: 56 }} value={ef.noShowHours} onChange={(e) => setEf({ ...ef, noShowHours: e.target.value })} /> h po datu příjezdu</label>
+            </div>
           </div>
           <div className="toolbar">
             <button className="btn" onClick={saveEdit}>Uložit</button>
@@ -1702,6 +1715,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Celkem</span><b>{folio ? money(folio.charges) : "…"}</b></div>
           <div className="kvline"><span className="muted">Zaplaceno</span><span>{folio ? money(folio.paid) : "…"}</span></div>
           <div className="kvline"><span className="muted">{bal >= 0 ? "Zbývá doplatit" : "Přeplatek"}</span><b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{folio ? money(Math.abs(bal)) : "…"}</b></div>
+          {prop?.depositPct ? <div className="kvline"><span className="muted">Požadovaná záloha</span><span>{money(Math.round(Number(r.totalAmount) * prop.depositPct / 100))} ({prop.depositPct} %)</span></div> : null}
         </div></div>
       </div>
 

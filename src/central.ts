@@ -32,6 +32,7 @@ export function updateProperty(id: string, data: Partial<{
   name: string; identifier: string; type: PropertyType; street: string; city: string; country: string; phone: string; email: string; ico: string; dic: string; iban: string; vatPayer: boolean; active: boolean; infoText: string;
   inventoryUnit: InventoryUnit; cityTaxEnabled: boolean; cityTaxPerPersonNight: number; cityTaxFreeAge: number;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number;
+  freeCancelDays: number; cancelFeePct: number; depositPct: number; reminderHours: number; noShowHours: number;
 }>) {
   return prisma.property.update({
     where: { id },

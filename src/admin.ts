@@ -9,6 +9,7 @@ import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, a
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
 import { findOrCreateGuest, previousStaysCount } from "./guests";
+import { computeCancellationFee } from "./policies";
 
 // ── Dashboard ────────────────────────────────────────────────
 export async function dashboard(propertyId: string, date: Date) {
@@ -292,11 +293,14 @@ export async function setPrimaryGuest(propertyId: string, id: string, guestId: s
 }
 
 export async function cancelReservation(propertyId: string, id: string) {
-  const { count } = await prisma.reservation.updateMany({
-    where: { id, propertyId }, data: { status: ReservationStatus.cancelled, holdExpiresAt: null },
-  });
-  if (count) void mailer.sendCancellation(id); // potvrzení storna hostovi (best-effort)
-  return { ok: true };
+  const r = await prisma.reservation.findFirst({ where: { id, propertyId }, include: { property: true } });
+  if (!r) throw NOT_FOUND();
+  if (r.status === ReservationStatus.cancelled) return { ok: true, fee: 0 };
+  const { fee } = computeCancellationFee(r.property, r); // storno poplatek dle politiky provozovny
+  if (fee > 0) await addCharge({ reservationId: id, category: ChargeCategory.other, description: `Storno poplatek (${r.property.cancelFeePct} %)`, unitPrice: fee });
+  await prisma.reservation.update({ where: { id }, data: { status: ReservationStatus.cancelled, holdExpiresAt: null } });
+  void mailer.sendCancellation(id, fee > 0 ? fee : undefined); // potvrzení storna hostovi (best-effort)
+  return { ok: true, fee };
 }
 
 // ── Úhrady a doklady o zaplacení ─────────────────────────────

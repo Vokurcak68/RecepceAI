@@ -27,6 +27,7 @@ export type Property = {
   street: string | null; city: string | null; country: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; vatPayer: boolean; active: boolean; infoText: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money; cityTaxFreeAge: number;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number;
+  freeCancelDays: number; cancelFeePct: number; depositPct: number; reminderHours: number; noShowHours: number;
   _count?: { rooms: number; beds: number; reservations: number };
 };
 export type UserRole = "super_admin" | "manager" | "housekeeping" | "maintenance";

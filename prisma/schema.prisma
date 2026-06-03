@@ -192,6 +192,13 @@ model Property {
   breakfastIncluded     Boolean       @default(false)
   onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
+  // Storno / zálohové politiky + automatika (0 = vypnuto).
+  freeCancelDays Int @default(0) // bezplatné storno do N dní před příjezdem; po lhůtě storno poplatek
+  cancelFeePct   Int @default(0) // storno poplatek v % z ceny při pozdním zrušení
+  depositPct     Int @default(0) // požadovaná záloha v % z ceny (informativně v potvrzení)
+  reminderHours  Int @default(0) // připomínka hostovi H hodin před příjezdem
+  noShowHours    Int @default(0) // po G hodinách od data příjezdu označit nedoraženého jako no-show
+
   rooms        Room[]
   beds         Bed[]
   roomTypes    RoomType[]

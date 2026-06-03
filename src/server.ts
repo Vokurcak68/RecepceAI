@@ -32,6 +32,7 @@ import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, 
 import { chat as aiChat, type ChatMsg } from "./ai";
 import * as guests from "./guests";
 import * as groups from "./groups";
+import { startPolicyScheduler, stopPolicyScheduler } from "./policies";
 import { createToken, readToken, verifyPassword } from "./auth";
 
 export const app = express();
@@ -237,6 +238,8 @@ centralRouter.patch("/properties/:id", h((req) => {
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(), cityTaxFreeAge: z.number().int().min(0).max(26).optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(),
     onlineCheckinHours: z.number().int().min(0).optional(),
+    freeCancelDays: z.number().int().min(0).max(365).optional(), cancelFeePct: z.number().int().min(0).max(100).optional(), depositPct: z.number().int().min(0).max(100).optional(),
+    reminderHours: z.number().int().min(0).max(720).optional(), noShowHours: z.number().int().min(0).max(168).optional(),
   }).parse(req.body);
   return central.updateProperty(req.params.id, b);
 }));
@@ -703,6 +706,7 @@ if (require.main === module) {
   const server = app.listen(port, () => console.log(`🛎️  Hotelový systém API běží na http://localhost:${port}`));
   initWhatsApp(); // připojení k WhatsAppu (session se drží v .wwebjs_auth)
   startIcalScheduler(); // periodická synchronizace iCal feedů (OTA → blokace)
+  startPolicyScheduler(); // automatika: no-show + připomínky před příjezdem
 
   // Graceful shutdown — při zastavení služby (NSSM posílá Ctrl-C → SIGINT/SIGBREAK,
   // resp. SIGTERM) korektně zavřeme headless Chrome, aby se WhatsApp session uložila
@@ -715,6 +719,7 @@ if (require.main === module) {
     const t = setTimeout(() => { console.error("Shutdown timeout — force exit."); process.exit(0); }, 20000);
     try { server.close(); } catch { /* */ }
     try { stopIcalScheduler(); } catch { /* */ }
+    try { stopPolicyScheduler(); } catch { /* */ }
     try { await destroyWhatsApp(); } catch { /* */ }
     clearTimeout(t);
     console.log("✅ Ukončeno čistě.");

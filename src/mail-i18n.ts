@@ -19,6 +19,8 @@ const cs: Dict = {
   infoHeading: "Užitečné informace", checkoutNote: "Odjezd (check-out) máte naplánovaný na <b>{date}</b>.", thanksNote: "Budeme rádi za vaši zpětnou vazbu. Přejeme šťastnou cestu! 👋",
   subjGroup: "Potvrzení skupinové rezervace {group} — {property}", titleGroup: "Potvrzení skupinové rezervace",
   introGroup: "Dobrý den, {name},<br>potvrzujeme vaši skupinovou rezervaci <b>{group}</b> ({rooms} pokojů) v <b>{property}</b>. Souhrn najdete níže.",
+  subjReminder: "Připomínka pobytu — {property}", titleReminder: "Těšíme se na vás", introReminder: "Dobrý den, {name},<br>připomínáme váš blížící se pobyt v <b>{property}</b> (příjezd {date}). Těšíme se na vás!",
+  depositNote: "Požadovaná záloha: <b>{amount}</b> ({pct} % z ceny). Pokyny k úhradě vám rádi sdělíme.", cancelFeeNote: "V souladu se storno podmínkami účtujeme storno poplatek <b>{amount}</b>.",
   footerAuto: "Tato zpráva byla odeslána automaticky. Neodpovídejte na ni prosím, případné dotazy směřujte na kontakt výše.",
 };
 const en: Dict = {
@@ -35,6 +37,8 @@ const en: Dict = {
   infoHeading: "Useful information", checkoutNote: "Your check-out is scheduled for <b>{date}</b>.", thanksNote: "We'd love your feedback. Have a safe trip! 👋",
   subjGroup: "Group reservation confirmation {group} — {property}", titleGroup: "Group reservation confirmation",
   introGroup: "Hello {name},<br>we confirm your group reservation <b>{group}</b> ({rooms} rooms) at <b>{property}</b>. Summary below.",
+  subjReminder: "Upcoming stay reminder — {property}", titleReminder: "We look forward to seeing you", introReminder: "Hello {name},<br>a reminder of your upcoming stay at <b>{property}</b> (arrival {date}). We look forward to welcoming you!",
+  depositNote: "Required deposit: <b>{amount}</b> ({pct}% of the price). We'll gladly share payment instructions.", cancelFeeNote: "In line with our cancellation policy we charge a cancellation fee of <b>{amount}</b>.",
   footerAuto: "This message was sent automatically. Please do not reply; for questions use the contact above.",
 };
 const de: Dict = {
@@ -51,6 +55,8 @@ const de: Dict = {
   infoHeading: "Nützliche Informationen", checkoutNote: "Ihr Check-out ist für <b>{date}</b> geplant.", thanksNote: "Wir freuen uns über Ihr Feedback. Gute Reise! 👋",
   subjGroup: "Gruppenreservierung bestätigt {group} — {property}", titleGroup: "Gruppenreservierung bestätigt",
   introGroup: "Guten Tag {name},<br>wir bestätigen Ihre Gruppenreservierung <b>{group}</b> ({rooms} Zimmer) im <b>{property}</b>. Übersicht unten.",
+  subjReminder: "Erinnerung an Ihren Aufenthalt — {property}", titleReminder: "Wir freuen uns auf Sie", introReminder: "Guten Tag {name},<br>wir erinnern an Ihren bevorstehenden Aufenthalt im <b>{property}</b> (Anreise {date}). Wir freuen uns auf Sie!",
+  depositNote: "Erforderliche Anzahlung: <b>{amount}</b> ({pct} % des Preises). Zahlungshinweise teilen wir Ihnen gerne mit.", cancelFeeNote: "Gemäß unseren Stornobedingungen berechnen wir eine Stornogebühr von <b>{amount}</b>.",
   footerAuto: "Diese Nachricht wurde automatisch gesendet. Bitte antworten Sie nicht; bei Fragen nutzen Sie den Kontakt oben.",
 };
 const ru: Dict = {
@@ -67,6 +73,8 @@ const ru: Dict = {
   infoHeading: "Полезная информация", checkoutNote: "Ваш выезд запланирован на <b>{date}</b>.", thanksNote: "Будем рады вашему отзыву. Счастливого пути! 👋",
   subjGroup: "Подтверждение групповой брони {group} — {property}", titleGroup: "Подтверждение групповой брони",
   introGroup: "Здравствуйте, {name},<br>подтверждаем вашу групповую бронь <b>{group}</b> ({rooms} номеров) в <b>{property}</b>. Сводка ниже.",
+  subjReminder: "Напоминание о проживании — {property}", titleReminder: "Будем рады вас видеть", introReminder: "Здравствуйте, {name},<br>напоминаем о вашем предстоящем проживании в <b>{property}</b> (заезд {date}). Будем рады вас видеть!",
+  depositNote: "Требуемый депозит: <b>{amount}</b> ({pct}% от стоимости). С радостью сообщим реквизиты для оплаты.", cancelFeeNote: "В соответствии с условиями отмены мы взимаем штраф за отмену <b>{amount}</b>.",
   footerAuto: "Это сообщение отправлено автоматически. Пожалуйста, не отвечайте на него; по вопросам используйте контакт выше.",
 };
 const uk: Dict = {
@@ -83,6 +91,8 @@ const uk: Dict = {
   infoHeading: "Корисна інформація", checkoutNote: "Ваш виїзд заплановано на <b>{date}</b>.", thanksNote: "Будемо раді вашому відгуку. Щасливої дороги! 👋",
   subjGroup: "Підтвердження групового бронювання {group} — {property}", titleGroup: "Підтвердження групового бронювання",
   introGroup: "Вітаємо, {name},<br>підтверджуємо ваше групове бронювання <b>{group}</b> ({rooms} номерів) у <b>{property}</b>. Зведення нижче.",
+  subjReminder: "Нагадування про проживання — {property}", titleReminder: "Будемо раді вас бачити", introReminder: "Вітаємо, {name},<br>нагадуємо про ваше майбутнє проживання в <b>{property}</b> (заїзд {date}). Будемо раді вас бачити!",
+  depositNote: "Необхідний завдаток: <b>{amount}</b> ({pct}% від ціни). Реквізити для оплати охоче надамо.", cancelFeeNote: "Згідно з умовами скасування стягуємо плату за скасування <b>{amount}</b>.",
   footerAuto: "Це повідомлення надіслано автоматично. Будь ласка, не відповідайте; із питаннями звертайтеся за контактом вище.",
 };
 const pl: Dict = {
@@ -99,6 +109,8 @@ const pl: Dict = {
   infoHeading: "Przydatne informacje", checkoutNote: "Wyjazd (check-out) zaplanowano na <b>{date}</b>.", thanksNote: "Będziemy wdzięczni za opinię. Szerokiej drogi! 👋",
   subjGroup: "Potwierdzenie rezerwacji grupowej {group} — {property}", titleGroup: "Potwierdzenie rezerwacji grupowej",
   introGroup: "Dzień dobry {name},<br>potwierdzamy rezerwację grupową <b>{group}</b> ({rooms} pokoi) w <b>{property}</b>. Podsumowanie poniżej.",
+  subjReminder: "Przypomnienie o pobycie — {property}", titleReminder: "Czekamy na Państwa", introReminder: "Dzień dobry {name},<br>przypominamy o zbliżającym się pobycie w <b>{property}</b> (przyjazd {date}). Czekamy na Państwa!",
+  depositNote: "Wymagana zaliczka: <b>{amount}</b> ({pct}% ceny). Chętnie przekażemy dane do płatności.", cancelFeeNote: "Zgodnie z warunkami anulowania pobieramy opłatę za anulowanie <b>{amount}</b>.",
   footerAuto: "Ta wiadomość została wysłana automatycznie. Prosimy nie odpowiadać; w razie pytań użyj kontaktu powyżej.",
 };
 const sk: Dict = {
@@ -115,6 +127,8 @@ const sk: Dict = {
   infoHeading: "Užitočné informácie", checkoutNote: "Odchod (check-out) máte naplánovaný na <b>{date}</b>.", thanksNote: "Budeme radi za vašu spätnú väzbu. Šťastnú cestu! 👋",
   subjGroup: "Potvrdenie skupinovej rezervácie {group} — {property}", titleGroup: "Potvrdenie skupinovej rezervácie",
   introGroup: "Dobrý deň, {name},<br>potvrdzujeme vašu skupinovú rezerváciu <b>{group}</b> ({rooms} izieb) v <b>{property}</b>. Súhrn nižšie.",
+  subjReminder: "Pripomienka pobytu — {property}", titleReminder: "Tešíme sa na vás", introReminder: "Dobrý deň, {name},<br>pripomíname váš blížiaci sa pobyt v <b>{property}</b> (príchod {date}). Tešíme sa na vás!",
+  depositNote: "Požadovaná záloha: <b>{amount}</b> ({pct} % z ceny). Pokyny k úhrade vám radi poskytneme.", cancelFeeNote: "V súlade so storno podmienkami účtujeme storno poplatok <b>{amount}</b>.",
   footerAuto: "Táto správa bola odoslaná automaticky. Neodpovedajte na ňu prosím; s otázkami sa obráťte na kontakt vyššie.",
 };
 const it: Dict = {
@@ -131,6 +145,8 @@ const it: Dict = {
   infoHeading: "Informazioni utili", checkoutNote: "Il check-out è previsto per il <b>{date}</b>.", thanksNote: "Ci farebbe piacere un suo feedback. Buon viaggio! 👋",
   subjGroup: "Conferma prenotazione di gruppo {group} — {property}", titleGroup: "Conferma prenotazione di gruppo",
   introGroup: "Buongiorno {name},<br>confermiamo la prenotazione di gruppo <b>{group}</b> ({rooms} camere) presso <b>{property}</b>. Riepilogo sotto.",
+  subjReminder: "Promemoria del soggiorno — {property}", titleReminder: "La aspettiamo", introReminder: "Buongiorno {name},<br>le ricordiamo il suo prossimo soggiorno presso <b>{property}</b> (arrivo {date}). La aspettiamo!",
+  depositNote: "Acconto richiesto: <b>{amount}</b> ({pct}% del prezzo). Le forniremo volentieri le istruzioni di pagamento.", cancelFeeNote: "In base alle nostre condizioni di cancellazione applichiamo una penale di <b>{amount}</b>.",
   footerAuto: "Questo messaggio è stato inviato automaticamente. Non risponda; per domande usi il contatto sopra.",
 };
 const fr: Dict = {
@@ -147,6 +163,8 @@ const fr: Dict = {
   infoHeading: "Informations utiles", checkoutNote: "Votre départ (check-out) est prévu le <b>{date}</b>.", thanksNote: "Votre avis nous intéresse. Bon voyage ! 👋",
   subjGroup: "Confirmation de réservation de groupe {group} — {property}", titleGroup: "Confirmation de réservation de groupe",
   introGroup: "Bonjour {name},<br>nous confirmons votre réservation de groupe <b>{group}</b> ({rooms} chambres) au <b>{property}</b>. Récapitulatif ci-dessous.",
+  subjReminder: "Rappel de votre séjour — {property}", titleReminder: "Au plaisir de vous accueillir", introReminder: "Bonjour {name},<br>nous vous rappelons votre prochain séjour au <b>{property}</b> (arrivée {date}). Au plaisir de vous accueillir !",
+  depositNote: "Acompte demandé : <b>{amount}</b> ({pct} % du prix). Nous vous communiquerons volontiers les instructions de paiement.", cancelFeeNote: "Conformément à nos conditions d'annulation, nous facturons des frais d'annulation de <b>{amount}</b>.",
   footerAuto: "Ce message a été envoyé automatiquement. Merci de ne pas y répondre ; pour toute question, utilisez le contact ci-dessus.",
 };
 const es: Dict = {
@@ -163,6 +181,8 @@ const es: Dict = {
   infoHeading: "Información útil", checkoutNote: "Su salida (check-out) está prevista para el <b>{date}</b>.", thanksNote: "Nos encantaría conocer su opinión. ¡Buen viaje! 👋",
   subjGroup: "Confirmación de reserva de grupo {group} — {property}", titleGroup: "Confirmación de reserva de grupo",
   introGroup: "Hola {name},<br>confirmamos su reserva de grupo <b>{group}</b> ({rooms} habitaciones) en <b>{property}</b>. Resumen a continuación.",
+  subjReminder: "Recordatorio de su estancia — {property}", titleReminder: "Le esperamos", introReminder: "Hola {name},<br>le recordamos su próxima estancia en <b>{property}</b> (llegada {date}). ¡Le esperamos!",
+  depositNote: "Depósito requerido: <b>{amount}</b> ({pct}% del precio). Con gusto le facilitaremos las instrucciones de pago.", cancelFeeNote: "De acuerdo con nuestras condiciones de cancelación, cobramos una tarifa de cancelación de <b>{amount}</b>.",
   footerAuto: "Este mensaje se ha enviado automáticamente. No responda; para consultas use el contacto de arriba.",
 };
 const zh: Dict = {
@@ -179,6 +199,8 @@ const zh: Dict = {
   infoHeading: "实用信息", checkoutNote: "您的退房时间为 <b>{date}</b>。", thanksNote: "期待您的反馈。旅途愉快！👋",
   subjGroup: "团体预订确认 {group} — {property}", titleGroup: "团体预订确认",
   introGroup: "您好 {name}，<br>确认您的团体预订 <b>{group}</b>（{rooms} 间房）在 <b>{property}</b>。摘要如下。",
+  subjReminder: "入住提醒 — {property}", titleReminder: "期待您的光临", introReminder: "您好 {name}，<br>提醒您即将入住 <b>{property}</b>（入住 {date}）。期待您的光临！",
+  depositNote: "所需押金：<b>{amount}</b>（价格的 {pct}%）。我们将很乐意提供付款方式。", cancelFeeNote: "根据我们的取消政策，我们收取取消费 <b>{amount}</b>。",
   footerAuto: "此邮件为自动发送，请勿回复；如有疑问请使用上方联系方式。",
 };
 
