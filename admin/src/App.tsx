@@ -3007,14 +3007,18 @@ function PhotoStrip({ urls, onUpload, busy }: { urls?: string[]; onUpload: (data
 
 // Naúčtování položky z ceníku (praní/žehlení/minibar) na účet hosta z požadavku.
 const BILLABLE = ["laundry", "ironing", "minibar", "other"];
-function BillRequest({ reqId, items, onDone }: { reqId: string; items: ServiceItem[]; onDone: () => void }) {
+// Typ úkolu → kategorie ceníku (žehlení nabídne jen žehlení atd.). „other" = vše.
+const CAT_FOR_TYPE: Record<string, string> = { laundry: "laundry", ironing: "ironing", minibar: "minibar" };
+function BillRequest({ reqId, type, items, onDone }: { reqId: string; type: string; items: ServiceItem[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("1");
   const [markDone, setMarkDone] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const act = items.filter((i) => i.active);
+  const cat = CAT_FOR_TYPE[type];
+  const inCat = items.filter((i) => i.active && (!cat || i.category === cat));
+  const act = inCat.length ? inCat : items.filter((i) => i.active); // fallback: když v kategorii nic není, ukaž vše
   const submit = async () => {
     if (!itemId) { setErr("Vyber položku."); return; }
     setBusy(true); setErr("");
@@ -3127,7 +3131,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
               <div className="req-actions">
                 {r.status === "open" && <button className="btn sm" onClick={() => act(r.id, "in_progress")}>Začít</button>}
                 <button className="btn sm ok" onClick={() => act(r.id, "done")}>Hotovo</button>
-                {isHK && BILLABLE.includes(r.type) && <BillRequest reqId={r.id} items={priceList.data ?? []} onDone={reloadAll} />}
+                {isHK && BILLABLE.includes(r.type) && <BillRequest reqId={r.id} type={r.type} items={priceList.data ?? []} onDone={reloadAll} />}
               </div>
             )}
             <PhotoStrip urls={r.imageUrls} onUpload={(d) => addPhotos(r.id, d)} busy={photoBusy === r.id} />
@@ -3170,7 +3174,7 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, 
             <div className="req-actions">
               {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
               <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
-              {BILLABLE.includes(i.type) && <BillRequest reqId={i.id} items={items} onDone={onReload} />}
+              {BILLABLE.includes(i.type) && <BillRequest reqId={i.id} type={i.type} items={items} onDone={onReload} />}
             </div>
           </div>
         ))}

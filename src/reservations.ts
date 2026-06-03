@@ -226,8 +226,8 @@ export async function computeFolio(reservationId: string): Promise<Folio> {
 
 // ── Účet pokoje: připsané položky (konzumace/služby) ─────────
 /** Výchozí sazba DPH dle kategorie (restaurace/strava 12 %, ostatní služby 21 %). */
-const CHARGE_VAT: Record<ChargeCategory, number> = { minibar: 21, restaurant: 12, wellness: 21, service: 21, parking: 21, other: 21 };
-export const CHARGE_LABEL: Record<ChargeCategory, string> = { minibar: "Minibar", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
+const CHARGE_VAT: Record<ChargeCategory, number> = { minibar: 21, laundry: 21, ironing: 21, restaurant: 12, wellness: 21, service: 21, parking: 21, other: 21 };
+export const CHARGE_LABEL: Record<ChargeCategory, string> = { minibar: "Minibar", laundry: "Praní", ironing: "Žehlení", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
 
 export async function addCharge(input: { reservationId: string; category: ChargeCategory; description?: string; quantity?: number; unitPrice: number; vatRate?: number }) {
   const qty = new Prisma.Decimal(input.quantity ?? 1);

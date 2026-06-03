@@ -85,7 +85,7 @@ export const STATUS_LABEL: Record<string, string> = {
   clean: "Uklizeno", dirty: "K úklidu", out_of_service: "Mimo provoz",
 };
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
-export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
+export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", laundry: "Praní", ironing: "Žehlení", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
 
 export type PaymentRow = Payment & { reservation?: { id: string; code: string; primaryGuest?: { firstName: string; lastName: string } } };
 export type PaymentsList = { payments: PaymentRow[]; totals: { total: Money; count: number; byMethod: Record<string, Money> } };

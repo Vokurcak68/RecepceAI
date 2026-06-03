@@ -153,6 +153,8 @@ enum CashMovementKind {
 /// Kategorie připsané položky na účet pokoje (mimo ubytování + poplatek, ty jsou na rezervaci).
 enum ChargeCategory {
   minibar
+  laundry // praní
+  ironing // žehlení
   wellness
   service // služby (úklid navíc, pronájem…)
   restaurant // restaurace / bar
