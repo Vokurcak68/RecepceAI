@@ -28,7 +28,7 @@ import * as billing from "./billing";
 import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
 import * as mailer from "./mailer";
-import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, syncProperty } from "./ical";
+import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, syncProperty, startIcalScheduler, stopIcalScheduler } from "./ical";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -665,6 +665,7 @@ if (require.main === module) {
   const port = Number(process.env.PORT ?? 4000);
   const server = app.listen(port, () => console.log(`🛎️  Hotelový systém API běží na http://localhost:${port}`));
   initWhatsApp(); // připojení k WhatsAppu (session se drží v .wwebjs_auth)
+  startIcalScheduler(); // periodická synchronizace iCal feedů (OTA → blokace)
 
   // Graceful shutdown — při zastavení služby (NSSM posílá Ctrl-C → SIGINT/SIGBREAK,
   // resp. SIGTERM) korektně zavřeme headless Chrome, aby se WhatsApp session uložila
@@ -676,6 +677,7 @@ if (require.main === module) {
     console.log(`⏹  ${signal} — ukončuji, zavírám WhatsApp/Chrome…`);
     const t = setTimeout(() => { console.error("Shutdown timeout — force exit."); process.exit(0); }, 20000);
     try { server.close(); } catch { /* */ }
+    try { stopIcalScheduler(); } catch { /* */ }
     try { await destroyWhatsApp(); } catch { /* */ }
     clearTimeout(t);
     console.log("✅ Ukončeno čistě.");

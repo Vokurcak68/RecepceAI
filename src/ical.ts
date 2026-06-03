@@ -116,6 +116,38 @@ export async function syncProperty(propertyId: string) {
   return out;
 }
 
+/** Synchronizuje VŠECHNY feedy napříč provozovnami (pro periodický scheduler). */
+export async function syncAllFeeds() {
+  const feeds = await prisma.icalFeed.findMany({ select: { id: true } });
+  const out: { id: string; ok: boolean; count?: number; error?: string }[] = [];
+  for (const f of feeds) out.push({ id: f.id, ...(await syncFeed(f.id)) });
+  return out;
+}
+
+// ── Periodický scheduler (in-process, běží po dobu života služby) ──
+let icalTimer: ReturnType<typeof setInterval> | null = null;
+let icalRunning = false; // zabraňuje překryvu, kdyby sync trval déle než interval
+
+/** Spustí periodickou synchronizaci všech feedů. Interval = ICAL_SYNC_INTERVAL_MIN (min, default 180); <=0 vypne. */
+export function startIcalScheduler() {
+  const min = Number(process.env.ICAL_SYNC_INTERVAL_MIN ?? 180);
+  if (!Number.isFinite(min) || min <= 0) { console.log("[ical] periodický sync vypnut (ICAL_SYNC_INTERVAL_MIN<=0)"); return; }
+  const run = async () => {
+    if (icalRunning) return;
+    icalRunning = true;
+    try {
+      const r = await syncAllFeeds();
+      if (r.length) { const bad = r.filter((x) => !x.ok).length; console.log(`[ical] sync ${r.length} feedů hotovo${bad ? `, ${bad} s chybou` : ""} @ ${new Date().toISOString()}`); }
+    } catch (e) { console.error(`[ical] sync selhal: ${(e as Error).message}`); }
+    finally { icalRunning = false; }
+  };
+  setTimeout(() => { void run(); }, 60_000); // první běh ~1 min po startu (ať se služba ustálí)
+  icalTimer = setInterval(() => { void run(); }, min * 60_000);
+  console.log(`[ical] periodický sync každých ${min} min`);
+}
+
+export function stopIcalScheduler() { if (icalTimer) { clearInterval(icalTimer); icalTimer = null; } }
+
 export const listIcalFeeds = (propertyId: string) =>
   prisma.icalFeed.findMany({ where: { propertyId }, include: { roomType: { select: { name: true } } }, orderBy: { createdAt: "asc" } });
 
