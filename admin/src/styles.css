@@ -144,7 +144,11 @@ tr.row-high { box-shadow: inset 3px 0 0 var(--warn); }
 .linkx { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 13px; padding: 0 2px; }
 
 /* Portál personálu */
-.staff { max-width: 680px; margin: 0 auto; min-height: 100vh; }
+.staff { max-width: 680px; margin: 0 auto; min-height: 100vh; width: 100%; overflow-x: clip; }
+.staff-head, .staff-tabs, .staff-add, .staff-list, .staff-rooms, .req-card { max-width: 100%; }
+.req-type, .req-loc, .req-desc, .room-h { overflow-wrap: anywhere; }
+.staff-head { gap: 10px; }
+.staff-head > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .staff-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
 .staff-tabs { display: flex; gap: 8px; align-items: center; padding: 12px 18px; }
 .staff-tabs button { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer; color: var(--muted); }
