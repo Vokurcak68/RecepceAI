@@ -943,6 +943,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const [cands, setCands] = useState<RoomCandidate[] | null>(null);
   const [unassigned, setUnassigned] = useState<UnassignedRes[] | null>(null);
   const [rf, setRf] = useState({ type: "cleaning", description: "" });
+  const [payAmt, setPayAmt] = useState("");
   const [ef, setEf] = useState<{ number: string; floor: string; lockType: string; notes: string } | null>(null);
   useEffect(() => { if (data) setEf({ number: data.room.number, floor: String(data.room.floor), lockType: data.room.lockType, notes: data.room.notes }); }, [data?.room.id]); // eslint-disable-line
 
@@ -956,7 +957,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const saveRoom = () => { if (ef) run(() => api.updateRoom(roomId, { number: ef.number, floor: Number(ef.floor), lockType: ef.lockType, notes: ef.notes }), "Pokoj uložen."); };
   const checkin = async (rid: string, code: string) => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{code}</b>?</>, confirmLabel: "Check-in" })) run(() => api.checkin(rid), "Check-in proveden."); };
   const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
-  const pay = async (rid: string, method: string, amount: number) => { if (amount <= 0) return; if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) run(() => api.addPayment(rid, { type: "balance", amount, method }), "Doplatek zaúčtován."); };
+  const pay = async (rid: string, method: string, amount: number) => { if (!Number.isFinite(amount) || amount <= 0) { setMsg("Zadej platnou částku."); return; } if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) { run(() => api.addPayment(rid, { type: "balance", amount, method }), "Úhrada zaúčtována."); setPayAmt(""); } };
 
   if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
@@ -966,7 +967,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   return (
     <>
       <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Pokoj {room.number} <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>· {room.roomType.name} · {room.floor}. patro</span></span> <RoomPill s={room.status} /></div>
-      {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen|proveden/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
+      {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen|proveden|zaúčtován/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
 
       <div className="grid2">
         <div className="panel"><h3>Stav úklidu</h3><div style={{ padding: 16 }}>
@@ -977,12 +978,18 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
             <div className="kvline"><span className="muted">Host</span><b>{occ.guestName}</b></div>
             <div className="kvline"><span className="muted">Pobyt</span><span>{d(occ.checkInDate)} → {d(occ.checkOutDate)}</span></div>
             <div className="kvline"><span className="muted">Zůstatek</span><b style={{ color: Number(data.occupantBalance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(data.occupantBalance ?? 0)}</b></div>
+            {Number(data.occupantBalance) > 0 && (
+              <div className="req-actions" style={{ marginTop: 10, alignItems: "center" }}>
+                <span className="muted">Doplatit:</span>
+                <input type="number" min={0} style={{ width: 110 }} placeholder={data.occupantBalance ?? ""} value={payAmt} onChange={(e) => setPayAmt(e.target.value)} />
+                <span className="muted">Kč</span>
+                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "card_terminal", payAmt ? Number(payAmt.replace(",", ".")) : Number(data.occupantBalance))}>Kartou</button>
+                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "cash", payAmt ? Number(payAmt.replace(",", ".")) : Number(data.occupantBalance))}>Hotově</button>
+                <span className="muted" style={{ fontSize: 12 }}>(prázdné = celý zůstatek)</span>
+              </div>
+            )}
             <div className="req-actions" style={{ marginTop: 10 }}>
               <button className="btn sm" onClick={() => setResId(occ.id)}>Detail rezervace</button>
-              {Number(data.occupantBalance) > 0 && <>
-                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "card_terminal", Number(data.occupantBalance))}>Doplatit kartou</button>
-                <button className="btn sm" disabled={busy} onClick={() => pay(occ.id, "cash", Number(data.occupantBalance))}>Doplatit hotově</button>
-              </>}
               <button className="btn sm ok" disabled={busy} onClick={() => checkout(occ.id, occ.code)}>Check-out</button>
               <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit</button>
             </div>
