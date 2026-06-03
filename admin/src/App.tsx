@@ -894,7 +894,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 // ── Rooms ────────────────────────────────────────────────────
 // Přehled pokojů = čistý seznam výsledných stavů; klik na řádek → detail pokoje
 // (centrální ovládání: stav, přehazování hostů, rezervace, požadavky, vlastnosti).
-const ROOM_STATES: [string, string][] = [["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]];
+const ROOM_STATES: [string, string][] = [["clean", "Uklizeno"], ["dirty", "K úklidu"], ["inspected", "Zkontrolováno"], ["out_of_service", "Mimo"]];
 const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{ROOM_STATUS_LABEL[s] ?? s}</span>;
 
 function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
@@ -906,7 +906,7 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
   const counts = { occupied: rooms.filter((r) => r.occupant).length, free: rooms.filter((r) => !r.occupant).length, arrivals: rooms.filter((r) => r.arrival).length, dirty: rooms.filter((r) => r.status === "dirty").length, maint: rooms.filter((r) => r.openMaintenance > 0).length };
   const match = (r: RoomBoardItem) => filter === "all" ? true : filter === "occupied" ? !!r.occupant : filter === "free" ? !r.occupant : filter === "arrivals" ? !!r.arrival : filter === "dirty" ? r.status === "dirty" : filter === "maint" ? r.openMaintenance > 0 : true;
   const shown = rooms.filter(match);
-  const FILTERS: [string, string][] = [["all", `Vše (${rooms.length})`], ["occupied", `Obsazené (${counts.occupied})`], ["free", `Volné (${counts.free})`], ["arrivals", `Příjezdy dnes (${counts.arrivals})`], ["dirty", `Špinavé (${counts.dirty})`], ["maint", `Údržba (${counts.maint})`]];
+  const FILTERS: [string, string][] = [["all", `Vše (${rooms.length})`], ["occupied", `Obsazené (${counts.occupied})`], ["free", `Volné (${counts.free})`], ["arrivals", `Příjezdy dnes (${counts.arrivals})`], ["dirty", `K úklidu (${counts.dirty})`], ["maint", `Údržba (${counts.maint})`]];
   return (
     <>
       <div className="h1"><span>Přehled pokojů</span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
