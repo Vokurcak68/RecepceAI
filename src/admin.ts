@@ -92,6 +92,7 @@ export async function getReservation(propertyId: string, id: string) {
     include: {
       primaryGuest: true, roomType: true, room: true, bed: { include: { room: true } }, property: true,
       payments: { orderBy: { createdAt: "asc" } }, registrationEntries: true, review: true,
+      group: { select: { id: true, code: true, name: true } },
     },
   });
   if (!r) throw NOT_FOUND();

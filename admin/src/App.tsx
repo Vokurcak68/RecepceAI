@@ -9,6 +9,7 @@ import {
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
+  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -68,6 +69,7 @@ export function App() {
       { id: "tapechart", label: "Plán pokojů" },
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
+      { id: "groups", label: "Skupiny" },
       { id: "guests", label: "Profily hostů" },
       { id: "reviews", label: "Hodnocení" },
       { id: "book", label: "Kniha hostů" },
@@ -158,6 +160,7 @@ export function App() {
         {prop && tab === "ical" && <IcalView selId={selId} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
+        {prop && tab === "groups" && <GroupsView selId={selId} prop={prop} />}
         {prop && tab === "guests" && <GuestsView selId={selId} />}
         {prop && tab === "reviews" && <ReviewsView selId={selId} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
@@ -1102,6 +1105,148 @@ function BookView({ selId }: { selId: string }) {
   );
 }
 
+// ── Skupinové / vícepokojové rezervace ───────────────────────
+const blankGroupRoom = (): GroupRoomInput => ({ roomTypeId: "", adults: 2, children: 0, firstName: "", lastName: "" });
+const blankGroupForm = () => ({ name: "", note: "", from: todayIso(), to: tomorrowIso(), firstName: "", lastName: "", email: "", phone: "", language: "cs", rooms: [blankGroupRoom()] });
+
+function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
+  const { data, error, reload } = useAsync<GroupListItem[]>(() => api.groups(), [selId]);
+  const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const [gid, setGid] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [g, setG] = useState(blankGroupForm());
+  const setRoom = (i: number, patch: Partial<GroupRoomInput>) => setG((s) => ({ ...s, rooms: s.rooms.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
+  const create = async () => {
+    setErr("");
+    if (!g.name.trim() || !g.firstName || !g.lastName) { setErr("Vyplň název skupiny a kontakt (jméno, příjmení)."); return; }
+    if (g.rooms.some((r) => !r.roomTypeId)) { setErr("U každého pokoje vyber typ."); return; }
+    setBusy(true);
+    try {
+      await api.createGroup({ name: g.name, note: g.note || undefined, from: g.from, to: g.to,
+        organizer: { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: g.language },
+        rooms: g.rooms.map((r) => ({ roomTypeId: r.roomTypeId, adults: Number(r.adults), children: Number(r.children) || 0, firstName: r.firstName || undefined, lastName: r.lastName || undefined })) });
+      setShowForm(false); setG(blankGroupForm()); reload();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  if (gid) return <GroupDetailView id={gid} prop={prop} onBack={() => { setGid(null); reload(); }} />;
+  return (
+    <>
+      <div className="h1">Skupiny <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? "Zavřít" : "+ Nová skupina"}</button></div>
+      {error && <div className="error">{error}</div>}
+      {showForm && (
+        <div className="panel" style={{ padding: 18 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Nová skupinová rezervace</h3>
+          {err && <div className="error">{err}</div>}
+          <div className="toolbar">
+            <input placeholder="Název skupiny (Svatba Novákovi, Zájezd ČD…)" style={{ minWidth: 260 }} value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} />
+            <label className="row">Příjezd <input type="date" value={g.from} onChange={(e) => setG({ ...g, from: e.target.value })} /></label>
+            <label className="row">Odjezd <input type="date" value={g.to} onChange={(e) => setG({ ...g, to: e.target.value })} /></label>
+          </div>
+          <div className="toolbar">
+            <input placeholder="Kontakt — jméno" value={g.firstName} onChange={(e) => setG({ ...g, firstName: e.target.value })} />
+            <input placeholder="Kontakt — příjmení" value={g.lastName} onChange={(e) => setG({ ...g, lastName: e.target.value })} />
+            <input placeholder="E-mail" value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} />
+            <input placeholder="Telefon" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} />
+            <label className="row">Jazyk <select value={g.language} onChange={(e) => setG({ ...g, language: e.target.value })}>{GUEST_LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}</select></label>
+          </div>
+          <div style={{ borderTop: "1px solid #e6eaee", margin: "8px 0", paddingTop: 10 }}>
+            <div className="muted" style={{ marginBottom: 8 }}>Pokoje ve skupině (jméno hosta nepovinné — jinak se použije kontakt):</div>
+            {g.rooms.map((r, i) => (
+              <div key={i} className="toolbar" style={{ marginBottom: 6 }}>
+                <span className="muted" style={{ width: 20 }}>{i + 1}.</span>
+                <select value={r.roomTypeId} onChange={(e) => setRoom(i, { roomTypeId: e.target.value })}>
+                  <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
+                  {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
+                </select>
+                <label className="row">Dosp. <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
+                <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => setRoom(i, { children: Math.max(0, Number(e.target.value) || 0) })} /></label>
+                <input placeholder="Jméno hosta" style={{ width: 110 }} value={r.firstName ?? ""} onChange={(e) => setRoom(i, { firstName: e.target.value })} />
+                <input placeholder="Příjmení" style={{ width: 110 }} value={r.lastName ?? ""} onChange={(e) => setRoom(i, { lastName: e.target.value })} />
+                {g.rooms.length > 1 && <button className="btn sm danger" onClick={() => setG((s) => ({ ...s, rooms: s.rooms.filter((_, idx) => idx !== i) }))}>✕</button>}
+              </div>
+            ))}
+            <button className="btn ghost sm" onClick={() => setG((s) => ({ ...s, rooms: [...s.rooms, blankGroupRoom()] }))}>+ Přidat pokoj</button>
+          </div>
+          <button className="btn" disabled={busy} onClick={create}>{busy ? "Vytvářím…" : `Vytvořit skupinu (${g.rooms.length} pok.)`}</button>
+        </div>
+      )}
+      <div className="panel">
+        <Table cols={["Kód", "Název", "Pokojů", "Termín", "Celkem", ""]} rows={data ?? []} empty="Žádné skupiny"
+          render={(gr: GroupListItem) => (
+            <tr key={gr.id}>
+              <td className="muted">{gr.code}</td>
+              <td>{gr.name}</td>
+              <td>{gr.rooms}</td>
+              <td>{gr.from ? `${d(gr.from)} → ${d(gr.to!)}` : "—"}</td>
+              <td>{money(gr.total)}</td>
+              <td className="right"><button className="btn sm ghost" onClick={() => setGid(gr.id)}>Detail</button></td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onBack: () => void }) {
+  const confirm = useConfirm();
+  const { data, error, reload } = useAsync<GroupDetail>(() => api.group(id), [id]);
+  const [memberId, setMemberId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [msgErr, setMsgErr] = useState(false);
+  const [results, setResults] = useState<BulkResult[] | null>(null);
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const act = async (fn: () => Promise<unknown>, label: string) => {
+    setBusy(true); setMsg(""); setResults(null);
+    try { const r = await fn(); if (Array.isArray(r)) setResults(r as BulkResult[]); setMsg(label); setMsgErr(false); reload(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setMsgErr(true); }
+    finally { setBusy(false); }
+  };
+  if (memberId) return <ReservationDetailView id={memberId} prop={prop} onBack={() => { setMemberId(null); reload(); }} />;
+  if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
+  if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  const bal = parseFloat(data.totals.balance);
+  return (
+    <>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{data.name} <span className="muted" style={{ fontSize: 15 }}>{data.code}</span></span></div>
+      {msg && <div className="error" style={msgErr ? undefined : { background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+      <div className="panel" style={{ padding: 16 }}>
+        <div className="toolbar">
+          <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
+          <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
+          <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id))); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+          <button className="btn danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Zrušit skupinu", message: <>Zrušit všechny pokoje skupiny <b>{data.name}</b>? (Odhlášené zůstanou.)</>, confirmLabel: "Zrušit vše", danger: true })) act(() => api.groupCancel(id), "Skupina zrušena."); }}>Zrušit vše</button>
+          <span style={{ flex: 1 }} />
+          <span className="muted">Celkem {money(data.totals.charges)} · zaplaceno {money(data.totals.paid)} · <b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{bal > 0 ? `zbývá ${money(bal)}` : "vyrovnáno"}</b></span>
+        </div>
+        {results && (
+          <div style={{ marginTop: 10 }}>
+            {results.map((r) => <div key={r.code} className="muted" style={{ fontSize: 13 }}>{r.ok ? "✓" : "✗"} {r.code}{r.error ? ` — ${r.error}` : ""}</div>)}
+          </div>
+        )}
+      </div>
+      <div className="panel">
+        <Table cols={["Kód", "Host", "Jednotka", "Termín", "Stav", "Částka", "Zůstatek", ""]} rows={data.members} empty="Žádné pokoje"
+          render={(m: GroupMember) => (
+            <tr key={m.id}>
+              <td className="muted">{m.code}</td>
+              <td>{m.guestName}</td>
+              <td>{m.unit}</td>
+              <td>{d(m.checkInDate)} → {d(m.checkOutDate)}</td>
+              <td><Badge s={m.status} /></td>
+              <td>{money(m.totalAmount)}</td>
+              <td>{parseFloat(m.balance) > 0 ? <span style={{ color: "var(--warn)" }}>{money(m.balance)}</span> : <span className="muted">0</span>}</td>
+              <td className="right"><button className="btn sm ghost" onClick={() => setMemberId(m.id)}>Detail</button></td>
+            </tr>
+          )} />
+      </div>
+      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
+    </>
+  );
+}
+
 // ── CRM: Profily hostů ───────────────────────────────────────
 function GuestsView({ selId }: { selId: string }) {
   const [q, setQ] = useState("");
@@ -1524,6 +1669,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
           <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>
+          {r.group ? <div className="kvline"><span className="muted">Skupina</span><span><span className="chip">👥 {r.group.name}</span> <span className="muted">{r.group.code}</span></span></div> : null}
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
         </div></div>

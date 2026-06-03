@@ -31,6 +31,7 @@ import * as mailer from "./mailer";
 import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, syncProperty, startIcalScheduler, stopIcalScheduler } from "./ical";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import * as guests from "./guests";
+import * as groups from "./groups";
 import { createToken, readToken, verifyPassword } from "./auth";
 
 export const app = express();
@@ -396,6 +397,21 @@ adminRouter.patch("/guests/:id", h((req, res) => guests.updateGuestCrm(req.param
 adminRouter.post("/guests/:id/merge", h((req, res) => guests.mergeGuests(req.params.id, z.object({ sourceId: z.string().uuid() }).parse(req.body).sourceId, [pid(res)])));
 adminRouter.delete("/guests/:id", h((req, res) => guests.deleteGuest(req.params.id)));
 adminRouter.get("/reviews", h((_req, res) => guests.listReviews(pid(res))));
+// Skupinové / vícepokojové rezervace
+const groupRoom = z.object({ roomTypeId: z.string().uuid(), adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(), firstName: z.string().optional(), lastName: z.string().optional() });
+adminRouter.get("/groups", h((_req, res) => groups.listGroups(pid(res))));
+adminRouter.get("/groups/:id", h((req, res) => groups.getGroup(pid(res), req.params.id)));
+adminRouter.post("/groups", h((req, res) => {
+  const b = z.object({
+    name: z.string().min(1), note: z.string().optional(), from: dateStr, to: dateStr,
+    organizer: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }),
+    rooms: z.array(groupRoom).min(1),
+  }).parse(req.body);
+  return groups.createGroup(pid(res), { ...b, from: new Date(b.from), to: new Date(b.to) });
+}));
+adminRouter.post("/groups/:id/checkin", h((req, res) => groups.checkInGroup(pid(res), req.params.id)));
+adminRouter.post("/groups/:id/checkout", h((req, res) => groups.checkOutGroup(pid(res), req.params.id)));
+adminRouter.post("/groups/:id/cancel", h((req, res) => groups.cancelGroup(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 

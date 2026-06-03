@@ -38,6 +38,11 @@ export type GuestStay = { id: string; code: string; propertyName: string; roomTy
 export type GuestProfile = { guest: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; language: string | null; address: string | null; documentType: string | null; documentNumber: string | null; vip: boolean; preferences: string | null; marketingConsent: boolean; createdAt: string }; stays: GuestStay[] };
 export type GuestPatch = { firstName?: string; lastName?: string; email?: string; phone?: string; language?: string; address?: string; documentType?: string; documentNumber?: string; vip?: boolean; preferences?: string; marketingConsent?: boolean };
 export type ReviewItem = { id: string; nps: number; comment: string | null; createdAt: string; code: string; checkOutDate: string; guestName: string };
+export type GroupListItem = { id: string; code: string; name: string; note: string | null; createdAt: string; rooms: number; total: number; from: string | null; to: string | null };
+export type GroupMember = { id: string; code: string; status: string; guestName: string; unit: string; roomType: string | null; checkInDate: string; checkOutDate: string; totalAmount: Money; balance: Money };
+export type GroupDetail = { id: string; code: string; name: string; note: string | null; createdAt: string; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money } };
+export type GroupRoomInput = { roomTypeId: string; adults: number; children?: number; childAges?: number[]; firstName?: string; lastName?: string };
+export type BulkResult = { code: string; ok: boolean; error?: string };
 export type ReviewsData = { summary: { count: number; avg: number | null; nps: number | null; promoters: number; passives: number; detractors: number }; reviews: ReviewItem[] };
 export type RoomType = { id: string; name: string; description: string | null; capacityAdults: number; capacityChildren: number; basePrice: Money; weeklyPrice: Money | null; monthlyPrice: Money | null; amenities: string[]; _count?: { rooms: number } };
 export type Bed = { id: string; label: string; status: string; room?: { number: string; roomType?: RoomType } };
@@ -119,7 +124,7 @@ export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null; note: string | null;
   onlineCheckinAt: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
-  previousStays?: number; review?: GuestReview | null;
+  previousStays?: number; review?: GuestReview | null; group?: { id: string; code: string; name: string } | null;
 };
 export type Invoice = {
   number: string; property: Property; reservation: { code: string; checkInDate: string; checkOutDate: string; nights: number };
@@ -227,6 +232,12 @@ export const api = {
   mergeGuests: (targetId: string, sourceId: string) => req(`/admin/guests/${targetId}/merge`, { method: "POST", body: JSON.stringify({ sourceId }) }),
   deleteGuest: (id: string) => req(`/admin/guests/${id}`, { method: "DELETE" }),
   reviews: () => req<ReviewsData>(`/admin/reviews`),
+  groups: () => req<GroupListItem[]>(`/admin/groups`),
+  group: (id: string) => req<GroupDetail>(`/admin/groups/${id}`),
+  createGroup: (b: { name: string; note?: string; from: string; to: string; organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string }; rooms: GroupRoomInput[] }) => req<GroupDetail>(`/admin/groups`, { method: "POST", body: JSON.stringify(b) }),
+  groupCheckin: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkin`, { method: "POST" }),
+  groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
+  groupCancel: (id: string) => req<{ ok: boolean; count: number }>(`/admin/groups/${id}/cancel`, { method: "POST" }),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),

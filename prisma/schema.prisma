@@ -93,6 +93,7 @@ enum ReservationSource {
   booking_com
   manual
   ical
+  group
 }
 
 enum PaymentType {
@@ -203,6 +204,7 @@ model Property {
   serviceItems  ServiceItem[]
   icalFeeds     IcalFeed[]
   reviews       GuestReview[]
+  reservationGroups ReservationGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -406,6 +408,10 @@ model Reservation {
   onlineCheckinAt DateTime? // host dokončil online check-in (vyplnil registrační údaje); recepce finalizuje příjezd
   externalRef     String?   // blokace z externího iCal feedu: "<feedId>:<UID>" (pro dedup při synchronizaci)
 
+  // Skupinová / vícepokojová rezervace — víc pokojů (firma, zájezd, svatba) pod jednou skupinou.
+  group   ReservationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId String?
+
   reservationGuests   ReservationGuest[]
   payments            Payment[]
   charges             Charge[]
@@ -421,6 +427,26 @@ model Reservation {
   @@index([propertyId, checkInDate, checkOutDate])
   @@index([propertyId, status])
   @@index([externalRef])
+  @@index([groupId])
+}
+
+/// Skupinová rezervace — blok více pokojů/jednotek pod jedním kontaktem
+/// (firma, zájezd, svatba). Každý pokoj je samostatná Reservation se svým
+/// check-inem a účtem; skupina je spojuje pro společný přehled a akce.
+model ReservationGroup {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  name       String
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId String
+  note       String?
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
 }
 
 /// Externí iCal feed (Airbnb/Booking/…) — synchronizuje obsazenost do blokujících rezervací.
