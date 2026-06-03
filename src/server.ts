@@ -697,9 +697,9 @@ staffRouter.post("/requests/:id/photos", h(async (req, res) => {
 // Ceník služeb + naúčtování praní/žehlení/minibaru na účet hosta (z požadavku)
 staffRouter.get("/service-items", h((_req, res) => admin.listServiceItems(pid(res))));
 staffRouter.post("/requests/:id/charge", h(async (req, res) => {
-  const b = z.object({ serviceItemId: z.string().uuid(), quantity: z.number().positive() }).parse(req.body);
+  const b = z.object({ serviceItemId: z.string().uuid(), quantity: z.number().positive(), markDone: z.boolean().optional() }).parse(req.body);
   const charge = await admin.chargeFromRequest(pid(res), req.params.id, b.serviceItemId, b.quantity);
-  await service.updateStatus(req.params.id, ServiceStatus.done, undefined, res.locals.user.id); // po naúčtování označit hotové
+  if (b.markDone) await service.updateStatus(req.params.id, ServiceStatus.done, undefined, res.locals.user.id); // volitelně označit hotové
   return charge;
 }));
 // Pokoje + přepnutí stavu (úklid odbavuje z telefonu)

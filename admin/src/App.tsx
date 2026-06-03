@@ -3011,13 +3011,14 @@ function BillRequest({ reqId, items, onDone }: { reqId: string; items: ServiceIt
   const [open, setOpen] = useState(false);
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("1");
+  const [markDone, setMarkDone] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const act = items.filter((i) => i.active);
   const submit = async () => {
     if (!itemId) { setErr("Vyber položku."); return; }
     setBusy(true); setErr("");
-    try { await api.staffChargeRequest(reqId, { serviceItemId: itemId, quantity: Number(qty.replace(",", ".")) || 1 }); setOpen(false); setItemId(""); setQty("1"); onDone(); }
+    try { await api.staffChargeRequest(reqId, { serviceItemId: itemId, quantity: Number(qty.replace(",", ".")) || 1, markDone }); setOpen(false); setItemId(""); setQty("1"); onDone(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Nepodařilo se naúčtovat."); }
     finally { setBusy(false); }
   };
@@ -3029,6 +3030,7 @@ function BillRequest({ reqId, items, onDone }: { reqId: string; items: ServiceIt
         {act.map((i) => <option key={i.id} value={i.id}>{i.name} — {money(i.price)}</option>)}
       </select>
       <input type="number" min={1} style={{ width: 56 }} value={qty} onChange={(e) => setQty(e.target.value)} title="počet" />
+      <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={markDone} onChange={(e) => setMarkDone(e.target.checked)} /> a označit hotové</label>
       <button className="btn sm" disabled={busy} onClick={submit}>Naúčtovat</button>
       <button className="btn sm ghost" onClick={() => { setOpen(false); setErr(""); }}>✕</button>
       {err && <span className="muted" style={{ color: "var(--danger)" }}>{err}</span>}
