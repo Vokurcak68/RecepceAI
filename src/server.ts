@@ -315,6 +315,15 @@ adminRouter.use(propertyScope);
 adminRouter.get("/dashboard", h((req, res) => admin.dashboard(pid(res), req.query.date ? new Date(String(req.query.date)) : new Date())));
 adminRouter.get("/occupancy", h((_req, res) => admin.occupancy(pid(res))));
 adminRouter.get("/room-board", h((_req, res) => admin.roomBoard(pid(res))));
+adminRouter.get("/rooms/:id/detail", h((req, res) => admin.roomDetail(pid(res), req.params.id)));
+adminRouter.get("/rooms/:id/unassigned", h((req, res) => admin.unassignedForRoom(pid(res), req.params.id)));
+adminRouter.get("/reservations/:id/room-candidates", h((req, res) => admin.roomMoveCandidates(pid(res), req.params.id)));
+adminRouter.post("/rooms/:id/request", h(async (req, res) => {
+  const room = await prisma.room.findFirst({ where: { id: req.params.id, propertyId: pid(res) }, select: { id: true } });
+  if (!room) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const b = z.object({ type: z.nativeEnum(ServiceType), description: z.string().optional() }).parse(req.body);
+  return service.createRequest({ propertyId: pid(res), roomId: req.params.id, type: b.type, description: b.description, fromGuest: false });
+}));
 
 // Hosté na pokoji (spolubydlící) — vč. adresy a dokladu, editace
 const guestBody = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), documentType: z.nativeEnum(DocumentType).nullable().optional(), documentNumber: z.string().optional() });

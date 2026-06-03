@@ -175,6 +175,10 @@ export const api = {
 
   rooms: () => req<Room[]>(`/admin/rooms`),
   roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board`),
+  roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail`),
+  roomCandidates: (reservationId: string) => req<RoomCandidate[]>(`/admin/reservations/${reservationId}/room-candidates`),
+  roomUnassigned: (id: string) => req<UnassignedRes[]>(`/admin/rooms/${id}/unassigned`),
+  createRoomRequest: (id: string, b: { type: string; description?: string }) => req(`/admin/rooms/${id}/request`, { method: "POST", body: JSON.stringify(b) }),
   createRoom: (b: unknown) => req<Room>(`/admin/rooms`, { method: "POST", body: JSON.stringify(b) }),
   updateRoom: (id: string, b: unknown) => req<Room>(`/admin/rooms/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   cleanRoom: (id: string) => req(`/admin/rooms/${id}/clean`, { method: "POST" }),
@@ -337,6 +341,11 @@ export type ServiceRequest = {
 };
 export type StaffRoom = { id: string; number: string; status: string; roomType?: { name: string } | null };
 export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
+export type RoomResItem = { id: string; code: string; guestName: string; status: string; checkInDate: string; checkOutDate: string };
+export type RoomReqItem = { id: string; type: string; domain: string; status: string; description: string | null; createdAt: string };
+export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; reservations: RoomResItem[]; requests: RoomReqItem[] };
+export type RoomCandidate = { id: string; number: string; floor: number; free: boolean; current: boolean };
+export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };
 export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Čisto", dirty: "Špinavo", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };
 export const SERVICE_ICON: Record<string, string> = { cleaning: "🧹", maintenance: "🔧", laundry: "🧺", ironing: "👔", minibar: "🥤", other: "📌" };

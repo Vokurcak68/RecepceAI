@@ -9,7 +9,7 @@ import {
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
-  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem,
+  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -891,25 +891,20 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 }
 
 // ── Rooms ────────────────────────────────────────────────────
-// Ucelený přehled pokojů („room rack") — stav úklidu, obsazenost, dnešní
-// příjezd/odjezd, otevřené požadavky; proklik do rezervace. Vše na jednom místě.
+// Přehled pokojů = čistý seznam výsledných stavů; klik na řádek → detail pokoje
+// (centrální ovládání: stav, přehazování hostů, rezervace, požadavky, vlastnosti).
 const ROOM_STATES: [string, string][] = [["clean", "Čisto"], ["dirty", "Špinavo"], ["inspected", "Kontrola"], ["out_of_service", "Mimo"]];
+const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{ROOM_STATUS_LABEL[s] ?? s}</span>;
+
 function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<RoomBoardItem[]>(() => api.roomBoard(), [selId]);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [busy, setBusy] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
-  const set = async (id: string, s: string) => { setBusy(id); try { await api.updateRoom(id, { status: s }); reload(); } finally { setBusy(""); } };
-  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
+  if (openId) return <RoomDetailView roomId={openId} prop={prop} onBack={() => { setOpenId(null); reload(); }} />;
   const rooms = data ?? [];
-  const counts = {
-    occupied: rooms.filter((r) => r.occupant).length, free: rooms.filter((r) => !r.occupant).length,
-    dirty: rooms.filter((r) => r.status === "dirty").length, maint: rooms.filter((r) => r.openMaintenance > 0).length,
-    arrivals: rooms.filter((r) => r.arrival).length,
-  };
-  const match = (r: RoomBoardItem) => filter === "all" ? true : filter === "occupied" ? !!r.occupant : filter === "free" ? !r.occupant : filter === "dirty" ? r.status === "dirty" : filter === "arrivals" ? !!r.arrival : filter === "maint" ? r.openMaintenance > 0 : true;
+  const counts = { occupied: rooms.filter((r) => r.occupant).length, free: rooms.filter((r) => !r.occupant).length, arrivals: rooms.filter((r) => r.arrival).length, dirty: rooms.filter((r) => r.status === "dirty").length, maint: rooms.filter((r) => r.openMaintenance > 0).length };
+  const match = (r: RoomBoardItem) => filter === "all" ? true : filter === "occupied" ? !!r.occupant : filter === "free" ? !r.occupant : filter === "arrivals" ? !!r.arrival : filter === "dirty" ? r.status === "dirty" : filter === "maint" ? r.openMaintenance > 0 : true;
   const shown = rooms.filter(match);
-  const floors = [...new Set(shown.map((r) => r.floor))].sort((a, b) => a - b);
   const FILTERS: [string, string][] = [["all", `Vše (${rooms.length})`], ["occupied", `Obsazené (${counts.occupied})`], ["free", `Volné (${counts.free})`], ["arrivals", `Příjezdy dnes (${counts.arrivals})`], ["dirty", `Špinavé (${counts.dirty})`], ["maint", `Údržba (${counts.maint})`]];
   return (
     <>
@@ -918,32 +913,129 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
       <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
         {FILTERS.map(([v, l]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l}</button>)}
       </div>
-      {rooms.length === 0 ? <div className="panel muted" style={{ padding: 20 }}>Žádné pokoje (provozovna na lůžka?).</div> : floors.map((fl) => (
-        <div key={fl} style={{ marginBottom: 16 }}>
-          <div className="muted" style={{ fontWeight: 700, margin: "2px 0 8px" }}>{fl}. patro</div>
-          <div className="staff-rooms" style={{ padding: 0, gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
-            {shown.filter((r) => r.floor === fl).map((r) => (
-              <div key={r.id} className={`room-card rs-${r.status}`}>
-                <div className="room-h"><b>Pokoj {r.number}</b> <span className="muted">{r.roomType ?? ""}</span></div>
-                <div className={`room-status rs-${r.status}`}>{ROOM_STATUS_LABEL[r.status] ?? r.status}</div>
-                {r.occupant ? (
-                  <button className="rb-line rb-occ" onClick={() => setDetailId(r.occupant!.reservationId)}>👤 {r.occupant.name}<span className="muted"> · do {d(r.occupant.checkOutDate)}{r.occupant.departsToday ? " · odjíždí dnes" : ""}</span></button>
-                ) : <div className="rb-line muted">Volný</div>}
-                {r.arrival && <button className="rb-line rb-arr" onClick={() => setDetailId(r.arrival!.reservationId)}>→ Příjezd dnes: {r.arrival.name}</button>}
-                {(r.openHousekeeping > 0 || r.openMaintenance > 0) && (
-                  <div className="rb-badges">
-                    {r.openHousekeeping > 0 && <span className="rb-badge hk">🧹 {r.openHousekeeping}</span>}
-                    {r.openMaintenance > 0 && <span className="rb-badge mt">🔧 {r.openMaintenance}</span>}
-                  </div>
-                )}
-                <div className="req-actions">
-                  {ROOM_STATES.map(([s, l]) => <button key={s} className={`btn sm ${r.status === s ? "" : "ghost"}`} disabled={busy === r.id || r.status === s} onClick={() => set(r.id, s)}>{l}</button>)}
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="panel">
+        <Table cols={["Pokoj", "Typ", "Stav", "Obsazenost", "Dnes", "Požadavky"]} rows={shown} empty="Žádné pokoje"
+          render={(r: RoomBoardItem) => (
+            <tr key={r.id} className="row-click" onClick={() => setOpenId(r.id)}>
+              <td><b>Pokoj {r.number}</b> <span className="muted">· {r.floor}.p</span></td>
+              <td className="muted">{r.roomType ?? "—"}</td>
+              <td><RoomPill s={r.status} /></td>
+              <td>{r.occupant ? <>👤 {r.occupant.name} <span className="muted">· do {d(r.occupant.checkOutDate)}</span></> : <span className="muted">Volný</span>}</td>
+              <td className="muted">{[r.occupant?.departsToday ? "🔁 odjezd dnes" : "", r.arrival ? `→ příjezd: ${r.arrival.name}` : ""].filter(Boolean).join(" · ") || "—"}</td>
+              <td>{r.openHousekeeping > 0 && <span className="rb-badge hk">🧹 {r.openHousekeeping}</span>}{r.openHousekeeping > 0 && r.openMaintenance > 0 ? " " : ""}{r.openMaintenance > 0 && <span className="rb-badge mt">🔧 {r.openMaintenance}</span>}{!r.openHousekeeping && !r.openMaintenance ? <span className="muted">—</span> : null}</td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+// Detail pokoje — centrální ovládání provozu pokoje.
+function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Property; onBack: () => void }) {
+  const { data, error, reload } = useAsync<RoomDetail>(() => api.roomDetail(roomId), [roomId]);
+  const [resId, setResId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [moveFor, setMoveFor] = useState<string | null>(null);
+  const [cands, setCands] = useState<RoomCandidate[] | null>(null);
+  const [unassigned, setUnassigned] = useState<UnassignedRes[] | null>(null);
+  const [rf, setRf] = useState({ type: "cleaning", description: "" });
+  const [ef, setEf] = useState<{ number: string; floor: string; lockType: string; notes: string } | null>(null);
+  useEffect(() => { if (data) setEf({ number: data.room.number, floor: String(data.room.floor), lockType: data.room.lockType, notes: data.room.notes }); }, [data?.room.id]); // eslint-disable-line
+
+  const run = async (fn: () => Promise<unknown>, ok?: string) => { setBusy(true); setMsg(""); try { await fn(); if (ok) setMsg(ok); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const setStatus = (s: string) => run(() => api.updateRoom(roomId, { status: s }));
+  const openMove = async (rid: string) => { setMoveFor(rid); setCands(null); try { setCands(await api.roomCandidates(rid)); } catch { /* */ } };
+  const doMove = (rid: string, targetId: string) => run(async () => { await api.assignUnit(rid, targetId); setMoveFor(null); }, "Host přemístěn.");
+  const openPlace = async () => { try { setUnassigned(await api.roomUnassigned(roomId)); } catch { /* */ } };
+  const doPlace = (rid: string) => run(async () => { await api.assignUnit(rid, roomId); setUnassigned(null); }, "Rezervace umístěna na pokoj.");
+  const addReq = () => run(async () => { await api.createRoomRequest(roomId, { type: rf.type, description: rf.description || undefined }); setRf({ type: "cleaning", description: "" }); }, "Požadavek vytvořen.");
+  const saveRoom = () => { if (ef) run(() => api.updateRoom(roomId, { number: ef.number, floor: Number(ef.floor), lockType: ef.lockType, notes: ef.notes }), "Pokoj uložen."); };
+
+  if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
+  if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
+  if (!data || !ef) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  const room = data.room;
+  const occ = data.occupantId ? data.reservations.find((r) => r.id === data.occupantId) : null;
+  return (
+    <>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Pokoj {room.number} <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>· {room.roomType.name} · {room.floor}. patro</span></span> <RoomPill s={room.status} /></div>
+      {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
+
+      <div className="grid2">
+        <div className="panel"><h3>Stav úklidu</h3><div style={{ padding: 16 }}>
+          <div className="req-actions">{ROOM_STATES.map(([s, l]) => <button key={s} className={`btn sm ${room.status === s ? "" : "ghost"}`} disabled={busy || room.status === s} onClick={() => setStatus(s)}>{l}</button>)}</div>
+        </div></div>
+        <div className="panel"><h3>Aktuální host</h3><div style={{ padding: 16 }}>
+          {occ ? <>
+            <div className="kvline"><span className="muted">Host</span><b>{occ.guestName}</b></div>
+            <div className="kvline"><span className="muted">Pobyt</span><span>{d(occ.checkInDate)} → {d(occ.checkOutDate)}</span></div>
+            <div className="kvline"><span className="muted">Zůstatek</span><b style={{ color: Number(data.occupantBalance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(data.occupantBalance ?? 0)}</b></div>
+            <div className="req-actions" style={{ marginTop: 10 }}>
+              <button className="btn sm" onClick={() => setResId(occ.id)}>Detail rezervace</button>
+              <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit na jiný pokoj</button>
+            </div>
+          </> : <>
+            <div className="muted">Pokoj není obsazen.</div>
+            <div style={{ marginTop: 10 }}><button className="btn sm" disabled={busy} onClick={openPlace}>Umístit hosta sem</button></div>
+          </>}
+        </div></div>
+      </div>
+
+      {moveFor && (
+        <div className="panel"><h3>Přemístit na pokoj <button className="linkx" style={{ float: "right" }} onClick={() => setMoveFor(null)}>zavřít</button></h3><div style={{ padding: 16 }}>
+          {!cands ? <div className="muted">Načítám…</div> : (
+            <div className="req-actions" style={{ flexWrap: "wrap" }}>
+              {cands.filter((c) => !c.current).length === 0 ? <span className="muted">Žádný jiný pokoj tohoto typu.</span> :
+                cands.filter((c) => !c.current).map((c) => <button key={c.id} className={`btn sm ${c.free ? "" : "ghost"}`} disabled={busy || !c.free} title={c.free ? "" : "obsazeno v termínu"} onClick={() => doMove(moveFor, c.id)}>Pokoj {c.number}{c.free ? "" : " (obsazen)"}</button>)}
+            </div>
+          )}
+        </div></div>
+      )}
+
+      {unassigned && (
+        <div className="panel"><h3>Umístit rezervaci na pokoj <button className="linkx" style={{ float: "right" }} onClick={() => setUnassigned(null)}>zavřít</button></h3>
+          {unassigned.length === 0 ? <div style={{ padding: 16 }} className="muted">Žádné nepřiřazené rezervace tohoto typu.</div> :
+            <Table cols={["Kód", "Host", "Termín", ""]} rows={unassigned} empty="—" render={(u: UnassignedRes) => (
+              <tr key={u.id}><td className="muted">{u.code}</td><td>{u.guestName}</td><td>{d(u.checkInDate)} → {d(u.checkOutDate)}</td><td className="right"><button className="btn sm" disabled={busy} onClick={() => doPlace(u.id)}>Umístit</button></td></tr>
+            )} />}
         </div>
-      ))}
+      )}
+
+      <div className="panel"><h3>Rezervace na pokoji</h3>
+        <Table cols={["Kód", "Host", "Termín", "Stav", ""]} rows={data.reservations} empty="Žádné rezervace"
+          render={(r: RoomResItem) => (
+            <tr key={r.id}>
+              <td className="muted">{r.code}</td><td>{r.guestName}</td><td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td><td><Badge s={r.status} /></td>
+              <td className="right" style={{ whiteSpace: "nowrap" }}>
+                <button className="btn sm ghost" onClick={() => setResId(r.id)}>Detail</button>{" "}
+                {["confirmed", "checked_in"].includes(r.status) && <button className="btn sm ghost" disabled={busy} onClick={() => openMove(r.id)}>Přemístit</button>}
+              </td>
+            </tr>
+          )} />
+      </div>
+
+      <div className="panel"><h3>Požadavky na pokoji</h3><div style={{ padding: 16 }}>
+        <div className="toolbar">
+          <select value={rf.type} onChange={(e) => setRf({ ...rf, type: e.target.value })}><option value="cleaning">Úklid</option><option value="maintenance">Údržba</option><option value="laundry">Praní</option><option value="ironing">Žehlení</option><option value="minibar">Minibar</option><option value="other">Jiné</option></select>
+          <input placeholder="Popis (nepovinné)" style={{ flex: 1, minWidth: 160 }} value={rf.description} onChange={(e) => setRf({ ...rf, description: e.target.value })} />
+          <button className="btn" disabled={busy} onClick={addReq}>+ Vytvořit</button>
+        </div>
+        {data.requests.length === 0 ? <div className="muted" style={{ marginTop: 8 }}>Žádné otevřené požadavky.</div> :
+          <Table cols={["Typ", "Fronta", "Popis", "Stav"]} rows={data.requests} empty="—" render={(q: RoomReqItem) => (
+            <tr key={q.id}><td>{SERVICE_ICON[q.type]} {SERVICE_LABEL[q.type]}</td><td className="muted">{q.domain === "maintenance" ? "údržba" : "úklid"}</td><td className="muted">{q.description ?? "—"}</td><td><Badge s={q.status} /></td></tr>
+          )} />}
+      </div></div>
+
+      <div className="panel"><h3>Vlastnosti pokoje</h3><div style={{ padding: 16 }}>
+        <div className="toolbar" style={{ flexWrap: "wrap" }}>
+          <label className="row">Číslo <input style={{ width: 90 }} value={ef.number} onChange={(e) => setEf({ ...ef, number: e.target.value })} /></label>
+          <label className="row">Patro <input type="number" style={{ width: 70 }} value={ef.floor} onChange={(e) => setEf({ ...ef, floor: e.target.value })} /></label>
+          <label className="row">Zámek <select value={ef.lockType} onChange={(e) => setEf({ ...ef, lockType: e.target.value })}><option value="physical_key">🔑 klíč</option><option value="smart_code">🔢 kód</option></select></label>
+        </div>
+        <textarea style={{ width: "100%", minHeight: 60, resize: "vertical", marginTop: 8 }} placeholder="Poznámka k pokoji…" value={ef.notes} onChange={(e) => setEf({ ...ef, notes: e.target.value })} />
+        <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={saveRoom}>Uložit pokoj</button></div>
+      </div></div>
     </>
   );
 }

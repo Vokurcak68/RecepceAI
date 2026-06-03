@@ -192,6 +192,13 @@ button.rb-line:hover { text-decoration: underline; }
 .rb-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 .rb-badge.hk { background: #fff5e6; color: var(--warn); }
 .rb-badge.mt { background: #fdeceb; color: var(--danger); }
+tr.row-click { cursor: pointer; }
+tr.row-click:hover td { background: #f3f6ff; }
+.rs-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.rs-pill.rs-clean { background: #e6f7ee; color: var(--ok); }
+.rs-pill.rs-dirty { background: #fff5e6; color: var(--warn); }
+.rs-pill.rs-inspected { background: #eef2ff; color: var(--accent); }
+.rs-pill.rs-out_of_service { background: #fdeceb; color: var(--danger); }
 
 /* Mobil: větší dotykové prvky pro personál na telefonu */
 @media (max-width: 640px) {

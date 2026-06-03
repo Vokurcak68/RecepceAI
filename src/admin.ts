@@ -238,6 +238,50 @@ export async function roomBoard(propertyId: string) {
   });
 }
 
+/** Detail pokoje — vše pro centrální ovládání: rezervace na pokoji, aktuální host
+ * (+ zůstatek), otevřené požadavky. */
+export async function roomDetail(propertyId: string, roomId: string) {
+  const room = await prisma.room.findFirst({ where: { id: roomId, propertyId }, include: { roomType: { select: { id: true, name: true } } } });
+  if (!room) throw NOT_FOUND();
+  const since = addDays(toDateOnly(new Date()), -60);
+  const reservations = await prisma.reservation.findMany({
+    where: { propertyId, roomId, status: { not: ReservationStatus.cancelled }, checkOutDate: { gte: since } },
+    include: { primaryGuest: { select: { firstName: true, lastName: true } } },
+    orderBy: { checkInDate: "asc" }, take: 50,
+  });
+  const requests = await prisma.serviceRequest.findMany({ where: { propertyId, roomId, status: { in: ["open", "in_progress"] } }, orderBy: { createdAt: "desc" } });
+  const occ = reservations.find((r) => r.status === ReservationStatus.checked_in) ?? null;
+  const occupantBalance = occ ? (await computeFolio(occ.id)).balance.toFixed(2) : null;
+  return {
+    room: { id: room.id, number: room.number, floor: room.floor, status: room.status, lockType: room.lockType, notes: room.notes ?? "", roomType: { id: room.roomType.id, name: room.roomType.name } },
+    occupantId: occ?.id ?? null, occupantBalance,
+    reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate })),
+    requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, createdAt: q.createdAt })),
+  };
+}
+
+/** Pokoje téhož typu vhodné pro přesun rezervace (volné = bez kolize v termínu). */
+export async function roomMoveCandidates(propertyId: string, reservationId: string) {
+  const res = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId }, select: { roomTypeId: true, checkInDate: true, checkOutDate: true, roomId: true } });
+  if (!res) throw NOT_FOUND();
+  const rooms = await prisma.room.findMany({ where: { propertyId, roomTypeId: res.roomTypeId, status: { not: "out_of_service" } }, orderBy: [{ floor: "asc" }, { number: "asc" }], select: { id: true, number: true, floor: true } });
+  const clashes = await prisma.reservation.findMany({ where: { id: { not: reservationId }, roomId: { not: null }, roomTypeId: res.roomTypeId, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { roomId: true } });
+  const taken = new Set(clashes.map((c) => c.roomId));
+  return rooms.map((r) => ({ id: r.id, number: r.number, floor: r.floor, free: !taken.has(r.id), current: r.id === res.roomId }));
+}
+
+/** Nepřiřazené (confirmed bez pokoje) rezervace téhož typu — k umístění na tento pokoj. */
+export async function unassignedForRoom(propertyId: string, roomId: string) {
+  const room = await prisma.room.findFirst({ where: { id: roomId, propertyId }, select: { roomTypeId: true } });
+  if (!room) throw NOT_FOUND();
+  const today = toDateOnly(new Date());
+  const list = await prisma.reservation.findMany({
+    where: { propertyId, roomId: null, roomTypeId: room.roomTypeId, status: ReservationStatus.confirmed, checkOutDate: { gte: today } },
+    include: { primaryGuest: { select: { firstName: true, lastName: true } } }, orderBy: { checkInDate: "asc" }, take: 30,
+  });
+  return list.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate }));
+}
+
 // ── Hosté na pokoji (spolubydlící) ───────────────────────────
 export async function listReservationGuests(propertyId: string, id: string) {
   await assertInProperty(propertyId, id);
