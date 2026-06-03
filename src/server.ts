@@ -354,6 +354,10 @@ adminRouter.get("/tapechart", h((req, res) => {
   return tapeChart(pid(res), q.from ? new Date(q.from) : new Date(), q.days ?? 21);
 }));
 adminRouter.post("/reservations/:id/assign", h((req, res) => admin.assignUnit(pid(res), req.params.id, z.object({ unitId: z.string().uuid() }).parse(req.body).unitId)));
+adminRouter.get("/ubyport", h((req, res) => {
+  const q = z.object({ from: dateStr, to: dateStr, all: z.coerce.boolean().optional() }).parse(req.query);
+  return admin.ubyportData(pid(res), new Date(q.from), new Date(q.to), !!q.all);
+}));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 

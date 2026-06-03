@@ -8,7 +8,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -69,6 +69,7 @@ export function App() {
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
       { id: "book", label: "Kniha hostů" },
+      { id: "ubyport", label: "Cizinci (UBYPORT)" },
     ] },
     { label: "Finance", icon: "💰", items: [
       { id: "payments", label: "Úhrady" },
@@ -150,6 +151,7 @@ export function App() {
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
         {prop && tab === "calendar" && <CalendarView selId={selId} />}
         {prop && tab === "tapechart" && <TapeChartView selId={selId} prop={prop} />}
+        {prop && tab === "ubyport" && <UbyportView selId={selId} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
@@ -598,6 +600,59 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
             })}
             {data.units.length === 0 && <div className="muted" style={{ padding: 16 }}>Žádné pokoje — založ je v „Pokoje".</div>}
           </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function UbyportView({ selId }: { selId: string }) {
+  const [from, setFrom] = useState(() => todayIso().slice(0, 8) + "01");
+  const [to, setTo] = useState(todayIso());
+  const [all, setAll] = useState(false);
+  const { data, error } = useAsync<UbyportData>(() => api.ubyport(from, to, all), [selId, from, to, all]);
+  const dl = (name: string, content: string, type: string) => {
+    const u = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement("a"); a.href = u; a.download = name; a.click(); URL.revokeObjectURL(u);
+  };
+  const csv = () => {
+    if (!data) return;
+    const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const head = ["Jméno", "Datum narození", "Národnost", "Druh dokladu", "Číslo dokladu", "Vízum", "Adresa", "Účel pobytu", "Pobyt od", "Pobyt do"];
+    const lines = [head.map(esc).join(";")];
+    for (const e of data.entries) lines.push([e.jmeno, d(e.datumNarozeni), e.narodnost, DOCTYPE_LABEL[e.druhDokladu] ?? e.druhDokladu, e.cisloDokladu, e.vizum, e.adresa, e.ucelPobytu, d(e.pobytOd), d(e.pobytDo)].map(esc).join(";"));
+    dl(`ubyport-${from}_${to}.csv`, "﻿" + lines.join("\r\n"), "text/csv;charset=utf-8");
+  };
+  const xml = () => {
+    if (!data) return;
+    const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const u = data.ubytovatel;
+    const body = data.entries.map((e) => `  <Cizinec>\n    <Jmeno>${esc(e.jmeno)}</Jmeno>\n    <DatumNarozeni>${e.datumNarozeni.slice(0, 10)}</DatumNarozeni>\n    <Narodnost>${esc(e.narodnost)}</Narodnost>\n    <DruhDokladu>${esc(e.druhDokladu)}</DruhDokladu>\n    <CisloDokladu>${esc(e.cisloDokladu)}</CisloDokladu>\n    <Vizum>${esc(e.vizum)}</Vizum>\n    <Adresa>${esc(e.adresa)}</Adresa>\n    <UcelPobytu>${esc(e.ucelPobytu)}</UcelPobytu>\n    <PobytOd>${e.pobytOd.slice(0, 10)}</PobytOd>\n    <PobytDo>${e.pobytDo.slice(0, 10)}</PobytDo>\n  </Cizinec>`).join("\n");
+    const doc = `<?xml version="1.0" encoding="UTF-8"?>\n<HlaseniUbytovatele od="${from}" do="${to}">\n  <Ubytovatel nazev="${esc(u.nazev)}" ico="${esc(u.ico)}" ulice="${esc(u.ulice)}" mesto="${esc(u.mesto)}"/>\n  <Cizinci>\n${body}\n  </Cizinci>\n</HlaseniUbytovatele>\n`;
+    dl(`ubyport-${from}_${to}.xml`, doc, "application/xml;charset=utf-8");
+  };
+  return (
+    <>
+      <div className="h1">Hlášení ubytovaných cizinců <span className="muted" style={{ fontSize: 15 }}>(podklad pro UBYPORT)</span></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar">
+        <label className="row">Pobyt od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="row">do <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label className="row"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> včetně tuzemců</label>
+        <button className="btn" disabled={!data || !data.entries.length} onClick={csv}>⬇ CSV</button>
+        <button className="btn ghost" disabled={!data || !data.entries.length} onClick={xml}>⬇ XML</button>
+      </div>
+      <div className="muted" style={{ marginBottom: 10 }}>Vybráni hosté s překryvem pobytu v období{all ? "" : " (jen cizinci — národnost ≠ ČR)"}. {data ? <b>{data.pocet} osob</b> : ""}. XML je podklad — před nahráním na UBYPORT ověř strukturu proti aktuálnímu XSD policie.</div>
+      {data && (
+        <div className="panel">
+          <Table cols={["Jméno", "Nar.", "Národnost", "Doklad", "Vízum", "Adresa", "Pobyt"]} rows={data.entries} empty="Žádní ubytovaní v období"
+            render={(e: UbyportData["entries"][number]) => (
+              <tr key={e.jmeno + e.pobytOd}>
+                <td><b>{e.jmeno}</b></td><td className="muted">{d(e.datumNarozeni)}</td><td>{e.narodnost}</td>
+                <td>{DOCTYPE_LABEL[e.druhDokladu] ?? e.druhDokladu} {e.cisloDokladu}</td><td className="muted">{e.vizum || "—"}</td>
+                <td className="muted">{e.adresa}</td><td className="muted">{d(e.pobytOd)}–{d(e.pobytDo)}</td>
+              </tr>
+            )} />
         </div>
       )}
     </>

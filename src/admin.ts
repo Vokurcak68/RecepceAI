@@ -126,6 +126,27 @@ export async function adminDeleteCharge(propertyId: string, chargeId: string) {
   return { ok: true };
 }
 
+// ── UBYPORT: hlášení ubytovaných cizinců (podklad pro Policii ČR) ─
+const isForeign = (nat: string) => { const n = (nat || "").toLowerCase().trim(); return !(n === "cz" || n.includes("česk") || n.includes("cesk") || n.includes("czech")); };
+
+export async function ubyportData(propertyId: string, from: Date, to: Date, all: boolean) {
+  const p = await prisma.property.findUniqueOrThrow({ where: { id: propertyId } });
+  const rows = await prisma.registrationEntry.findMany({
+    where: { reservation: { propertyId }, stayFrom: { lte: toDateOnly(to) }, stayTo: { gte: toDateOnly(from) } },
+    orderBy: [{ stayFrom: "asc" }, { fullName: "asc" }],
+  });
+  const filtered = all ? rows : rows.filter((r) => isForeign(r.nationality));
+  return {
+    ubytovatel: { nazev: p.name, ulice: p.street ?? "", mesto: p.city ?? "", ico: p.ico ?? "", dic: p.dic ?? "" },
+    pocet: filtered.length,
+    entries: filtered.map((r) => ({
+      jmeno: r.fullName, datumNarozeni: r.dateOfBirth, narodnost: r.nationality,
+      druhDokladu: r.documentType, cisloDokladu: r.documentNumber, vizum: r.visaNumber ?? "",
+      adresa: r.homeAddress, ucelPobytu: r.purposeOfStay ?? "", pobytOd: r.stayFrom, pobytDo: r.stayTo,
+    })),
+  };
+}
+
 // ── Přiřazení pokoje/lůžka rezervaci (tape chart) ────────────
 export async function assignUnit(propertyId: string, id: string, unitId: string) {
   await assertInProperty(propertyId, id);

@@ -52,6 +52,8 @@ export type OccupancyCalendar = { from: string; days: number; unit: "room" | "be
 export type TapeUnit = { id: string; label: string; roomTypeId: string };
 export type TapeRes = { id: string; code: string; guestName: string; status: string; roomTypeId: string; unitId: string | null; checkInDate: string; checkOutDate: string };
 export type TapeChart = { from: string; days: number; unit: "room" | "bed"; dates: string[]; types: { roomTypeId: string; name: string }[]; units: TapeUnit[]; reservations: TapeRes[] };
+export type UbyEntry = { jmeno: string; datumNarozeni: string; narodnost: string; druhDokladu: string; cisloDokladu: string; vizum: string; adresa: string; ucelPobytu: string; pobytOd: string; pobytDo: string };
+export type UbyportData = { ubytovatel: { nazev: string; ulice: string; mesto: string; ico: string; dic: string }; pocet: number; entries: UbyEntry[] };
 export type EmailLog = { id: string; type: string; recipient: string; subject: string; status: string; error: string | null; createdAt: string };
 export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace" };
 
@@ -203,6 +205,7 @@ export const api = {
   resGuests: (id: string) => req<ResGuest[]>(`/admin/reservations/${id}/guests`),
   calendar: (from?: string, days = 21) => req<OccupancyCalendar>(`/admin/calendar?days=${days}${from ? `&from=${from}` : ""}`),
   tapechart: (from?: string, days = 14) => req<TapeChart>(`/admin/tapechart?days=${days}${from ? `&from=${from}` : ""}`),
+  ubyport: (from: string, to: string, all = false) => req<UbyportData>(`/admin/ubyport?from=${from}&to=${to}${all ? "&all=1" : ""}`),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),
