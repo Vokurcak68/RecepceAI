@@ -224,6 +224,8 @@ export const api = {
   searchGuests: (q: string) => req<GuestListItem[]>(`/admin/guests?q=${encodeURIComponent(q)}`),
   guestProfile: (id: string) => req<GuestProfile>(`/admin/guests/${id}`),
   updateGuest: (id: string, b: GuestPatch) => req(`/admin/guests/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  mergeGuests: (targetId: string, sourceId: string) => req(`/admin/guests/${targetId}/merge`, { method: "POST", body: JSON.stringify({ sourceId }) }),
+  deleteGuest: (id: string) => req(`/admin/guests/${id}`, { method: "DELETE" }),
   reviews: () => req<ReviewsData>(`/admin/reviews`),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),

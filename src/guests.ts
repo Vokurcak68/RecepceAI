@@ -127,6 +127,60 @@ export async function updateGuestCrm(
   });
 }
 
+/** Sloučí duplicitní záznam: pobyty/registrace/hodnocení zdroje se přesunou do
+ * cílového hosta, prázdná pole cíle se doplní ze zdroje, zdroj se smaže. */
+export async function mergeGuests(targetId: string, sourceId: string, propertyIds: string[]) {
+  if (targetId === sourceId) throw new Error("Nelze sloučit záznam sám se sebou.");
+  const [target, source] = await Promise.all([
+    prisma.guest.findUnique({ where: { id: targetId } }),
+    prisma.guest.findUnique({ where: { id: sourceId } }),
+  ]);
+  if (!target || !source) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const belongs = await prisma.reservation.findFirst({ where: { primaryGuestId: targetId, propertyId: { in: propertyIds } }, select: { id: true } });
+  if (!belongs) throw Object.assign(new Error("not_found"), { code: "P2025" });
+
+  await prisma.$transaction(async (tx) => {
+    // doplň prázdná pole cíle ze zdroje (cíl má přednost)
+    await tx.guest.update({ where: { id: targetId }, data: {
+      email: target.email ?? source.email, phone: target.phone ?? source.phone,
+      language: target.language ?? source.language, address: target.address ?? source.address,
+      documentType: target.documentType ?? source.documentType, documentNumber: target.documentNumber ?? source.documentNumber,
+      preferences: target.preferences || source.preferences || null,
+      vip: target.vip || source.vip, marketingConsent: target.marketingConsent || source.marketingConsent,
+    } });
+    // primární rezervace
+    await tx.reservation.updateMany({ where: { primaryGuestId: sourceId }, data: { primaryGuestId: targetId } });
+    // spolubydlící — ošetři unikát [reservationId, guestId]
+    const srcRGs = await tx.reservationGuest.findMany({ where: { guestId: sourceId } });
+    for (const rg of srcRGs) {
+      const dup = await tx.reservationGuest.findUnique({ where: { reservationId_guestId: { reservationId: rg.reservationId, guestId: targetId } } });
+      if (dup) {
+        if (rg.isPrimary && !dup.isPrimary) await tx.reservationGuest.update({ where: { id: dup.id }, data: { isPrimary: true } });
+        await tx.reservationGuest.delete({ where: { id: rg.id } });
+      } else {
+        await tx.reservationGuest.update({ where: { id: rg.id }, data: { guestId: targetId } });
+      }
+    }
+    await tx.registrationEntry.updateMany({ where: { guestId: sourceId }, data: { guestId: targetId } });
+    await tx.guestReview.updateMany({ where: { guestId: sourceId }, data: { guestId: targetId } });
+    await tx.guest.delete({ where: { id: sourceId } });
+  });
+  return { ok: true, targetId };
+}
+
+/** Smaže hosta z adresáře — jen pokud nemá žádné navázané pobyty. */
+export async function deleteGuest(guestId: string) {
+  const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { id: true } });
+  if (!guest) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const [asPrimary, asGuest] = await Promise.all([
+    prisma.reservation.count({ where: { primaryGuestId: guestId } }),
+    prisma.reservationGuest.count({ where: { guestId } }),
+  ]);
+  if (asPrimary > 0 || asGuest > 0) throw new Error("Hosta nelze smazat — má navázané pobyty. Použij sloučení do jiného záznamu.");
+  await prisma.guest.delete({ where: { id: guestId } });
+  return { ok: true };
+}
+
 // ── Hodnocení pobytu (NPS) ───────────────────────────────────
 const RATEABLE: ReservationStatus[] = [ReservationStatus.checked_in, ReservationStatus.checked_out];
 

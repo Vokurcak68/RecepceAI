@@ -393,6 +393,8 @@ adminRouter.get("/guests", h((req, res) => guests.searchGuests([pid(res)], Strin
 adminRouter.get("/guests/:id", h((req, res) => guests.guestProfile(req.params.id, [pid(res)])));
 adminRouter.patch("/guests/:id", h((req, res) => guests.updateGuestCrm(req.params.id, [pid(res)],
   z.object({ firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), phone: z.string().optional(), language: z.string().optional(), address: z.string().optional(), documentType: z.string().optional(), documentNumber: z.string().optional(), vip: z.boolean().optional(), preferences: z.string().optional(), marketingConsent: z.boolean().optional() }).parse(req.body))));
+adminRouter.post("/guests/:id/merge", h((req, res) => guests.mergeGuests(req.params.id, z.object({ sourceId: z.string().uuid() }).parse(req.body).sourceId, [pid(res)])));
+adminRouter.delete("/guests/:id", h((req, res) => guests.deleteGuest(req.params.id)));
 adminRouter.get("/reviews", h((_req, res) => guests.listReviews(pid(res))));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));

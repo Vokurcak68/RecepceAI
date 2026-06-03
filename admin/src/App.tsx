@@ -1134,11 +1134,13 @@ function GuestsView({ selId }: { selId: string }) {
 
 type GuestForm = { firstName: string; lastName: string; email: string; phone: string; language: string; address: string; documentType: string; documentNumber: string; vip: boolean; preferences: string; marketingConsent: boolean };
 function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
+  const confirm = useConfirm();
   const { data, error, reload } = useAsync<GuestProfile>(() => api.guestProfile(id), [id]);
   const [f, setF] = useState<GuestForm | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [merge, setMerge] = useState(false);
   const fromData = (): GuestForm | null => {
     if (!data) return null;
     const g = data.guest;
@@ -1158,8 +1160,18 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   if (!data || !f) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
   return (
     <>
-      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span></div>
-      {msg && <div className="error" style={msg === "Uloženo." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span>
+        <span style={{ display: "flex", gap: 8 }}>
+          <button className="btn ghost" disabled={busy} onClick={() => setMerge(true)}>🔗 Sloučit duplicitu</button>
+          <button className="btn danger" disabled={busy} onClick={async () => {
+            if (await confirm({ title: "Smazat hosta", message: <>Opravdu smazat <b>{f.firstName} {f.lastName}</b> z adresáře? Lze jen u hosta bez pobytů.</>, confirmLabel: "Smazat" })) {
+              setBusy(true); setMsg("");
+              try { await api.deleteGuest(id); onBack(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setBusy(false); }
+            }
+          }}>🗑 Smazat</button>
+        </span>
+      </div>
+      {msg && <div className="error" style={msg === "Uloženo." || msg === "Sloučeno." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
       <div className="grid2">
         <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16 }}>
           <div className="toolbar" style={{ flexWrap: "wrap" }}>
@@ -1201,6 +1213,17 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
             </tr>
           )} />
       </div>
+      {merge && <GuestPickerOverlay
+        title="Sloučit duplicitní záznam"
+        subtitle={`Vyber DRUHÝ záznam téhož hosta — jeho pobyty se přesunou do „${f.firstName} ${f.lastName}" a původní záznam se smaže.`}
+        prefill={f.lastName} excludeId={id} actionLabel="Sloučit sem"
+        onClose={() => setMerge(false)}
+        onPick={async (sid) => {
+          if (await confirm({ title: "Sloučit hosty", message: <>Přesunout všechny pobyty vybraného záznamu do <b>{f.firstName} {f.lastName}</b> a původní smazat? Tuto akci nelze vrátit.</>, confirmLabel: "Sloučit" })) {
+            setMerge(false); setBusy(true); setMsg("");
+            try { await api.mergeGuests(id, sid); setMsg("Sloučeno."); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+          }
+        }} />}
     </>
   );
 }
@@ -1615,17 +1638,18 @@ const EmailStatus = ({ s }: { s: string }) => {
 };
 
 // Popup z detailu rezervace: přehled odeslaných e-mailů + znovuodeslání.
-// Adresář hostů — výběr existujícího klienta a jeho připojení k rezervaci.
-function GuestPickerOverlay({ prefill, onPick, onClose }: { prefill: string; onPick: (guestId: string) => void; onClose: () => void }) {
+// Adresář hostů — výběr existujícího klienta (připojení k rezervaci nebo sloučení).
+function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář hostů", subtitle = "Vyber existujícího klienta — připojí se k této rezervaci (jeho historie a preference se pak zobrazí).", excludeId, actionLabel = "Použít" }: { prefill: string; onPick: (guestId: string) => void; onClose: () => void; title?: string; subtitle?: string; excludeId?: string; actionLabel?: string }) {
   const [q, setQ] = useState(prefill);
   const list = useAsync<GuestListItem[]>(() => api.searchGuests(q), []);
+  const rows = (list.data ?? []).filter((g) => g.id !== excludeId);
   return (
     <div className="inv-backdrop" onClick={onClose}>
       <div className="invoice" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
         <div className="inv-head">
           <div>
-            <h2 style={{ margin: 0 }}>Adresář hostů</h2>
-            <div className="muted" style={{ marginTop: 4 }}>Vyber existujícího klienta — připojí se k této rezervaci (jeho historie a preference se pak zobrazí).</div>
+            <h2 style={{ margin: 0 }}>{title}</h2>
+            <div className="muted" style={{ marginTop: 4 }}>{subtitle}</div>
           </div>
           <button className="linkx" onClick={onClose}>zavřít</button>
         </div>
@@ -1637,15 +1661,15 @@ function GuestPickerOverlay({ prefill, onPick, onClose }: { prefill: string; onP
         <table style={{ marginTop: 8 }}>
           <thead><tr><th>Host</th><th>Kontakt</th><th>Pobytů</th><th className="right"></th></tr></thead>
           <tbody>
-            {(list.data ?? []).map((g) => (
+            {rows.map((g) => (
               <tr key={g.id}>
                 <td>{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</td>
                 <td className="muted">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""}</td>
                 <td>{g.stays}</td>
-                <td className="right"><button className="btn sm" onClick={() => onPick(g.id)}>Použít</button></td>
+                <td className="right"><button className="btn sm" onClick={() => onPick(g.id)}>{actionLabel}</button></td>
               </tr>
             ))}
-            {list.data && list.data.length === 0 && <tr><td colSpan={4} className="muted">Nikdo nenalezen.</td></tr>}
+            {list.data && rows.length === 0 && <tr><td colSpan={4} className="muted">Nikdo nenalezen.</td></tr>}
           </tbody>
         </table>
       </div>
