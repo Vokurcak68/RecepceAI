@@ -209,6 +209,37 @@ export async function sendCancellation(reservationId: string): Promise<void> {
   await deliver(r, "cancellation", mt(lang, "subjCancel", { code: r.code, property: r.property.name }), html);
 }
 
+/** Souhrnný e-mail organizátorovi skupinové rezervace (jeden za celou skupinu). */
+export async function sendGroupSummary(groupId: string): Promise<void> {
+  const group = await prisma.reservationGroup.findUnique({
+    where: { id: groupId },
+    include: { property: true, organizer: true, reservations: { include: { roomType: true } } },
+  });
+  if (!group) return;
+  const active = group.reservations.filter((r) => r.status !== "cancelled");
+  if (!active.length) return;
+  const to = group.organizer?.email;
+  if (!to) return; // bez e-mailu organizátora nelze poslat
+  const lang = mailLang(group.organizer?.language);
+  const from = active.reduce((m, r) => (r.checkInDate < m ? r.checkInDate : m), active[0].checkInDate);
+  const until = active.reduce((m, r) => (r.checkOutDate > m ? r.checkOutDate : m), active[0].checkOutDate);
+  let total = new Prisma.Decimal(0);
+  const roomRows = active.map((r) => {
+    total = total.add(r.totalAmount);
+    const guests = `${r.adults} ${mt(lang, "adultsShort")}${r.children ? ` + ${r.children} ${mt(lang, "childrenShort")}` : ""}`;
+    return row(esc(r.roomType?.name ?? "—"), `${guests} · ${money(r.totalAmount)}`);
+  }).join("");
+  const rows = row(mt(lang, "rowStay"), `${fmtDate(from)} – ${fmtDate(until)}`) + roomRows + row(mt(lang, "rowTotal"), money(total));
+  const vars = { name: esc(group.organizer?.firstName ?? ""), group: esc(group.name), rooms: String(active.length), property: esc(group.property.name) };
+  const html = layout(lang, group.property, mt(lang, "titleGroup"), mt(lang, "introGroup", vars), rows);
+  const t = getTransport();
+  if (!t) { console.log(`📧 [mail] souhrn skupiny ${group.code} přeskočen (SMTP nenakonfigurováno)`); return; }
+  try {
+    await t.sendMail({ from: `"${group.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`, to, ...(group.property.email ? { replyTo: group.property.email } : {}), subject: mt(lang, "subjGroup", { group: group.name, property: group.property.name }), html });
+    console.log(`📧 [mail] souhrn skupiny "${group.name}" → ${to} (${group.code})`);
+  } catch (e) { console.error(`📧 [mail] souhrn skupiny CHYBA → ${to}: ${(e as Error).message}`); }
+}
+
 // ── Přehled odeslaných e-mailů + znovuodeslání ───────────────
 export const listEmails = (reservationId: string) =>
   prisma.emailLog.findMany({ where: { reservationId }, orderBy: { createdAt: "desc" } });

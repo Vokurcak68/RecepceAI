@@ -238,6 +238,7 @@ export const api = {
   groupCheckin: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkin`, { method: "POST" }),
   groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
   groupCancel: (id: string) => req<{ ok: boolean; count: number }>(`/admin/groups/${id}/cancel`, { method: "POST" }),
+  groupEmail: (id: string) => req<{ ok: boolean }>(`/admin/groups/${id}/email`, { method: "POST" }),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),

@@ -8,6 +8,7 @@ import { getStayPrice } from "./pricing";
 import { nightsBetween, toDateOnly } from "./dates";
 import { findOrCreateGuest } from "./guests";
 import { checkIn, checkOut, computeFolio, generateReservationCode } from "./reservations";
+import * as mailer from "./mailer";
 
 function generateGroupCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,7 +35,7 @@ export async function createGroup(propertyId: string, input: CreateGroupInput) {
 
   const organizerId = await findOrCreateGuest(organizer);
   const group = await prisma.reservationGroup.create({
-    data: { code: generateGroupCode(), name: input.name.trim() || "Skupina", propertyId, note: input.note?.trim() || null },
+    data: { code: generateGroupCode(), name: input.name.trim() || "Skupina", propertyId, note: input.note?.trim() || null, organizerGuestId: organizerId },
   });
 
   const created: string[] = [];
@@ -63,7 +64,17 @@ export async function createGroup(propertyId: string, input: CreateGroupInput) {
     });
     created.push(res.id);
   }
+  void mailer.sendGroupSummary(group.id); // jeden souhrnný e-mail organizátorovi (best-effort)
   return getGroup(propertyId, group.id);
+}
+
+/** Znovu odešle souhrnný e-mail skupiny (scopováno na provozovnu). */
+export async function emailGroupSummary(propertyId: string, id: string) {
+  const g = await prisma.reservationGroup.findFirst({ where: { id, propertyId }, select: { id: true, organizer: { select: { email: true } } } });
+  if (!g) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  if (!g.organizer?.email) throw new Error("Skupina nemá kontakt s e-mailem.");
+  await mailer.sendGroupSummary(id);
+  return { ok: true };
 }
 
 const memberInclude = { primaryGuest: true, roomType: true, room: true, bed: true } as const;

@@ -1106,7 +1106,7 @@ function BookView({ selId }: { selId: string }) {
 }
 
 // ── Skupinové / vícepokojové rezervace ───────────────────────
-const blankGroupRoom = (): GroupRoomInput => ({ roomTypeId: "", adults: 2, children: 0, firstName: "", lastName: "" });
+const blankGroupRoom = (): GroupRoomInput => ({ roomTypeId: "", adults: 2, children: 0, childAges: [], firstName: "", lastName: "" });
 const blankGroupForm = () => ({ name: "", note: "", from: todayIso(), to: tomorrowIso(), firstName: "", lastName: "", email: "", phone: "", language: "cs", rooms: [blankGroupRoom()] });
 
 function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
@@ -1126,7 +1126,7 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
     try {
       await api.createGroup({ name: g.name, note: g.note || undefined, from: g.from, to: g.to,
         organizer: { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: g.language },
-        rooms: g.rooms.map((r) => ({ roomTypeId: r.roomTypeId, adults: Number(r.adults), children: Number(r.children) || 0, firstName: r.firstName || undefined, lastName: r.lastName || undefined })) });
+        rooms: g.rooms.map((r) => ({ roomTypeId: r.roomTypeId, adults: Number(r.adults), children: Number(r.children) || 0, childAges: r.childAges, firstName: r.firstName || undefined, lastName: r.lastName || undefined })) });
       setShowForm(false); setG(blankGroupForm()); reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -1154,17 +1154,27 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
           <div style={{ borderTop: "1px solid #e6eaee", margin: "8px 0", paddingTop: 10 }}>
             <div className="muted" style={{ marginBottom: 8 }}>Pokoje ve skupině (jméno hosta nepovinné — jinak se použije kontakt):</div>
             {g.rooms.map((r, i) => (
-              <div key={i} className="toolbar" style={{ marginBottom: 6 }}>
-                <span className="muted" style={{ width: 20 }}>{i + 1}.</span>
-                <select value={r.roomTypeId} onChange={(e) => setRoom(i, { roomTypeId: e.target.value })}>
-                  <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
-                  {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
-                </select>
-                <label className="row">Dosp. <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
-                <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => setRoom(i, { children: Math.max(0, Number(e.target.value) || 0) })} /></label>
-                <input placeholder="Jméno hosta" style={{ width: 110 }} value={r.firstName ?? ""} onChange={(e) => setRoom(i, { firstName: e.target.value })} />
-                <input placeholder="Příjmení" style={{ width: 110 }} value={r.lastName ?? ""} onChange={(e) => setRoom(i, { lastName: e.target.value })} />
-                {g.rooms.length > 1 && <button className="btn sm danger" onClick={() => setG((s) => ({ ...s, rooms: s.rooms.filter((_, idx) => idx !== i) }))}>✕</button>}
+              <div key={i} style={{ marginBottom: 8 }}>
+                <div className="toolbar" style={{ marginBottom: (r.children ?? 0) > 0 ? 4 : 0 }}>
+                  <span className="muted" style={{ width: 20 }}>{i + 1}.</span>
+                  <select value={r.roomTypeId} onChange={(e) => setRoom(i, { roomTypeId: e.target.value })}>
+                    <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
+                    {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
+                  </select>
+                  <label className="row">Dosp. <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
+                  <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setRoom(i, { children: n, childAges: Array.from({ length: n }, (_, j) => r.childAges?.[j] ?? 8) }); }} /></label>
+                  <input placeholder="Jméno hosta" style={{ width: 110 }} value={r.firstName ?? ""} onChange={(e) => setRoom(i, { firstName: e.target.value })} />
+                  <input placeholder="Příjmení" style={{ width: 110 }} value={r.lastName ?? ""} onChange={(e) => setRoom(i, { lastName: e.target.value })} />
+                  {g.rooms.length > 1 && <button className="btn sm danger" onClick={() => setG((s) => ({ ...s, rooms: s.rooms.filter((_, idx) => idx !== i) }))}>✕</button>}
+                </div>
+                {(r.children ?? 0) > 0 && (
+                  <div className="toolbar" style={{ marginLeft: 24 }}>
+                    {(r.childAges ?? []).map((age, j) => (
+                      <label key={j} className="row">Věk dítěte {j + 1} <input type="number" min={0} max={25} style={{ width: 56 }} value={age} onChange={(e) => { const a = [...(r.childAges ?? [])]; a[j] = Math.max(0, Number(e.target.value) || 0); setRoom(i, { childAges: a }); }} /></label>
+                    ))}
+                    <span className="muted" style={{ fontSize: 12 }}>poplatek platí děti od věku osvobození</span>
+                  </div>
+                )}
               </div>
             ))}
             <button className="btn ghost sm" onClick={() => setG((s) => ({ ...s, rooms: [...s.rooms, blankGroupRoom()] }))}>+ Přidat pokoj</button>
@@ -1217,6 +1227,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
           <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
           <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id))); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+          <button className="btn ghost" disabled={busy} onClick={() => act(() => api.groupEmail(id), "Souhrn odeslán organizátorovi.")}>✉️ Odeslat souhrn</button>
           <button className="btn danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Zrušit skupinu", message: <>Zrušit všechny pokoje skupiny <b>{data.name}</b>? (Odhlášené zůstanou.)</>, confirmLabel: "Zrušit vše", danger: true })) act(() => api.groupCancel(id), "Skupina zrušena."); }}>Zrušit vše</button>
           <span style={{ flex: 1 }} />
           <span className="muted">Celkem {money(data.totals.charges)} · zaplaceno {money(data.totals.paid)} · <b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{bal > 0 ? `zbývá ${money(bal)}` : "vyrovnáno"}</b></span>

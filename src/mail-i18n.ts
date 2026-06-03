@@ -17,6 +17,8 @@ const cs: Dict = {
   ctaManage: "Spravovat rezervaci", ctaRequests: "Požadavky během pobytu", ctaRate: "Ohodnotit pobyt",
   createdExtra: "Přes odkaz níže můžete kdykoli zobrazit detaily a zadávat požadavky během pobytu.",
   infoHeading: "Užitečné informace", checkoutNote: "Odjezd (check-out) máte naplánovaný na <b>{date}</b>.", thanksNote: "Budeme rádi za vaši zpětnou vazbu. Přejeme šťastnou cestu! 👋",
+  subjGroup: "Potvrzení skupinové rezervace {group} — {property}", titleGroup: "Potvrzení skupinové rezervace",
+  introGroup: "Dobrý den, {name},<br>potvrzujeme vaši skupinovou rezervaci <b>{group}</b> ({rooms} pokojů) v <b>{property}</b>. Souhrn najdete níže.",
   footerAuto: "Tato zpráva byla odeslána automaticky. Neodpovídejte na ni prosím, případné dotazy směřujte na kontakt výše.",
 };
 const en: Dict = {
@@ -31,6 +33,8 @@ const en: Dict = {
   ctaManage: "Manage reservation", ctaRequests: "Requests during your stay", ctaRate: "Rate your stay",
   createdExtra: "Using the link below you can view details and submit requests during your stay anytime.",
   infoHeading: "Useful information", checkoutNote: "Your check-out is scheduled for <b>{date}</b>.", thanksNote: "We'd love your feedback. Have a safe trip! 👋",
+  subjGroup: "Group reservation confirmation {group} — {property}", titleGroup: "Group reservation confirmation",
+  introGroup: "Hello {name},<br>we confirm your group reservation <b>{group}</b> ({rooms} rooms) at <b>{property}</b>. Summary below.",
   footerAuto: "This message was sent automatically. Please do not reply; for questions use the contact above.",
 };
 const de: Dict = {
@@ -45,6 +49,8 @@ const de: Dict = {
   ctaManage: "Reservierung verwalten", ctaRequests: "Wünsche während des Aufenthalts", ctaRate: "Aufenthalt bewerten",
   createdExtra: "Über den Link unten können Sie jederzeit Details ansehen und Wünsche während Ihres Aufenthalts senden.",
   infoHeading: "Nützliche Informationen", checkoutNote: "Ihr Check-out ist für <b>{date}</b> geplant.", thanksNote: "Wir freuen uns über Ihr Feedback. Gute Reise! 👋",
+  subjGroup: "Gruppenreservierung bestätigt {group} — {property}", titleGroup: "Gruppenreservierung bestätigt",
+  introGroup: "Guten Tag {name},<br>wir bestätigen Ihre Gruppenreservierung <b>{group}</b> ({rooms} Zimmer) im <b>{property}</b>. Übersicht unten.",
   footerAuto: "Diese Nachricht wurde automatisch gesendet. Bitte antworten Sie nicht; bei Fragen nutzen Sie den Kontakt oben.",
 };
 const ru: Dict = {
@@ -59,6 +65,8 @@ const ru: Dict = {
   ctaManage: "Управление бронированием", ctaRequests: "Запросы во время проживания", ctaRate: "Оценить проживание",
   createdExtra: "По ссылке ниже вы можете в любой момент посмотреть детали и отправлять запросы во время проживания.",
   infoHeading: "Полезная информация", checkoutNote: "Ваш выезд запланирован на <b>{date}</b>.", thanksNote: "Будем рады вашему отзыву. Счастливого пути! 👋",
+  subjGroup: "Подтверждение групповой брони {group} — {property}", titleGroup: "Подтверждение групповой брони",
+  introGroup: "Здравствуйте, {name},<br>подтверждаем вашу групповую бронь <b>{group}</b> ({rooms} номеров) в <b>{property}</b>. Сводка ниже.",
   footerAuto: "Это сообщение отправлено автоматически. Пожалуйста, не отвечайте на него; по вопросам используйте контакт выше.",
 };
 const uk: Dict = {
@@ -73,6 +81,8 @@ const uk: Dict = {
   ctaManage: "Керувати бронюванням", ctaRequests: "Запити під час перебування", ctaRate: "Оцінити перебування",
   createdExtra: "За посиланням нижче ви можете будь-коли переглянути деталі та надсилати запити під час перебування.",
   infoHeading: "Корисна інформація", checkoutNote: "Ваш виїзд заплановано на <b>{date}</b>.", thanksNote: "Будемо раді вашому відгуку. Щасливої дороги! 👋",
+  subjGroup: "Підтвердження групового бронювання {group} — {property}", titleGroup: "Підтвердження групового бронювання",
+  introGroup: "Вітаємо, {name},<br>підтверджуємо ваше групове бронювання <b>{group}</b> ({rooms} номерів) у <b>{property}</b>. Зведення нижче.",
   footerAuto: "Це повідомлення надіслано автоматично. Будь ласка, не відповідайте; із питаннями звертайтеся за контактом вище.",
 };
 const pl: Dict = {
@@ -87,6 +97,8 @@ const pl: Dict = {
   ctaManage: "Zarządzaj rezerwacją", ctaRequests: "Prośby podczas pobytu", ctaRate: "Oceń pobyt",
   createdExtra: "Pod linkiem poniżej możesz w każdej chwili zobaczyć szczegóły i wysyłać prośby podczas pobytu.",
   infoHeading: "Przydatne informacje", checkoutNote: "Wyjazd (check-out) zaplanowano na <b>{date}</b>.", thanksNote: "Będziemy wdzięczni za opinię. Szerokiej drogi! 👋",
+  subjGroup: "Potwierdzenie rezerwacji grupowej {group} — {property}", titleGroup: "Potwierdzenie rezerwacji grupowej",
+  introGroup: "Dzień dobry {name},<br>potwierdzamy rezerwację grupową <b>{group}</b> ({rooms} pokoi) w <b>{property}</b>. Podsumowanie poniżej.",
   footerAuto: "Ta wiadomość została wysłana automatycznie. Prosimy nie odpowiadać; w razie pytań użyj kontaktu powyżej.",
 };
 const sk: Dict = {
@@ -101,6 +113,8 @@ const sk: Dict = {
   ctaManage: "Spravovať rezerváciu", ctaRequests: "Požiadavky počas pobytu", ctaRate: "Ohodnotiť pobyt",
   createdExtra: "Cez odkaz nižšie môžete kedykoľvek zobraziť detaily a zadávať požiadavky počas pobytu.",
   infoHeading: "Užitočné informácie", checkoutNote: "Odchod (check-out) máte naplánovaný na <b>{date}</b>.", thanksNote: "Budeme radi za vašu spätnú väzbu. Šťastnú cestu! 👋",
+  subjGroup: "Potvrdenie skupinovej rezervácie {group} — {property}", titleGroup: "Potvrdenie skupinovej rezervácie",
+  introGroup: "Dobrý deň, {name},<br>potvrdzujeme vašu skupinovú rezerváciu <b>{group}</b> ({rooms} izieb) v <b>{property}</b>. Súhrn nižšie.",
   footerAuto: "Táto správa bola odoslaná automaticky. Neodpovedajte na ňu prosím; s otázkami sa obráťte na kontakt vyššie.",
 };
 const it: Dict = {
@@ -115,6 +129,8 @@ const it: Dict = {
   ctaManage: "Gestisci prenotazione", ctaRequests: "Richieste durante il soggiorno", ctaRate: "Valuta il soggiorno",
   createdExtra: "Tramite il link qui sotto può vedere i dettagli e inviare richieste durante il soggiorno in qualsiasi momento.",
   infoHeading: "Informazioni utili", checkoutNote: "Il check-out è previsto per il <b>{date}</b>.", thanksNote: "Ci farebbe piacere un suo feedback. Buon viaggio! 👋",
+  subjGroup: "Conferma prenotazione di gruppo {group} — {property}", titleGroup: "Conferma prenotazione di gruppo",
+  introGroup: "Buongiorno {name},<br>confermiamo la prenotazione di gruppo <b>{group}</b> ({rooms} camere) presso <b>{property}</b>. Riepilogo sotto.",
   footerAuto: "Questo messaggio è stato inviato automaticamente. Non risponda; per domande usi il contatto sopra.",
 };
 const fr: Dict = {
@@ -129,6 +145,8 @@ const fr: Dict = {
   ctaManage: "Gérer la réservation", ctaRequests: "Demandes pendant le séjour", ctaRate: "Évaluer le séjour",
   createdExtra: "Via le lien ci-dessous, vous pouvez consulter les détails et envoyer des demandes pendant votre séjour à tout moment.",
   infoHeading: "Informations utiles", checkoutNote: "Votre départ (check-out) est prévu le <b>{date}</b>.", thanksNote: "Votre avis nous intéresse. Bon voyage ! 👋",
+  subjGroup: "Confirmation de réservation de groupe {group} — {property}", titleGroup: "Confirmation de réservation de groupe",
+  introGroup: "Bonjour {name},<br>nous confirmons votre réservation de groupe <b>{group}</b> ({rooms} chambres) au <b>{property}</b>. Récapitulatif ci-dessous.",
   footerAuto: "Ce message a été envoyé automatiquement. Merci de ne pas y répondre ; pour toute question, utilisez le contact ci-dessus.",
 };
 const es: Dict = {
@@ -143,6 +161,8 @@ const es: Dict = {
   ctaManage: "Gestionar reserva", ctaRequests: "Solicitudes durante la estancia", ctaRate: "Valorar la estancia",
   createdExtra: "Mediante el enlace de abajo puede ver los detalles y enviar solicitudes durante su estancia en cualquier momento.",
   infoHeading: "Información útil", checkoutNote: "Su salida (check-out) está prevista para el <b>{date}</b>.", thanksNote: "Nos encantaría conocer su opinión. ¡Buen viaje! 👋",
+  subjGroup: "Confirmación de reserva de grupo {group} — {property}", titleGroup: "Confirmación de reserva de grupo",
+  introGroup: "Hola {name},<br>confirmamos su reserva de grupo <b>{group}</b> ({rooms} habitaciones) en <b>{property}</b>. Resumen a continuación.",
   footerAuto: "Este mensaje se ha enviado automáticamente. No responda; para consultas use el contacto de arriba.",
 };
 const zh: Dict = {
@@ -157,6 +177,8 @@ const zh: Dict = {
   ctaManage: "管理预订", ctaRequests: "住宿期间的需求", ctaRate: "评价您的入住",
   createdExtra: "通过下方链接，您可随时查看详情并在住宿期间提交需求。",
   infoHeading: "实用信息", checkoutNote: "您的退房时间为 <b>{date}</b>。", thanksNote: "期待您的反馈。旅途愉快！👋",
+  subjGroup: "团体预订确认 {group} — {property}", titleGroup: "团体预订确认",
+  introGroup: "您好 {name}，<br>确认您的团体预订 <b>{group}</b>（{rooms} 间房）在 <b>{property}</b>。摘要如下。",
   footerAuto: "此邮件为自动发送，请勿回复；如有疑问请使用上方联系方式。",
 };
 

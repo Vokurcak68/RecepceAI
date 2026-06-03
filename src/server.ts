@@ -412,6 +412,7 @@ adminRouter.post("/groups", h((req, res) => {
 adminRouter.post("/groups/:id/checkin", h((req, res) => groups.checkInGroup(pid(res), req.params.id)));
 adminRouter.post("/groups/:id/checkout", h((req, res) => groups.checkOutGroup(pid(res), req.params.id)));
 adminRouter.post("/groups/:id/cancel", h((req, res) => groups.cancelGroup(pid(res), req.params.id)));
+adminRouter.post("/groups/:id/email", h((req, res) => groups.emailGroupSummary(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 

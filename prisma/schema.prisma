@@ -340,6 +340,7 @@ model Guest {
   reservationGuests     ReservationGuest[]
   registrationEntries   RegistrationEntry[]
   reviews               GuestReview[]
+  organizedGroups       ReservationGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -440,6 +441,10 @@ model ReservationGroup {
   property   Property @relation(fields: [propertyId], references: [id])
   propertyId String
   note       String?
+
+  // Kontakt skupiny (organizátor) — pro souhrnný e-mail.
+  organizer       Guest?  @relation(fields: [organizerGuestId], references: [id])
+  organizerGuestId String?
 
   reservations Reservation[]
 
