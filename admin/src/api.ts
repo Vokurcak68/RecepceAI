@@ -31,7 +31,13 @@ export type Property = {
 };
 export type UserRole = "super_admin" | "manager" | "housekeeping" | "maintenance";
 export type User = { id: string; email: string; name: string; role: UserRole; properties?: { property: Property }[] };
-export type Guest = { firstName: string; lastName: string; email: string | null; phone: string | null };
+export type Guest = { firstName: string; lastName: string; email: string | null; phone: string | null; vip?: boolean; preferences?: string | null };
+export type GuestReview = { nps: number; comment: string | null; createdAt: string };
+export type GuestListItem = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; vip: boolean; preferences: string | null; stays: number; lastStay: string | null };
+export type GuestStay = { id: string; code: string; propertyName: string; roomType: string | null; checkInDate: string; checkOutDate: string; status: string; totalAmount: Money; review: GuestReview | null };
+export type GuestProfile = { guest: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; language: string | null; address: string | null; vip: boolean; preferences: string | null; marketingConsent: boolean; createdAt: string }; stays: GuestStay[] };
+export type ReviewItem = { id: string; nps: number; comment: string | null; createdAt: string; code: string; checkOutDate: string; guestName: string };
+export type ReviewsData = { summary: { count: number; avg: number | null; nps: number | null; promoters: number; passives: number; detractors: number }; reviews: ReviewItem[] };
 export type RoomType = { id: string; name: string; description: string | null; capacityAdults: number; capacityChildren: number; basePrice: Money; weeklyPrice: Money | null; monthlyPrice: Money | null; amenities: string[]; _count?: { rooms: number } };
 export type Bed = { id: string; label: string; status: string; room?: { number: string; roomType?: RoomType } };
 export type Room = { id: string; number: string; floor: number; status: string; lockType: string; roomType?: RoomType; beds?: Bed[] };
@@ -112,6 +118,7 @@ export type ReservationDetail = Reservation & {
   billingCompany: string | null; billingIco: string | null; billingDic: string | null; note: string | null;
   onlineCheckinAt: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
+  previousStays?: number; review?: GuestReview | null;
 };
 export type Invoice = {
   number: string; property: Property; reservation: { code: string; checkInDate: string; checkOutDate: string; nights: number };
@@ -212,6 +219,10 @@ export const api = {
   addIcalImportFeed: (b: { roomTypeId: string; url: string; label?: string }) => req(`/admin/ical/import-feeds`, { method: "POST", body: JSON.stringify(b) }),
   deleteIcalImportFeed: (id: string) => req(`/admin/ical/import-feeds/${id}`, { method: "DELETE" }),
   icalSync: () => req<{ id: string; ok: boolean; count?: number; error?: string }[]>(`/admin/ical/sync`, { method: "POST" }),
+  searchGuests: (q: string) => req<GuestListItem[]>(`/admin/guests?q=${encodeURIComponent(q)}`),
+  guestProfile: (id: string) => req<GuestProfile>(`/admin/guests/${id}`),
+  updateGuest: (id: string, b: { preferences?: string; vip?: boolean; email?: string; phone?: string; firstName?: string; lastName?: string }) => req(`/admin/guests/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  reviews: () => req<ReviewsData>(`/admin/reviews`),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),

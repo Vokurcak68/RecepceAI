@@ -8,6 +8,7 @@ import { InventoryUnit } from "@prisma/client";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
+import { findOrCreateGuest, previousStaysCount } from "./guests";
 
 // ── Dashboard ────────────────────────────────────────────────
 export async function dashboard(propertyId: string, date: Date) {
@@ -65,16 +66,16 @@ export async function createReservation(input: {
   if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0)
     throw new Error("Pro zvolený termín už není volná jednotka tohoto typu (předešlo se přebookování).");
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
-  const g = await prisma.guest.create({ data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language } });
+  const gId = await findOrCreateGuest(guest); // párování vracejícího se hosta dle e-mailu
   const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
-      primaryGuest: { connect: { id: g.id } }, roomType: { connect: { id: roomTypeId } },
+      primaryGuest: { connect: { id: gId } }, roomType: { connect: { id: roomTypeId } },
       checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children, childAges,
       status: ReservationStatus.confirmed, source: "manual", billingCycle: price.billingCycle,
       totalAmount: price.total, cityTax: price.cityTax,
       billingCompany: input.billingCompany, billingIco: input.billingIco, billingDic: input.billingDic,
-      reservationGuests: { create: { guest: { connect: { id: g.id } }, isPrimary: true } },
+      reservationGuests: { create: { guest: { connect: { id: gId } }, isPrimary: true } },
     },
     include: { primaryGuest: true, roomType: true },
   });
@@ -90,11 +91,12 @@ export async function getReservation(propertyId: string, id: string) {
     where: { id, propertyId },
     include: {
       primaryGuest: true, roomType: true, room: true, bed: { include: { room: true } }, property: true,
-      payments: { orderBy: { createdAt: "asc" } }, registrationEntries: true,
+      payments: { orderBy: { createdAt: "asc" } }, registrationEntries: true, review: true,
     },
   });
   if (!r) throw NOT_FOUND();
-  return r;
+  const previousStays = await previousStaysCount(propertyId, r.primaryGuestId, r.id); // pro odznak „vrací se"
+  return { ...r, previousStays };
 }
 
 async function assertInProperty(propertyId: string, id: string) {

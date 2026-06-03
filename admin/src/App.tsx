@@ -8,7 +8,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -68,6 +68,8 @@ export function App() {
       { id: "tapechart", label: "Plán pokojů" },
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
+      { id: "guests", label: "Profily hostů" },
+      { id: "reviews", label: "Hodnocení" },
       { id: "book", label: "Kniha hostů" },
       { id: "ubyport", label: "Cizinci (UBYPORT)" },
     ] },
@@ -86,7 +88,7 @@ export function App() {
       roomsTab,
       { id: "types", label: "Typy & ceny" },
       { id: "equipment", label: "Vybavení" },
-      { id: "ical", label: "iCal export" },
+      { id: "ical", label: "iCal synchronizace" },
     ] },
   ];
   const navItemsBottom = [{ id: "agents", label: "AI agenti", icon: "🤖" }];
@@ -156,6 +158,8 @@ export function App() {
         {prop && tab === "ical" && <IcalView selId={selId} />}
         {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
+        {prop && tab === "guests" && <GuestsView selId={selId} />}
+        {prop && tab === "reviews" && <ReviewsView selId={selId} />}
         {prop && tab === "rooms" && <RoomsView selId={selId} />}
         {prop && tab === "beds" && <BedsView selId={selId} />}
         {prop && tab === "equipment" && <EquipmentView selId={selId} />}
@@ -1098,6 +1102,121 @@ function BookView({ selId }: { selId: string }) {
   );
 }
 
+// ── CRM: Profily hostů ───────────────────────────────────────
+function GuestsView({ selId }: { selId: string }) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState<string | null>(null);
+  const list = useAsync<GuestListItem[]>(() => api.searchGuests(q), [selId]);
+  if (sel) return <GuestProfileView id={sel} onBack={() => { setSel(null); list.reload(); }} />;
+  return (
+    <>
+      <div className="h1">Profily hostů</div>
+      <div className="toolbar">
+        <input placeholder="Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ minWidth: 300 }} />
+        <button className="btn" onClick={() => list.reload()}>Hledat</button>
+      </div>
+      {list.error && <div className="error">{list.error}</div>}
+      <div className="panel">
+        <Table cols={["Host", "Kontakt", "Pobytů", "Poslední pobyt", ""]} rows={list.data ?? []} empty="Žádní hosté"
+          render={(g: GuestListItem) => (
+            <tr key={g.id}>
+              <td>{g.vip && <span title="VIP">⭐ </span>}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</td>
+              <td className="muted">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""}</td>
+              <td>{g.stays}</td>
+              <td className="muted">{g.lastStay ? d(g.lastStay) : "—"}</td>
+              <td className="right"><button className="btn sm ghost" onClick={() => setSel(g.id)}>Profil</button></td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
+  const { data, error, reload } = useAsync<GuestProfile>(() => api.guestProfile(id), [id]);
+  const [prefs, setPrefs] = useState("");
+  const [vip, setVip] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { if (data) { setPrefs(data.guest.preferences ?? ""); setVip(data.guest.vip); setDirty(false); } }, [data?.guest.id]); // eslint-disable-line
+  const save = async () => { setBusy(true); setMsg(""); try { await api.updateGuest(id, { preferences: prefs, vip }); setMsg("Uloženo."); setDirty(false); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
+  if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  const g = data.guest;
+  return (
+    <>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}</span></div>
+      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+      <div className="grid2">
+        <div className="panel"><h3>Kontakt</h3><div style={{ padding: 16 }}>
+          <div className="kvline"><span className="muted">E-mail</span><span>{g.email ?? "—"}</span></div>
+          <div className="kvline"><span className="muted">Telefon</span><span>{g.phone ?? "—"}</span></div>
+          <div className="kvline"><span className="muted">Jazyk</span><span>{g.language ?? "—"}</span></div>
+          <div className="kvline"><span className="muted">Adresa</span><span>{g.address ?? "—"}</span></div>
+          <div className="kvline"><span className="muted">Pobytů</span><b>{data.stays.length}</b></div>
+        </div></div>
+        <div className="panel"><h3>CRM</h3><div style={{ padding: 16 }}>
+          <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={vip} onChange={(e) => { setVip(e.target.checked); setDirty(true); }} />&nbsp; VIP host</label>
+          <div className="muted" style={{ marginBottom: 6 }}>Preference / poznámky (napříč pobyty):</div>
+          <textarea style={{ width: "100%", minHeight: 90, resize: "vertical" }} value={prefs} onChange={(e) => { setPrefs(e.target.value); setDirty(true); }} placeholder="Např.: alergie na ořechy, preferuje patro výš, manželská postel, tichý pokoj do dvora…" />
+          {dirty && <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={save}>Uložit</button></div>}
+        </div></div>
+      </div>
+      <div className="panel"><h3>Historie pobytů</h3>
+        <Table cols={["Kód", "Termín", "Pokoj", "Stav", "Cena", "Hodnocení"]} rows={data.stays} empty="Žádné pobyty v této provozovně"
+          render={(s: GuestStay) => (
+            <tr key={s.id}>
+              <td className="muted">{s.code}</td>
+              <td>{d(s.checkInDate)} → {d(s.checkOutDate)}</td>
+              <td>{s.roomType ?? "—"}</td>
+              <td><Badge s={s.status} /></td>
+              <td>{money(s.totalAmount)}</td>
+              <td>{s.review ? <span title={s.review.comment ?? ""}>{s.review.nps}/10{s.review.comment ? " 💬" : ""}</span> : <span className="muted">—</span>}</td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
+// ── Hodnocení (NPS) ──────────────────────────────────────────
+function ReviewsView({ selId }: { selId: string }) {
+  const { data, error } = useAsync<ReviewsData>(() => api.reviews(), [selId]);
+  return (
+    <>
+      <div className="h1">Hodnocení hostů</div>
+      {error && <div className="error">{error}</div>}
+      {data && (
+        <div className="grid2">
+          <div className="panel"><h3>Souhrn</h3><div style={{ padding: 16 }}>
+            <div className="kvline"><span className="muted">Hodnocení celkem</span><b>{data.summary.count}</b></div>
+            <div className="kvline"><span className="muted">Průměr (0–10)</span><b>{data.summary.avg ?? "—"}</b></div>
+            <div className="kvline"><span className="muted">NPS skóre (−100…100)</span><b style={{ color: (data.summary.nps ?? 0) >= 0 ? "var(--ok)" : "var(--danger)" }}>{data.summary.nps ?? "—"}</b></div>
+          </div></div>
+          <div className="panel"><h3>Rozložení</h3><div style={{ padding: 16 }}>
+            <div className="kvline"><span className="muted">Promotéři (9–10)</span><b style={{ color: "var(--ok)" }}>{data.summary.promoters}</b></div>
+            <div className="kvline"><span className="muted">Pasivní (7–8)</span><b>{data.summary.passives}</b></div>
+            <div className="kvline"><span className="muted">Kritici (0–6)</span><b style={{ color: "var(--danger)" }}>{data.summary.detractors}</b></div>
+          </div></div>
+        </div>
+      )}
+      <div className="panel">
+        <Table cols={["Datum", "Host", "NPS", "Komentář", "Rezervace"]} rows={data?.reviews ?? []} empty="Zatím žádná hodnocení"
+          render={(r: ReviewItem) => (
+            <tr key={r.id}>
+              <td className="muted">{d(r.createdAt)}</td>
+              <td>{r.guestName}</td>
+              <td><span style={{ fontWeight: 700, color: r.nps >= 9 ? "var(--ok)" : r.nps <= 6 ? "var(--danger)" : "var(--warn)" }}>{r.nps}</span></td>
+              <td>{r.comment ?? "—"}</td>
+              <td className="muted">{r.code}</td>
+            </tr>
+          )} />
+      </div>
+    </>
+  );
+}
+
 // ── CENTRÁLA: Provozovny ─────────────────────────────────────
 type PropEdit = {
   name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
@@ -1350,8 +1469,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
 
       <div className="grid2">
         <div className="panel"><h3>Údaje</h3><div style={{ padding: 16 }}>
-          <div className="kvline"><span className="muted">Host</span><b>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</b></div>
+          <div className="kvline"><span className="muted">Host</span><b>{r.primaryGuest?.vip ? "⭐ " : ""}{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}{(r.previousStays ?? 0) > 0 ? <span className="chip" style={{ marginLeft: 8 }}>🔁 {(r.previousStays ?? 0) + 1}. pobyt</span> : null}</b></div>
           <div className="kvline"><span className="muted">Kontakt</span><span>{r.primaryGuest?.email ?? "—"} · {r.primaryGuest?.phone ?? "—"}</span></div>
+          {r.primaryGuest?.preferences ? <div className="kvline"><span className="muted">Preference</span><span style={{ color: "var(--warn)", fontWeight: 600 }}>{r.primaryGuest.preferences}</span></div> : null}
+          {r.review ? <div className="kvline"><span className="muted">Hodnocení pobytu</span><span><b>{r.review.nps}/10</b>{r.review.comment ? ` — „${r.review.comment}"` : ""}</span></div> : null}
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
           <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</span></div>

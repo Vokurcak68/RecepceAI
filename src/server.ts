@@ -30,6 +30,7 @@ import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./w
 import * as mailer from "./mailer";
 import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, syncProperty, startIcalScheduler, stopIcalScheduler } from "./ical";
 import { chat as aiChat, type ChatMsg } from "./ai";
+import * as guests from "./guests";
 import { createToken, readToken, verifyPassword } from "./auth";
 
 export const app = express();
@@ -386,6 +387,12 @@ adminRouter.post("/ical/import-feeds", h((req, res) => {
 }));
 adminRouter.delete("/ical/import-feeds/:id", h((req, res) => deleteIcalFeed(pid(res), req.params.id)));
 adminRouter.post("/ical/sync", h((_req, res) => syncProperty(pid(res))));
+// CRM hostů + hodnocení (scopováno na vybranou provozovnu)
+adminRouter.get("/guests", h((req, res) => guests.searchGuests([pid(res)], String(req.query.q ?? ""))));
+adminRouter.get("/guests/:id", h((req, res) => guests.guestProfile(req.params.id, [pid(res)])));
+adminRouter.patch("/guests/:id", h((req, res) => guests.updateGuestCrm(req.params.id, [pid(res)],
+  z.object({ preferences: z.string().optional(), vip: z.boolean().optional(), email: z.string().optional(), phone: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional() }).parse(req.body))));
+adminRouter.get("/reviews", h((_req, res) => guests.listReviews(pid(res))));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 
@@ -612,6 +619,16 @@ app.post("/guest/:code/requests", h(async (req) => {
   if (r.status !== "checked_in" && b.type !== ServiceType.other)
     throw new Error("Tento typ požadavku bude dostupný po vašem příjezdu. Nyní můžete poslat jen obecný požadavek (Jiné).");
   return service.createRequest({ propertyId: r.propertyId, reservationId: r.id, roomId: r.roomId, bedId: r.bedId, type: b.type, description: b.description, fromGuest: true });
+}));
+// Hodnocení pobytu (NPS) — odkaz z check-out e-mailu, bez přihlášení.
+app.get("/guest/:code/feedback", h(async (req) => {
+  const ctx = await guests.feedbackContext(req.params.code);
+  if (!ctx) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  return ctx;
+}));
+app.post("/guest/:code/feedback", h(async (req) => {
+  const b = z.object({ nps: z.number().int().min(0).max(10), comment: z.string().max(2000).optional() }).parse(req.body);
+  return guests.saveReview(req.params.code, b.nps, b.comment);
 }));
 
 // ── Portál personálu (uklízečka / údržbář / manažer) ─────────

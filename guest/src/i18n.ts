@@ -32,6 +32,9 @@ const cs: Dict = {
   myTitle: "Moje požadavky", myEmpty: "Zatím žádné.",
   tCleaning: "Úklid", tMaintenance: "Údržba", tLaundry: "Praní", tIroning: "Žehlení", tMinibar: "Minibar", tOther: "Jiné",
   sOpen: "přijato", sInProgress: "řeší se", sDone: "hotovo", sCancelled: "zrušeno",
+  rateTitle: "Jak jste byli spokojeni?", rateQ: "Doporučili byste nás svým přátelům?", rateLow: "Vůbec", rateHigh: "Určitě",
+  rateCommentPh: "Co bychom mohli zlepšit? (nepovinné)", rateSubmit: "Odeslat hodnocení", rateSending: "Odesílám…",
+  rateThanks: "Děkujeme za vaše hodnocení! 🙏", rateAlready: "Toto hodnocení jste už odeslali. Děkujeme!", rateClosed: "Hodnocení je dostupné po pobytu.",
 };
 const en: Dict = {
   appTitle: "Guest requests",
@@ -47,6 +50,9 @@ const en: Dict = {
   myTitle: "My requests", myEmpty: "None yet.",
   tCleaning: "Cleaning", tMaintenance: "Maintenance", tLaundry: "Laundry", tIroning: "Ironing", tMinibar: "Minibar", tOther: "Other",
   sOpen: "received", sInProgress: "in progress", sDone: "done", sCancelled: "cancelled",
+  rateTitle: "How was your stay?", rateQ: "Would you recommend us to friends?", rateLow: "Not at all", rateHigh: "Definitely",
+  rateCommentPh: "What could we improve? (optional)", rateSubmit: "Send feedback", rateSending: "Sending…",
+  rateThanks: "Thank you for your feedback! 🙏", rateAlready: "You've already submitted this rating. Thank you!", rateClosed: "Rating is available after your stay.",
 };
 const de: Dict = {
   appTitle: "Gästewünsche",
@@ -62,6 +68,9 @@ const de: Dict = {
   myTitle: "Meine Anfragen", myEmpty: "Noch keine.",
   tCleaning: "Reinigung", tMaintenance: "Wartung", tLaundry: "Wäsche", tIroning: "Bügeln", tMinibar: "Minibar", tOther: "Sonstiges",
   sOpen: "eingegangen", sInProgress: "in Bearbeitung", sDone: "erledigt", sCancelled: "storniert",
+  rateTitle: "Wie war Ihr Aufenthalt?", rateQ: "Würden Sie uns weiterempfehlen?", rateLow: "Gar nicht", rateHigh: "Auf jeden Fall",
+  rateCommentPh: "Was könnten wir verbessern? (optional)", rateSubmit: "Bewertung senden", rateSending: "Senden…",
+  rateThanks: "Danke für Ihre Bewertung! 🙏", rateAlready: "Sie haben diese Bewertung bereits gesendet. Danke!", rateClosed: "Die Bewertung ist nach dem Aufenthalt verfügbar.",
 };
 const ru: Dict = {
   appTitle: "Запросы гостя",
@@ -77,6 +86,9 @@ const ru: Dict = {
   myTitle: "Мои запросы", myEmpty: "Пока нет.",
   tCleaning: "Уборка", tMaintenance: "Ремонт", tLaundry: "Стирка", tIroning: "Глажка", tMinibar: "Мини-бар", tOther: "Другое",
   sOpen: "принято", sInProgress: "в работе", sDone: "готово", sCancelled: "отменено",
+  rateTitle: "Как прошло ваше пребывание?", rateQ: "Порекомендовали бы вы нас друзьям?", rateLow: "Точно нет", rateHigh: "Обязательно",
+  rateCommentPh: "Что мы могли бы улучшить? (необязательно)", rateSubmit: "Отправить отзыв", rateSending: "Отправка…",
+  rateThanks: "Спасибо за ваш отзыв! 🙏", rateAlready: "Вы уже отправили эту оценку. Спасибо!", rateClosed: "Оценка доступна после пребывания.",
 };
 const uk: Dict = {
   appTitle: "Запити гостя",
@@ -92,6 +104,9 @@ const uk: Dict = {
   myTitle: "Мої запити", myEmpty: "Поки немає.",
   tCleaning: "Прибирання", tMaintenance: "Ремонт", tLaundry: "Прання", tIroning: "Прасування", tMinibar: "Мінібар", tOther: "Інше",
   sOpen: "прийнято", sInProgress: "у роботі", sDone: "виконано", sCancelled: "скасовано",
+  rateTitle: "Як минуло ваше перебування?", rateQ: "Чи порекомендували б ви нас друзям?", rateLow: "Зовсім ні", rateHigh: "Безумовно",
+  rateCommentPh: "Що ми могли б покращити? (необов'язково)", rateSubmit: "Надіслати відгук", rateSending: "Надсилання…",
+  rateThanks: "Дякуємо за ваш відгук! 🙏", rateAlready: "Ви вже надіслали цю оцінку. Дякуємо!", rateClosed: "Оцінка доступна після перебування.",
 };
 const pl: Dict = {
   appTitle: "Prośby gościa",
@@ -107,6 +122,9 @@ const pl: Dict = {
   myTitle: "Moje prośby", myEmpty: "Jeszcze żadnych.",
   tCleaning: "Sprzątanie", tMaintenance: "Naprawa", tLaundry: "Pranie", tIroning: "Prasowanie", tMinibar: "Minibar", tOther: "Inne",
   sOpen: "przyjęto", sInProgress: "w toku", sDone: "gotowe", sCancelled: "anulowano",
+  rateTitle: "Jak minął Twój pobyt?", rateQ: "Czy poleciłbyś nas znajomym?", rateLow: "W ogóle", rateHigh: "Zdecydowanie",
+  rateCommentPh: "Co moglibyśmy poprawić? (opcjonalnie)", rateSubmit: "Wyślij ocenę", rateSending: "Wysyłanie…",
+  rateThanks: "Dziękujemy za ocenę! 🙏", rateAlready: "Ta ocena została już wysłana. Dziękujemy!", rateClosed: "Ocena jest dostępna po pobycie.",
 };
 const sk: Dict = {
   appTitle: "Požiadavky hosťa",
@@ -122,6 +140,9 @@ const sk: Dict = {
   myTitle: "Moje požiadavky", myEmpty: "Zatiaľ žiadne.",
   tCleaning: "Upratovanie", tMaintenance: "Údržba", tLaundry: "Pranie", tIroning: "Žehlenie", tMinibar: "Minibar", tOther: "Iné",
   sOpen: "prijaté", sInProgress: "rieši sa", sDone: "hotovo", sCancelled: "zrušené",
+  rateTitle: "Ako ste boli spokojní?", rateQ: "Odporučili by ste nás priateľom?", rateLow: "Vôbec", rateHigh: "Určite",
+  rateCommentPh: "Čo by sme mohli zlepšiť? (nepovinné)", rateSubmit: "Odoslať hodnotenie", rateSending: "Odosielam…",
+  rateThanks: "Ďakujeme za vaše hodnotenie! 🙏", rateAlready: "Toto hodnotenie ste už odoslali. Ďakujeme!", rateClosed: "Hodnotenie je dostupné po pobyte.",
 };
 const it: Dict = {
   appTitle: "Richieste dell'ospite",
@@ -137,6 +158,9 @@ const it: Dict = {
   myTitle: "Le mie richieste", myEmpty: "Ancora nessuna.",
   tCleaning: "Pulizia", tMaintenance: "Manutenzione", tLaundry: "Lavanderia", tIroning: "Stiratura", tMinibar: "Minibar", tOther: "Altro",
   sOpen: "ricevuto", sInProgress: "in corso", sDone: "completato", sCancelled: "annullato",
+  rateTitle: "Com'è stato il suo soggiorno?", rateQ: "Ci consiglierebbe ai suoi amici?", rateLow: "Per niente", rateHigh: "Assolutamente",
+  rateCommentPh: "Cosa potremmo migliorare? (facoltativo)", rateSubmit: "Invia valutazione", rateSending: "Invio…",
+  rateThanks: "Grazie per la sua valutazione! 🙏", rateAlready: "Ha già inviato questa valutazione. Grazie!", rateClosed: "La valutazione è disponibile dopo il soggiorno.",
 };
 const fr: Dict = {
   appTitle: "Demandes du client",
@@ -152,6 +176,9 @@ const fr: Dict = {
   myTitle: "Mes demandes", myEmpty: "Aucune pour l'instant.",
   tCleaning: "Ménage", tMaintenance: "Entretien", tLaundry: "Blanchisserie", tIroning: "Repassage", tMinibar: "Minibar", tOther: "Autre",
   sOpen: "reçu", sInProgress: "en cours", sDone: "terminé", sCancelled: "annulé",
+  rateTitle: "Comment s'est passé votre séjour ?", rateQ: "Nous recommanderiez-vous à vos amis ?", rateLow: "Pas du tout", rateHigh: "Absolument",
+  rateCommentPh: "Que pourrions-nous améliorer ? (facultatif)", rateSubmit: "Envoyer l'avis", rateSending: "Envoi…",
+  rateThanks: "Merci pour votre avis ! 🙏", rateAlready: "Vous avez déjà envoyé cette évaluation. Merci !", rateClosed: "L'évaluation est disponible après le séjour.",
 };
 const es: Dict = {
   appTitle: "Solicitudes del huésped",
@@ -167,6 +194,9 @@ const es: Dict = {
   myTitle: "Mis solicitudes", myEmpty: "Ninguna todavía.",
   tCleaning: "Limpieza", tMaintenance: "Mantenimiento", tLaundry: "Lavandería", tIroning: "Planchado", tMinibar: "Minibar", tOther: "Otro",
   sOpen: "recibido", sInProgress: "en curso", sDone: "hecho", sCancelled: "cancelado",
+  rateTitle: "¿Qué tal su estancia?", rateQ: "¿Nos recomendaría a sus amigos?", rateLow: "Para nada", rateHigh: "Sin duda",
+  rateCommentPh: "¿Qué podríamos mejorar? (opcional)", rateSubmit: "Enviar valoración", rateSending: "Enviando…",
+  rateThanks: "¡Gracias por su valoración! 🙏", rateAlready: "Ya ha enviado esta valoración. ¡Gracias!", rateClosed: "La valoración está disponible tras la estancia.",
 };
 const zh: Dict = {
   appTitle: "客人请求",
@@ -182,6 +212,9 @@ const zh: Dict = {
   myTitle: "我的请求", myEmpty: "暂无。",
   tCleaning: "清洁", tMaintenance: "维修", tLaundry: "洗衣", tIroning: "熨烫", tMinibar: "迷你吧", tOther: "其他",
   sOpen: "已收到", sInProgress: "处理中", sDone: "已完成", sCancelled: "已取消",
+  rateTitle: "您的入住体验如何？", rateQ: "您会向朋友推荐我们吗？", rateLow: "完全不会", rateHigh: "一定会",
+  rateCommentPh: "我们可以改进什么？（可选）", rateSubmit: "提交评价", rateSending: "提交中…",
+  rateThanks: "感谢您的评价！🙏", rateAlready: "您已提交过此评价。谢谢！", rateClosed: "评价将在入住后开放。",
 };
 
 export const DICT: Record<Lang, Dict> = { cs, en, de, ru, uk, pl, sk, it, fr, es, zh };

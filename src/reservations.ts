@@ -8,6 +8,7 @@ import { findFreeRoom, findFreeBed, freeUnitsForType } from "./availability";
 import { getStayPrice } from "./pricing";
 import { addDays, nightsBetween, toDateOnly } from "./dates";
 import * as mailer from "./mailer";
+import { findOrCreateGuest } from "./guests";
 
 const HOLD_MINUTES = 15;
 const REGISTRATION_RETENTION_YEARS = 6;
@@ -63,15 +64,13 @@ export async function createWalkInHold(input: WalkInInput) {
   if (useBed ? !bedId : !roomId) throw new Error("Pro zvolený termín už není volná jednotka tohoto typu.");
 
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
-  const newGuest = await prisma.guest.create({
-    data: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone, language: guest.language },
-  });
+  const guestId = await findOrCreateGuest(guest); // párování vracejícího se hosta dle e-mailu
 
   return prisma.reservation.create({
     data: {
       code: generateReservationCode(),
       property: { connect: { id: propertyId } },
-      primaryGuest: { connect: { id: newGuest.id } },
+      primaryGuest: { connect: { id: guestId } },
       roomType: { connect: { id: roomTypeId } },
       ...(roomId ? { room: { connect: { id: roomId } } } : {}),
       ...(bedId ? { bed: { connect: { id: bedId } } } : {}),
@@ -80,7 +79,7 @@ export async function createWalkInHold(input: WalkInInput) {
       billingCycle: price.billingCycle,
       totalAmount: price.total, cityTax: price.cityTax,
       holdExpiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
-      reservationGuests: { create: { guest: { connect: { id: newGuest.id } }, isPrimary: true } },
+      reservationGuests: { create: { guest: { connect: { id: guestId } }, isPrimary: true } },
     },
     include: RES_INCLUDE,
   });

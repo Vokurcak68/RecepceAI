@@ -136,6 +136,8 @@ async function deliver(r: ResForMail, type: string, subject: string, html: strin
 
 const guestUrl = (code: string) =>
   process.env.PUBLIC_GUEST_URL ? `${process.env.PUBLIC_GUEST_URL.replace(/\/$/, "")}/?code=${encodeURIComponent(code)}` : null;
+const feedbackUrl = (code: string) =>
+  process.env.PUBLIC_GUEST_URL ? `${process.env.PUBLIC_GUEST_URL.replace(/\/$/, "")}/?code=${encodeURIComponent(code)}&rate=1` : null;
 
 // ── Jednotlivé e-maily ───────────────────────────────────────
 /** Potvrzení vytvořené rezervace. */
@@ -189,7 +191,9 @@ export async function sendCheckOut(reservationId: string): Promise<void> {
     row(mt(lang, "rowCosts"), money(charges)),
     row(mt(lang, "rowPaid"), money(paid)),
   ].join("");
-  const html = layout(lang, r.property, mt(lang, "titleCheckout"), mt(lang, "introCheckout", vars), rows, undefined, undefined,
+  const rate = feedbackUrl(r.code);
+  const html = layout(lang, r.property, mt(lang, "titleCheckout"), mt(lang, "introCheckout", vars), rows,
+    rate ? mt(lang, "ctaRate") : undefined, rate ?? undefined,
     `<p style="margin:18px 0 0;font-size:13px;color:#6b7a89;">${esc(mt(lang, "thanksNote"))}</p>`);
   await deliver(r, "checkout", mt(lang, "subjCheckout", { property: r.property.name }), html);
 }

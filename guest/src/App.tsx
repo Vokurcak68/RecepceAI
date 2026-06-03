@@ -48,6 +48,7 @@ export function App() {
   const [ciErr, setCiErr] = useState("");
 
   const t = makeT(lang);
+  const rateMode = new URLSearchParams(location.search).has("rate");
 
   const refresh = async (c: string) => {
     try { setData(await api<Data>(`/guest/${encodeURIComponent(c.trim())}`)); } catch { /* ponech současná data */ }
@@ -65,7 +66,7 @@ export function App() {
       setError(t("notFound")); setData(null); localStorage.removeItem(CODE_KEY);
     } finally { setBusy(false); }
   };
-  useEffect(() => { if (code) load(code); }, []); // eslint-disable-line
+  useEffect(() => { if (code && !rateMode) load(code); }, []); // eslint-disable-line
 
   useEffect(() => {
     if (!data) return;
@@ -119,6 +120,8 @@ export function App() {
       ))}
     </div>
   );
+
+  if (rateMode && code) return <RatingApp code={code} />;
 
   if (!data) {
     return (
@@ -206,6 +209,86 @@ export function App() {
       </div>
 
       <button className="btn ghost block" onClick={() => { setData(null); setCode(""); localStorage.removeItem(CODE_KEY); }}>{t("logout")}</button>
+    </div>
+  );
+}
+
+// ── Hodnocení pobytu (NPS) — samostatná stránka z odkazu v check-out e-mailu ──
+type RateCtx = { propertyName: string; guestName: string; lang?: string | null; eligible: boolean; already: { nps: number; comment: string | null } | null };
+function RatingApp({ code }: { code: string }) {
+  const [lang, setLang] = useState<Lang>(() => detectLang());
+  const [ctx, setCtx] = useState<RateCtx | null>(null);
+  const [nps, setNps] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState("");
+  const t = makeT(lang);
+
+  useEffect(() => {
+    api<RateCtx>(`/guest/${encodeURIComponent(code)}/feedback`)
+      .then((c) => { setCtx(c); if (c.lang && !localStorage.getItem(LANG_KEY)) setLang(c.lang as Lang); if (c.already) { setNps(c.already.nps); setComment(c.already.comment ?? ""); } })
+      .catch(() => setErr(t("notFound")));
+  }, []); // eslint-disable-line
+
+  const changeLang = (l: Lang) => { setLang(l); localStorage.setItem(LANG_KEY, l); };
+  const submit = async () => {
+    if (nps == null) return;
+    setBusy(true); setErr("");
+    try { await api(`/guest/${encodeURIComponent(code)}/feedback`, { method: "POST", body: JSON.stringify({ nps, comment: comment || undefined }) }); setDone(true); }
+    catch (e) { setErr(e instanceof Error ? e.message : t("reqFail")); }
+    finally { setBusy(false); }
+  };
+
+  const LangSwitch = () => (
+    <div className="langs">
+      {LANGS.map((l) => (
+        <button key={l.code} className={`langbtn ${lang === l.code ? "on" : ""}`} title={l.label} onClick={() => changeLang(l.code)}>
+          <span className={`fi fi-${l.cc}`} />
+        </button>
+      ))}
+    </div>
+  );
+
+  const npsColor = (n: number) => (n <= 6 ? "#d65b4a" : n <= 8 ? "#d6a44a" : "#3a9d6a");
+
+  return (
+    <div className="wrap">
+      <div className="card center">
+        <LangSwitch />
+        <div className="logo">🛎️</div>
+        {ctx && <div className="muted" style={{ marginTop: -4 }}>{ctx.propertyName}</div>}
+        {done || (ctx?.already && nps != null && !err) ? null : <h1 style={{ marginBottom: 4 }}>{t("rateTitle")}</h1>}
+        {err && <div className="error">{err}</div>}
+
+        {done ? (
+          <div className="ok-msg" style={{ fontSize: 16, padding: "20px 12px" }}>{t("rateThanks")}</div>
+        ) : !ctx ? (
+          !err && <p className="muted">{t("loading")}</p>
+        ) : !ctx.eligible ? (
+          <p className="muted">{t("rateClosed")}</p>
+        ) : (
+          <>
+            {ctx.already && <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{t("rateAlready")}</div>}
+            <p className="muted" style={{ marginTop: 8 }}>{t("rateQ")}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", margin: "10px 0 4px" }}>
+              {Array.from({ length: 11 }, (_, n) => (
+                <button key={n} onClick={() => setNps(n)}
+                  style={{ width: 40, height: 44, borderRadius: 9, fontSize: 16, fontWeight: 700, cursor: "pointer",
+                    border: nps === n ? `2px solid ${npsColor(n)}` : "1px solid #cfd6dd",
+                    background: nps === n ? npsColor(n) : "#fff", color: nps === n ? "#fff" : "#243240" }}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#8a97a3", padding: "0 2px 6px" }}>
+              <span>{t("rateLow")}</span><span>{t("rateHigh")}</span>
+            </div>
+            <textarea className="desc" placeholder={t("rateCommentPh")} value={comment} onChange={(e) => setComment(e.target.value)} />
+            <button className="btn block" disabled={busy || nps == null} onClick={submit}>{busy ? t("rateSending") : t("rateSubmit")}</button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -202,6 +202,7 @@ model Property {
   cashRegisters CashRegister[]
   serviceItems  ServiceItem[]
   icalFeeds     IcalFeed[]
+  reviews       GuestReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -329,12 +330,35 @@ model Guest {
 
   marketingConsent Boolean @default(false)
 
+  // CRM — trvalé preference napříč pobyty (alergie, preference pokoje/lůžka…) a VIP příznak.
+  preferences String?
+  vip         Boolean @default(false)
+
   reservationsAsPrimary Reservation[]       @relation("PrimaryGuest")
   reservationGuests     ReservationGuest[]
   registrationEntries   RegistrationEntry[]
+  reviews               GuestReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+/// Hodnocení pobytu hostem (NPS 0–10 + komentář). Jedno na rezervaci.
+model GuestReview {
+  id            String      @id @default(uuid())
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String      @unique
+  property      Property    @relation(fields: [propertyId], references: [id])
+  propertyId    String
+  guest         Guest       @relation(fields: [guestId], references: [id])
+  guestId       String
+  nps           Int // 0–10 (jak pravděpodobně by nás doporučil)
+  comment       String?
+  createdAt     DateTime    @default(now())
+
+  @@index([propertyId, createdAt])
 }
 
 model Reservation {
@@ -389,6 +413,7 @@ model Reservation {
   serviceRequests     ServiceRequest[]
   documents           DocumentReservation[]
   emailLogs           EmailLog[]
+  review              GuestReview?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
