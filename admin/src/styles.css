@@ -186,6 +186,8 @@ tr.row-high { box-shadow: inset 3px 0 0 var(--warn); }
 
 /* Mobil: větší dotykové prvky pro personál na telefonu */
 @media (max-width: 640px) {
+  /* ≥16px zabrání automatickému zoomu iOS Safari při klepnutí do pole */
+  input, select, textarea { font-size: 16px; }
   .staff-head, .staff-tabs, .staff-add, .staff-list, .staff-rooms { padding-left: 12px; padding-right: 12px; }
   .staff-tabs { flex-wrap: wrap; }
   .staff-tabs button { padding: 9px 14px; font-size: 15px; }
