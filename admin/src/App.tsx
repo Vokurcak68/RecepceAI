@@ -1158,6 +1158,13 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   };
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
   if (!data || !f) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  const fieldInp: CSSProperties = { flex: 1, minWidth: 0 };
+  const Field = ({ label, children }: { label: string; children: ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+      <span className="muted" style={{ width: 110, textAlign: "right", flexShrink: 0 }}>{label}</span>
+      {children}
+    </div>
+  );
   return (
     <>
       <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span>
@@ -1173,23 +1180,15 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
       </div>
       {msg && <div className="error" style={msg === "Uloženo." || msg === "Sloučeno." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
       <div className="grid2">
-        <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16 }}>
-          <div className="toolbar" style={{ flexWrap: "wrap" }}>
-            <label className="row">Jméno <input value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></label>
-            <label className="row">Příjmení <input value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></label>
-          </div>
-          <div className="toolbar" style={{ flexWrap: "wrap" }}>
-            <label className="row" style={{ flex: 1 }}>E-mail <input style={{ minWidth: 180 }} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></label>
-            <label className="row">Telefon <input value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></label>
-          </div>
-          <div className="toolbar" style={{ flexWrap: "wrap" }}>
-            <label className="row">Jazyk <input style={{ width: 70 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></label>
-            <label className="row" style={{ flex: 1 }}>Adresa <input style={{ minWidth: 200 }} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></label>
-          </div>
-          <div className="toolbar" style={{ flexWrap: "wrap" }}>
-            <label className="row">Doklad <select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></label>
-            <label className="row">Číslo dokladu <input value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></label>
-          </div>
+        <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16, maxWidth: 460 }}>
+          <Field label="Jméno"><input style={fieldInp} value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></Field>
+          <Field label="Příjmení"><input style={fieldInp} value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></Field>
+          <Field label="E-mail"><input style={fieldInp} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></Field>
+          <Field label="Telefon"><input style={fieldInp} value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></Field>
+          <Field label="Jazyk"><input style={{ width: 90 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></Field>
+          <Field label="Adresa"><input style={fieldInp} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></Field>
+          <Field label="Doklad"><select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></Field>
+          <Field label="Číslo dokladu"><input style={fieldInp} value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></Field>
         </div></div>
         <div className="panel"><h3>CRM</h3><div style={{ padding: 16 }}>
           <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={f.vip} onChange={(e) => upd({ vip: e.target.checked })} />&nbsp; VIP host</label>
