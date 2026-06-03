@@ -232,6 +232,8 @@ export const api = {
   deleteIcalImportFeed: (id: string) => req(`/admin/ical/import-feeds/${id}`, { method: "DELETE" }),
   icalSync: () => req<{ id: string; ok: boolean; count?: number; error?: string }[]>(`/admin/ical/sync`, { method: "POST" }),
   setReservationPrimaryGuest: (id: string, guestId: string) => req<ReservationDetail>(`/admin/reservations/${id}/primary-guest`, { method: "PATCH", body: JSON.stringify({ guestId }) }),
+  addRegistration: (id: string, b: { primary?: boolean; fullName: string; dateOfBirth: string; nationality: string; documentType?: string; documentNumber?: string; homeAddress?: string }) => req(`/admin/reservations/${id}/registration`, { method: "POST", body: JSON.stringify(b) }),
+  deleteRegistration: (id: string) => req(`/admin/registrations/${id}`, { method: "DELETE" }),
   searchGuests: (q: string) => req<GuestListItem[]>(`/admin/guests?q=${encodeURIComponent(q)}`),
   guestProfile: (id: string) => req<GuestProfile>(`/admin/guests/${id}`),
   updateGuest: (id: string, b: GuestPatch) => req(`/admin/guests/${id}`, { method: "PATCH", body: JSON.stringify(b) }),

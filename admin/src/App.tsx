@@ -1874,6 +1874,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const svc = useAsync<ServiceItem[]>(() => api.serviceItems(), [id]);
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
   const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
+  const [reg, setReg] = useState({ primary: true, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
   const [gEdit, setGEdit] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteDirty, setNoteDirty] = useState(false);
@@ -2014,12 +2015,27 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           render={(p: Payment) => (<tr key={p.id}><td className="muted">{p.createdAt.slice(0, 10)}</td><td>{PAY_TYPE_LABEL[p.type] ?? p.type}</td><td>{p.description ?? "—"}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</td><td className="muted">{PAY_METHOD_LABEL[p.method] ?? p.method}</td><td>{money(p.amount)}</td><td className="right">{p.type !== "deposit_hold" && <button className="btn sm ghost" onClick={() => openReceipt(() => api.paymentReceipt(p.id))}>🧾</button>}</td></tr>)} />
       </div>
 
-      {r.registrationEntries.length > 0 && (
-        <div className="panel"><h3>Evidenční kniha</h3>
-          <Table cols={["Jméno", "Narození", "Doklad", "Pobyt"]} rows={r.registrationEntries} empty=""
-            render={(e: RegistrationEntry) => (<tr key={e.id}><td>{e.fullName}</td><td>{d(e.dateOfBirth)}</td><td className="muted">{e.documentNumber}</td><td>{d(e.stayFrom)} → {d(e.stayTo)}</td></tr>)} />
+      <div className="panel"><h3>Evidenční kniha <span className="muted" style={{ fontSize: 14 }}>zápis ubytovaných osob</span></h3>
+        <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap", alignItems: "center" }}>
+          <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={reg.primary} onChange={(e) => setReg({ ...reg, primary: e.target.checked, fullName: e.target.checked ? `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() : "" })} /> hlavní host</label>
+          <input placeholder="Jméno a příjmení" style={{ minWidth: 180 }} value={reg.fullName} onChange={(e) => setReg({ ...reg, fullName: e.target.value })} />
+          <label className="row">nar. <input type="date" value={reg.dateOfBirth} onChange={(e) => setReg({ ...reg, dateOfBirth: e.target.value })} /></label>
+          <input placeholder="Národnost" style={{ width: 150 }} value={reg.nationality} onChange={(e) => setReg({ ...reg, nationality: e.target.value })} />
+          <select value={reg.documentType} onChange={(e) => setReg({ ...reg, documentType: e.target.value })}><option value="id_card">OP</option><option value="passport">Pas</option></select>
+          <input placeholder="Číslo dokladu" style={{ width: 130 }} value={reg.documentNumber} onChange={(e) => setReg({ ...reg, documentNumber: e.target.value })} />
+          <input placeholder="Adresa trvalého bydliště" style={{ minWidth: 200 }} value={reg.homeAddress} onChange={(e) => setReg({ ...reg, homeAddress: e.target.value })} />
+          <button className="btn" disabled={busy || !reg.fullName.trim() || !reg.dateOfBirth || !reg.nationality.trim()} onClick={() => run(async () => { await api.addRegistration(id, { primary: reg.primary, fullName: reg.fullName, dateOfBirth: reg.dateOfBirth, nationality: reg.nationality, documentType: reg.documentType || undefined, documentNumber: reg.documentNumber || undefined, homeAddress: reg.homeAddress || undefined }); setReg({ primary: false, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" }); })}>Zapsat do knihy</button>
         </div>
-      )}
+        <Table cols={["Jméno", "Narození", "Národnost", "Doklad", "Adresa", "Pobyt", ""]} rows={r.registrationEntries} empty="Zatím nikdo zapsán"
+          render={(e: RegistrationEntry) => (
+            <tr key={e.id}>
+              <td>{e.fullName}</td><td>{d(e.dateOfBirth)}</td><td className="muted">{e.nationality}</td>
+              <td className="muted">{DOCTYPE_LABEL[e.documentType] ?? e.documentType} {e.documentNumber}</td>
+              <td className="muted">{e.homeAddress}</td><td>{d(e.stayFrom)} → {d(e.stayTo)}</td>
+              <td className="right"><button className="btn sm danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Smazat zápis", message: <>Smazat <b>{e.fullName}</b> z evidenční knihy?</>, confirmLabel: "Smazat", danger: true })) run(() => api.deleteRegistration(e.id)); }}>Smazat</button></td>
+            </tr>
+          )} />
+      </div>
 
       {issuedDoc && <DocumentOverlay doc={issuedDoc} onClose={() => setIssuedDoc(null)} />}
       {receipt && <ReceiptOverlay rec={receipt} onClose={() => setReceipt(null)} />}

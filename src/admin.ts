@@ -5,7 +5,7 @@ import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
 import { freeUnitsForType, overlapWhere } from "./availability";
 import { InventoryUnit } from "@prisma/client";
-import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge } from "./reservations";
+import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge, addRegistrationEntry } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
 import { findOrCreateGuest, previousStaysCount } from "./guests";
@@ -359,6 +359,31 @@ export async function buildInvoice(propertyId: string, id: string) {
     billing: { company: r.billingCompany, ico: r.billingIco, dic: r.billingDic },
     lines, total: folio.charges, paid: folio.paid, balance: folio.balance,
   };
+}
+
+// ── Evidenční kniha (zápis na recepci) ───────────────────────
+export async function addRegistration(propertyId: string, id: string, input: { primary?: boolean; fullName: string; dateOfBirth: Date; nationality: string; documentType?: DocumentType; documentNumber?: string; homeAddress?: string }) {
+  const res = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, primaryGuestId: true, checkInDate: true, checkOutDate: true } });
+  if (!res) throw NOT_FOUND();
+  let guestId = res.primaryGuestId;
+  if (!input.primary) {
+    const parts = input.fullName.trim().split(/\s+/);
+    const g = await prisma.guest.create({ data: { firstName: parts[0] ?? input.fullName, lastName: parts.slice(1).join(" ") || "—", address: input.homeAddress, documentType: input.documentType ?? null, documentNumber: input.documentNumber } });
+    guestId = g.id;
+    await prisma.reservationGuest.upsert({ where: { reservationId_guestId: { reservationId: id, guestId } }, create: { reservationId: id, guestId, isPrimary: false }, update: {} });
+  }
+  return addRegistrationEntry({
+    reservationId: id, guestId, fullName: input.fullName, dateOfBirth: input.dateOfBirth, nationality: input.nationality,
+    documentType: input.documentType ?? DocumentType.id_card, documentNumber: input.documentNumber ?? "", homeAddress: input.homeAddress ?? "",
+    stayFrom: res.checkInDate, stayTo: res.checkOutDate,
+  });
+}
+
+export async function deleteRegistration(propertyId: string, id: string) {
+  const e = await prisma.registrationEntry.findFirst({ where: { id, reservation: { propertyId } }, select: { id: true } });
+  if (!e) throw NOT_FOUND();
+  await prisma.registrationEntry.delete({ where: { id } });
+  return { ok: true };
 }
 
 export async function updateReservationNote(propertyId: string, id: string, note: string) {

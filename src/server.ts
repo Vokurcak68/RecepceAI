@@ -352,6 +352,11 @@ adminRouter.post("/reservations", h((req, res) => {
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
 adminRouter.patch("/reservations/:id", h((req, res) => admin.updateReservationNote(pid(res), req.params.id, z.object({ note: z.string() }).parse(req.body).note)));
 adminRouter.patch("/reservations/:id/primary-guest", h((req, res) => admin.setPrimaryGuest(pid(res), req.params.id, z.object({ guestId: z.string().uuid() }).parse(req.body).guestId)));
+adminRouter.post("/reservations/:id/registration", h((req, res) => {
+  const b = z.object({ primary: z.boolean().optional(), fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2), documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional() }).parse(req.body);
+  return admin.addRegistration(pid(res), req.params.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });
+}));
+adminRouter.delete("/registrations/:id", h((req, res) => admin.deleteRegistration(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/folio", h((req, res) => admin.adminFolio(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkin", h((req, res) => admin.adminCheckIn(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/checkout", h(async (req, res) => {
