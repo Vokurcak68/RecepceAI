@@ -32,6 +32,9 @@ function Chk({ label, checked, onChange, disabled }: { label: string; checked: b
   return <label className="row" style={{ gap: 6, opacity: disabled ? 0.5 : 1 }}><input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /> {label}</label>;
 }
 const fullInput: CSSProperties = { width: "100%", boxSizing: "border-box" };
+// Denní úklid (automaticky generovaný stayover úkol) má vlastní ikonu/štítek.
+const isDailyTask = (type: string, desc?: string | null) => type === "cleaning" && desc === "Denní úklid";
+const taskIcon = (type: string, desc?: string | null) => (isDailyTask(type, desc) ? "🔄" : SERVICE_ICON[type]);
 
 // Adresa portálu hosta (přepsatelné přes VITE_GUEST_URL při buildu).
 const GUEST_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_GUEST_URL || "http://localhost:5175";
@@ -2921,7 +2924,7 @@ function HousekeepingView({ selId }: { selId: string }) {
           render={(i: PlanItem) => (
             <tr key={i.id} className={`row-${i.priority}`}>
               <td><PrioBadge p={i.priority} /></td>
-              <td>{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}{i.fromGuest && <> <span className="chip">host</span></>}{i.status === "in_progress" && <> <span className="chip">probíhá</span></>}</td>
+              <td>{taskIcon(i.type, i.description)} {SERVICE_LABEL[i.type]}{isDailyTask(i.type, i.description) && <> <span className="chip chip-daily">denní</span></>}{i.fromGuest && <> <span className="chip">host</span></>}{i.status === "in_progress" && <> <span className="chip">probíhá</span></>}</td>
               <td>{planLoc(i)}{i.roomTypeName ? <span className="muted"> · {i.roomTypeName}</span> : null}</td>
               <td>{i.guestName ?? "—"}</td>
               <td className="muted">{i.reason}</td>
@@ -3109,7 +3112,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
       <div className="staff-list">
         {items.length === 0 ? <div className="empty">Žádné požadavky</div> : items.map((r) => (
           <div key={r.id} className={`req-card s-${r.status}`}>
-            <div className="req-top"><span className="req-type">{SERVICE_ICON[r.type]} {SERVICE_LABEL[r.type]}</span><Badge s={r.status} /></div>
+            <div className="req-top"><span className="req-type">{taskIcon(r.type, r.description)} {SERVICE_LABEL[r.type]}{isDailyTask(r.type, r.description) && <> <span className="chip chip-daily">denní</span></>}</span><Badge s={r.status} /></div>
             <div className="req-loc">{r.room ? `Pokoj ${r.room.number}` : "—"}{r.fromGuest && r.reservation?.primaryGuest ? ` · ${r.reservation.primaryGuest.firstName} ${r.reservation.primaryGuest.lastName}` : ""}</div>
             {r.description && <div className="req-desc">{r.description}</div>}
             {r.status === "done" || r.status === "cancelled" ? (
@@ -3155,7 +3158,7 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, 
       <div className="staff-list">
         {!plan?.items.length ? <div className="empty">Fronta úklidu je prázdná 🎉</div> : plan.items.map((i) => (
           <div key={i.id} className={`req-card s-${i.status} row-${i.priority}`}>
-            <div className="req-top"><span className="req-type">{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}</span><PrioBadge p={i.priority} /></div>
+            <div className="req-top"><span className="req-type">{taskIcon(i.type, i.description)} {SERVICE_LABEL[i.type]}{isDailyTask(i.type, i.description) && <> <span className="chip chip-daily">denní</span></>}</span><PrioBadge p={i.priority} /></div>
             <div className="req-loc">{planLoc(i)}{i.roomTypeName ? ` · ${i.roomTypeName}` : ""}{i.guestName ? ` · ${i.guestName}` : ""}</div>
             <div className="req-desc">{i.reason}{i.description ? ` — ${i.description}` : ""}</div>
             <div className="req-actions">
