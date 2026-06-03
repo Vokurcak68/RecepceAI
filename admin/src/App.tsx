@@ -2920,7 +2920,7 @@ function HousekeepingView({ selId }: { selId: string }) {
           render={(i: PlanItem) => (
             <tr key={i.id} className={`row-${i.priority}`}>
               <td><PrioBadge p={i.priority} /></td>
-              <td>{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}{i.fromGuest && <span className="chip">host</span>}{i.status === "in_progress" && <span className="chip">probíhá</span>}</td>
+              <td>{SERVICE_ICON[i.type]} {SERVICE_LABEL[i.type]}{i.fromGuest && <> <span className="chip">host</span></>}{i.status === "in_progress" && <> <span className="chip">probíhá</span></>}</td>
               <td>{planLoc(i)}{i.roomTypeName ? <span className="muted"> · {i.roomTypeName}</span> : null}</td>
               <td>{i.guestName ?? "—"}</td>
               <td className="muted">{i.reason}</td>
