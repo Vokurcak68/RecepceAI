@@ -340,7 +340,7 @@ export type ServiceRequest = {
   room?: { number: string } | null; resolvedBy?: { id: string; name: string } | null;
 };
 export type StaffRoom = { id: string; number: string; status: string; roomType?: { name: string } | null };
-export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
+export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean; balance: Money } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
 export type RoomResItem = { id: string; code: string; guestName: string; status: string; checkInDate: string; checkOutDate: string };
 export type RoomReqItem = { id: string; type: string; domain: string; status: string; description: string | null; createdAt: string };
 export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; reservations: RoomResItem[]; requests: RoomReqItem[] };

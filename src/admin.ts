@@ -220,6 +220,8 @@ export async function roomBoard(propertyId: string) {
   ]);
   const occ = new Map(inHouse.map((r) => [r.roomId!, r]));
   const arr = new Map(arrivals.map((r) => [r.roomId!, r]));
+  const balances = new Map<string, string>();
+  await Promise.all(inHouse.map(async (r) => { balances.set(r.roomId!, (await computeFolio(r.id)).balance.toFixed(2)); }));
   const reqs = new Map<string, { housekeeping: number; maintenance: number }>();
   for (const g of reqGroups) {
     const m = reqs.get(g.roomId!) ?? { housekeeping: 0, maintenance: 0 };
@@ -231,7 +233,7 @@ export async function roomBoard(propertyId: string) {
     const o = occ.get(r.id); const a = arr.get(r.id); const rq = reqs.get(r.id) ?? { housekeeping: 0, maintenance: 0 };
     return {
       id: r.id, number: r.number, floor: r.floor, roomType: r.roomType?.name ?? null, status: r.status,
-      occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs } : null,
+      occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs, balance: balances.get(r.id) ?? "0" } : null,
       arrival: a ? { reservationId: a.id, name: `${a.primaryGuest.firstName} ${a.primaryGuest.lastName}` } : null,
       openHousekeeping: rq.housekeeping, openMaintenance: rq.maintenance,
     };

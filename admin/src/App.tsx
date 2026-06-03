@@ -914,13 +914,14 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
         {FILTERS.map(([v, l]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l}</button>)}
       </div>
       <div className="panel">
-        <Table cols={["Pokoj", "Typ", "Stav", "Obsazenost", "Dnes", "Požadavky"]} rows={shown} empty="Žádné pokoje"
+        <Table cols={["Pokoj", "Typ", "Stav", "Obsazenost", "Účet", "Dnes", "Požadavky"]} rows={shown} empty="Žádné pokoje"
           render={(r: RoomBoardItem) => (
             <tr key={r.id} className="row-click" onClick={() => setOpenId(r.id)}>
               <td><b>Pokoj {r.number}</b> <span className="muted">· {r.floor}.p</span></td>
               <td className="muted">{r.roomType ?? "—"}</td>
               <td><RoomPill s={r.status} /></td>
               <td>{r.occupant ? <>👤 {r.occupant.name} <span className="muted">· do {d(r.occupant.checkOutDate)}</span></> : <span className="muted">Volný</span>}</td>
+              <td>{r.occupant ? (Number(r.occupant.balance) > 0 ? <b style={{ color: "var(--warn)" }}>{money(r.occupant.balance)}</b> : <span className="muted">{money(r.occupant.balance)}</span>) : <span className="muted">—</span>}</td>
               <td className="muted">{[r.occupant?.departsToday ? "🔁 odjezd dnes" : "", r.arrival ? `→ příjezd: ${r.arrival.name}` : ""].filter(Boolean).join(" · ") || "—"}</td>
               <td>{r.openHousekeeping > 0 && <span className="rb-badge hk">🧹 {r.openHousekeeping}</span>}{r.openHousekeeping > 0 && r.openMaintenance > 0 ? " " : ""}{r.openMaintenance > 0 && <span className="rb-badge mt">🔧 {r.openMaintenance}</span>}{!r.openHousekeeping && !r.openMaintenance ? <span className="muted">—</span> : null}</td>
             </tr>
@@ -932,7 +933,9 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
 
 // Detail pokoje — centrální ovládání provozu pokoje.
 function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Property; onBack: () => void }) {
+  const confirm = useConfirm();
   const { data, error, reload } = useAsync<RoomDetail>(() => api.roomDetail(roomId), [roomId]);
+  const [doc, setDoc] = useState<Doc | null>(null);
   const [resId, setResId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -951,6 +954,8 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const doPlace = (rid: string) => run(async () => { await api.assignUnit(rid, roomId); setUnassigned(null); }, "Rezervace umístěna na pokoj.");
   const addReq = () => run(async () => { await api.createRoomRequest(roomId, { type: rf.type, description: rf.description || undefined }); setRf({ type: "cleaning", description: "" }); }, "Požadavek vytvořen.");
   const saveRoom = () => { if (ef) run(() => api.updateRoom(roomId, { number: ef.number, floor: Number(ef.floor), lockType: ef.lockType, notes: ef.notes }), "Pokoj uložen."); };
+  const checkin = async (rid: string, code: string) => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{code}</b>?</>, confirmLabel: "Check-in" })) run(() => api.checkin(rid), "Check-in proveden."); };
+  const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
 
   if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
@@ -960,7 +965,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   return (
     <>
       <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Pokoj {room.number} <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>· {room.roomType.name} · {room.floor}. patro</span></span> <RoomPill s={room.status} /></div>
-      {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
+      {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen|proveden/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
 
       <div className="grid2">
         <div className="panel"><h3>Stav úklidu</h3><div style={{ padding: 16 }}>
@@ -973,7 +978,8 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
             <div className="kvline"><span className="muted">Zůstatek</span><b style={{ color: Number(data.occupantBalance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(data.occupantBalance ?? 0)}</b></div>
             <div className="req-actions" style={{ marginTop: 10 }}>
               <button className="btn sm" onClick={() => setResId(occ.id)}>Detail rezervace</button>
-              <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit na jiný pokoj</button>
+              <button className="btn sm ok" disabled={busy} onClick={() => checkout(occ.id, occ.code)}>Check-out</button>
+              <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit</button>
             </div>
           </> : <>
             <div className="muted">Pokoj není obsazen.</div>
@@ -1009,6 +1015,8 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
               <td className="muted">{r.code}</td><td>{r.guestName}</td><td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td><td><Badge s={r.status} /></td>
               <td className="right" style={{ whiteSpace: "nowrap" }}>
                 <button className="btn sm ghost" onClick={() => setResId(r.id)}>Detail</button>{" "}
+                {["confirmed", "pending"].includes(r.status) && <><button className="btn sm ok" disabled={busy} onClick={() => checkin(r.id, r.code)}>Check-in</button>{" "}</>}
+                {r.status === "checked_in" && <><button className="btn sm ok" disabled={busy} onClick={() => checkout(r.id, r.code)}>Check-out</button>{" "}</>}
                 {["confirmed", "checked_in"].includes(r.status) && <button className="btn sm ghost" disabled={busy} onClick={() => openMove(r.id)}>Přemístit</button>}
               </td>
             </tr>
@@ -1036,6 +1044,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
         <textarea style={{ width: "100%", minHeight: 60, resize: "vertical", marginTop: 8 }} placeholder="Poznámka k pokoji…" value={ef.notes} onChange={(e) => setEf({ ...ef, notes: e.target.value })} />
         <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={saveRoom}>Uložit pokoj</button></div>
       </div></div>
+      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
   );
 }
