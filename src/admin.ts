@@ -270,6 +270,26 @@ export async function updateReservationNote(propertyId: string, id: string, note
   return prisma.reservation.update({ where: { id }, data: { note: note || null } });
 }
 
+/** Přepojí rezervaci na existujícího hosta z adresáře (primární host). */
+export async function setPrimaryGuest(propertyId: string, id: string, guestId: string) {
+  await assertInProperty(propertyId, id);
+  const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { id: true } });
+  if (!guest) throw new Error("Klient nenalezen v adresáři.");
+  const oldPrimary = await prisma.reservationGuest.findFirst({ where: { reservationId: id, isPrimary: true } });
+  if (oldPrimary?.guestId !== guestId) {
+    await prisma.$transaction(async (tx) => {
+      await tx.reservation.update({ where: { id }, data: { primaryGuestId: guestId } });
+      if (oldPrimary) await tx.reservationGuest.delete({ where: { id: oldPrimary.id } });
+      await tx.reservationGuest.upsert({
+        where: { reservationId_guestId: { reservationId: id, guestId } },
+        create: { reservationId: id, guestId, isPrimary: true },
+        update: { isPrimary: true },
+      });
+    });
+  }
+  return getReservation(propertyId, id);
+}
+
 export async function cancelReservation(propertyId: string, id: string) {
   const { count } = await prisma.reservation.updateMany({
     where: { id, propertyId }, data: { status: ReservationStatus.cancelled, holdExpiresAt: null },

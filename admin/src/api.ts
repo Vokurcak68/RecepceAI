@@ -219,6 +219,7 @@ export const api = {
   addIcalImportFeed: (b: { roomTypeId: string; url: string; label?: string }) => req(`/admin/ical/import-feeds`, { method: "POST", body: JSON.stringify(b) }),
   deleteIcalImportFeed: (id: string) => req(`/admin/ical/import-feeds/${id}`, { method: "DELETE" }),
   icalSync: () => req<{ id: string; ok: boolean; count?: number; error?: string }[]>(`/admin/ical/sync`, { method: "POST" }),
+  setReservationPrimaryGuest: (id: string, guestId: string) => req<ReservationDetail>(`/admin/reservations/${id}/primary-guest`, { method: "PATCH", body: JSON.stringify({ guestId }) }),
   searchGuests: (q: string) => req<GuestListItem[]>(`/admin/guests?q=${encodeURIComponent(q)}`),
   guestProfile: (id: string) => req<GuestProfile>(`/admin/guests/${id}`),
   updateGuest: (id: string, b: { preferences?: string; vip?: boolean; email?: string; phone?: string; firstName?: string; lastName?: string }) => req(`/admin/guests/${id}`, { method: "PATCH", body: JSON.stringify(b) }),

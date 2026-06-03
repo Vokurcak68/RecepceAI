@@ -1437,6 +1437,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
+  const [pickGuest, setPickGuest] = useState(false);
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
@@ -1499,6 +1500,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
           <button className="btn ghost" onClick={() => setEmailsOpen(true)}>📧 E-maily</button>
+          <button className="btn ghost" onClick={() => setPickGuest(true)}>📇 Adresář</button>
         </div>
       </div>
 
@@ -1576,6 +1578,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       {receipt && <ReceiptOverlay rec={receipt} onClose={() => setReceipt(null)} />}
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
       {emailsOpen && <EmailsOverlay id={id} guestEmail={r.primaryGuest?.email ?? null} onClose={() => setEmailsOpen(false)} />}
+      {pickGuest && <GuestPickerOverlay prefill={r.primaryGuest?.email || r.primaryGuest?.lastName || ""} onClose={() => setPickGuest(false)} onPick={(gid) => run(async () => { await api.setReservationPrimaryGuest(id, gid); setPickGuest(false); })} />}
     </>
   );
 }
@@ -1587,6 +1590,44 @@ const EmailStatus = ({ s }: { s: string }) => {
 };
 
 // Popup z detailu rezervace: přehled odeslaných e-mailů + znovuodeslání.
+// Adresář hostů — výběr existujícího klienta a jeho připojení k rezervaci.
+function GuestPickerOverlay({ prefill, onPick, onClose }: { prefill: string; onPick: (guestId: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState(prefill);
+  const list = useAsync<GuestListItem[]>(() => api.searchGuests(q), []);
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div>
+            <h2 style={{ margin: 0 }}>Adresář hostů</h2>
+            <div className="muted" style={{ marginTop: 4 }}>Vyber existujícího klienta — připojí se k této rezervaci (jeho historie a preference se pak zobrazí).</div>
+          </div>
+          <button className="linkx" onClick={onClose}>zavřít</button>
+        </div>
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <input autoFocus placeholder="Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ flex: 1, minWidth: 240 }} />
+          <button className="btn" onClick={() => list.reload()}>Hledat</button>
+        </div>
+        {list.error && <div className="error">{list.error}</div>}
+        <table style={{ marginTop: 8 }}>
+          <thead><tr><th>Host</th><th>Kontakt</th><th>Pobytů</th><th className="right"></th></tr></thead>
+          <tbody>
+            {(list.data ?? []).map((g) => (
+              <tr key={g.id}>
+                <td>{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</td>
+                <td className="muted">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""}</td>
+                <td>{g.stays}</td>
+                <td className="right"><button className="btn sm" onClick={() => onPick(g.id)}>Použít</button></td>
+              </tr>
+            ))}
+            {list.data && list.data.length === 0 && <tr><td colSpan={4} className="muted">Nikdo nenalezen.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function EmailsOverlay({ id, guestEmail, onClose }: { id: string; guestEmail: string | null; onClose: () => void }) {
   const { data, error, reload } = useAsync<EmailLog[]>(() => api.reservationEmails(id), [id]);
   const [busy, setBusy] = useState("");
