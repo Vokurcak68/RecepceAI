@@ -54,6 +54,7 @@ export type TapeRes = { id: string; code: string; guestName: string; status: str
 export type TapeChart = { from: string; days: number; unit: "room" | "bed"; dates: string[]; types: { roomTypeId: string; name: string }[]; units: TapeUnit[]; reservations: TapeRes[] };
 export type UbyEntry = { jmeno: string; datumNarozeni: string; narodnost: string; druhDokladu: string; cisloDokladu: string; vizum: string; adresa: string; ucelPobytu: string; pobytOd: string; pobytDo: string };
 export type UbyportData = { ubytovatel: { nazev: string; ulice: string; mesto: string; ico: string; dic: string }; pocet: number; entries: UbyEntry[] };
+export type IcalImportFeed = { id: string; url: string; label: string | null; roomTypeId: string; roomType?: { name: string }; lastSyncedAt: string | null; lastError: string | null };
 export type EmailLog = { id: string; type: string; recipient: string; subject: string; status: string; error: string | null; createdAt: string };
 export const EMAIL_TYPE_LABEL: Record<string, string> = { created: "Potvrzení rezervace", checkin: "Uvítání (check-in)", checkout: "Poděkování (check-out)", cancellation: "Zrušení rezervace" };
 
@@ -207,6 +208,10 @@ export const api = {
   tapechart: (from?: string, days = 14) => req<TapeChart>(`/admin/tapechart?days=${days}${from ? `&from=${from}` : ""}`),
   ubyport: (from: string, to: string, all = false) => req<UbyportData>(`/admin/ubyport?from=${from}&to=${to}${all ? "&all=1" : ""}`),
   icalFeeds: () => req<{ all: string; perType: { name: string; url: string }[] }>(`/admin/ical/feeds`),
+  icalImportFeeds: () => req<IcalImportFeed[]>(`/admin/ical/import-feeds`),
+  addIcalImportFeed: (b: { roomTypeId: string; url: string; label?: string }) => req(`/admin/ical/import-feeds`, { method: "POST", body: JSON.stringify(b) }),
+  deleteIcalImportFeed: (id: string) => req(`/admin/ical/import-feeds/${id}`, { method: "DELETE" }),
+  icalSync: () => req<{ id: string; ok: boolean; count?: number; error?: string }[]>(`/admin/ical/sync`, { method: "POST" }),
   assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),

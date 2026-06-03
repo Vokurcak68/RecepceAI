@@ -28,7 +28,7 @@ import * as billing from "./billing";
 import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
 import * as mailer from "./mailer";
-import { icalToken, buildExportIcs } from "./ical";
+import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, syncProperty } from "./ical";
 import { chat as aiChat, type ChatMsg } from "./ai";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -379,6 +379,13 @@ adminRouter.get("/ical/feeds", h(async (_req, res) => {
   const types = await prisma.roomType.findMany({ where: { propertyId: pid(res) }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   return { all: url(), perType: types.map((t) => ({ name: t.name, url: url(t.id) })) };
 }));
+adminRouter.get("/ical/import-feeds", h((_req, res) => listIcalFeeds(pid(res))));
+adminRouter.post("/ical/import-feeds", h((req, res) => {
+  const b = z.object({ roomTypeId: z.string().uuid(), url: z.string().url(), label: z.string().optional() }).parse(req.body);
+  return addIcalFeed(pid(res), b.roomTypeId, b.url, b.label);
+}));
+adminRouter.delete("/ical/import-feeds/:id", h((req, res) => deleteIcalFeed(pid(res), req.params.id)));
+adminRouter.post("/ical/sync", h((_req, res) => syncProperty(pid(res))));
 adminRouter.get("/reservations/:id/emails", h((req, res) => admin.adminListEmails(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminResendEmail(pid(res), req.params.id, z.object({ type: z.string() }).parse(req.body).type)));
 

@@ -92,6 +92,7 @@ enum ReservationSource {
   kiosk_walkin
   booking_com
   manual
+  ical
 }
 
 enum PaymentType {
@@ -200,6 +201,7 @@ model Property {
   documents     Document[]
   cashRegisters CashRegister[]
   serviceItems  ServiceItem[]
+  icalFeeds     IcalFeed[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -255,6 +257,7 @@ model RoomType {
   rooms        Room[]
   reservations Reservation[]
   ratePlans    RatePlan[]
+  icalFeeds    IcalFeed[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -377,6 +380,7 @@ model Reservation {
   holdExpiresAt DateTime?
 
   onlineCheckinAt DateTime? // host dokončil online check-in (vyplnil registrační údaje); recepce finalizuje příjezd
+  externalRef     String?   // blokace z externího iCal feedu: "<feedId>:<UID>" (pro dedup při synchronizaci)
 
   reservationGuests   ReservationGuest[]
   payments            Payment[]
@@ -391,6 +395,24 @@ model Reservation {
 
   @@index([propertyId, checkInDate, checkOutDate])
   @@index([propertyId, status])
+  @@index([externalRef])
+}
+
+/// Externí iCal feed (Airbnb/Booking/…) — synchronizuje obsazenost do blokujících rezervací.
+model IcalFeed {
+  id           String    @id @default(uuid())
+  property     Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId   String
+  roomType     RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  roomTypeId   String
+  url          String
+  label        String?
+  blockGuestId String?   // sdílený „host" pro blokace z tohoto feedu
+  lastSyncedAt DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+
+  @@index([propertyId])
 }
 
 /// Záznam o odeslaném (nebo neúspěšném) e-mailu hostovi — pro přehled v detailu

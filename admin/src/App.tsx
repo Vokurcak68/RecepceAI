@@ -8,7 +8,7 @@ import {
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
-  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData,
+  type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -609,10 +609,18 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
 }
 
 function IcalView({ selId }: { selId: string }) {
-  const { data, error } = useAsync<{ all: string; perType: { name: string; url: string }[] }>(() => api.icalFeeds(), [selId]);
+  const exportA = useAsync<{ all: string; perType: { name: string; url: string }[] }>(() => api.icalFeeds(), [selId]);
+  const feeds = useAsync<IcalImportFeed[]>(() => api.icalImportFeeds(), [selId]);
+  const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
   const [copied, setCopied] = useState("");
+  const [nf, setNf] = useState({ roomTypeId: "", url: "", label: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const copy = (u: string) => { navigator.clipboard?.writeText(u).then(() => { setCopied(u); setTimeout(() => setCopied(""), 1500); }).catch(() => {}); };
-  const Row = ({ label, url }: { label: string; url: string }) => (
+  const run = async (fn: () => Promise<unknown>, ok?: string) => { setBusy(true); setErr(""); setMsg(""); try { await fn(); if (ok) setMsg(ok); feeds.reload(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const add = () => { if (!nf.roomTypeId || !nf.url) { setErr("Vyber typ a zadej URL."); return; } run(async () => { await api.addIcalImportFeed({ roomTypeId: nf.roomTypeId, url: nf.url, label: nf.label || undefined }); setNf({ roomTypeId: "", url: "", label: "" }); }, "Feed přidán a synchronizován."); };
+  const sync = () => run(async () => { const r = await api.icalSync(); const bad = r.filter((x) => !x.ok).length; setMsg(bad ? `Synchronizováno, ${bad} feed(ů) s chybou.` : `Synchronizováno (${r.length} feed(ů)).`); }, undefined);
+  const ExpRow = ({ label, url }: { label: string; url: string }) => (
     <div className="kvline" style={{ alignItems: "center", gap: 10 }}>
       <span className="muted" style={{ minWidth: 160 }}>{label}</span>
       <input readOnly value={url} style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }} onFocus={(e) => e.currentTarget.select()} />
@@ -621,18 +629,49 @@ function IcalView({ selId }: { selId: string }) {
   );
   return (
     <>
-      <div className="h1">iCal export obsazenosti</div>
-      {error && <div className="error">{error}</div>}
-      <div className="panel" style={{ padding: 16 }}>
-        <p className="muted" style={{ marginTop: 0 }}>Tyto odkazy vlož do Google Kalendáře („Přidat kalendář → Z URL") nebo do Airbnb/Booking („Import iCal"), aby viděly tvoji obsazenost. Feed je read-only a obsahuje jen termíny (bez jmen hostů).</p>
-        {!data ? <div className="muted">Načítám…</div> : (
-          <>
-            <Row label="Celá provozovna" url={data.all} />
-            {data.perType.map((t) => <Row key={t.url} label={t.name} url={t.url} />)}
-          </>
-        )}
+      <div className="h1">iCal synchronizace</div>
+      {(exportA.error || feeds.error || err) && <div className="error">{exportA.error || feeds.error || err}</div>}
+      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+
+      <div className="panel">
+        <h3>Export — naše obsazenost ven</h3>
+        <div style={{ padding: 16 }}>
+          <p className="muted" style={{ marginTop: 0 }}>Tyto odkazy vlož do Google Kalendáře / Airbnb / Booking („Import iCal"), aby viděly tvoji obsazenost (read-only, jen termíny, bez jmen).</p>
+          {!exportA.data ? <div className="muted">Načítám…</div> : (<>
+            <ExpRow label="Celá provozovna" url={exportA.data.all} />
+            {exportA.data.perType.map((t) => <ExpRow key={t.url} label={t.name} url={t.url} />)}
+          </>)}
+        </div>
       </div>
-      <div className="muted" style={{ marginTop: 12 }}>Pozn.: Import OTA rezervací (stažení Airbnb/Booking kalendářů do systému jako blokace) je další krok — připraví se samostatně.</div>
+
+      <div className="panel">
+        <h3>Import — OTA rezervace dovnitř (blokace) <button className="btn sm" disabled={busy} style={{ float: "right" }} onClick={sync}>↻ Synchronizovat teď</button></h3>
+        <div style={{ padding: 16 }}>
+          <p className="muted" style={{ marginTop: 0 }}>Vlož sem iCal odkaz z Airbnb/Booking pro daný typ pokoje. Rezervace se stáhnou jako blokace a zaberou dostupnost (brání přebookování). Přidání i tlačítko stáhnou feed hned; doporučeno občas synchronizovat (OTA se mění).</p>
+          <div className="toolbar">
+            <select value={nf.roomTypeId} onChange={(e) => setNf({ ...nf, roomTypeId: e.target.value })}>
+              <option value="">Typ pokoje…</option>
+              {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <input placeholder="iCal URL (https://…/calendar.ics)" style={{ minWidth: 320 }} value={nf.url} onChange={(e) => setNf({ ...nf, url: e.target.value })} />
+            <input placeholder="Popis (Airbnb…)" style={{ width: 140 }} value={nf.label} onChange={(e) => setNf({ ...nf, label: e.target.value })} />
+            <button className="btn" disabled={busy} onClick={add}>+ Přidat feed</button>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            {!feeds.data ? <div className="muted">Načítám…</div> : feeds.data.length === 0 ? <div className="muted">Zatím žádné importované feedy.</div> : (
+              <Table cols={["Typ", "Popis", "URL", "Poslední sync", ""]} rows={feeds.data} empty="Žádné"
+                render={(f: IcalImportFeed) => (
+                  <tr key={f.id}>
+                    <td>{f.roomType?.name ?? "—"}</td><td>{f.label || "—"}</td>
+                    <td className="muted" style={{ fontFamily: "monospace", fontSize: 11, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.url}</td>
+                    <td className="muted">{f.lastSyncedAt ? d(f.lastSyncedAt) : "—"}{f.lastError ? <span style={{ color: "var(--danger)" }}> · chyba: {f.lastError}</span> : ""}</td>
+                    <td className="right"><button className="btn sm danger" disabled={busy} onClick={() => run(() => api.deleteIcalImportFeed(f.id), "Feed smazán.")}>Smazat</button></td>
+                  </tr>
+                )} />
+            )}
+          </div>
+        </div>
+      </div>
     </>
   );
 }
