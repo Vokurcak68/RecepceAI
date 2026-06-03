@@ -222,9 +222,9 @@ function Login({ onLogin }: { onLogin: (s: LoginResult) => void }) {
     } catch { setError("Nesprávný e-mail nebo heslo."); } finally { setBusy(false); }
   };
   return (
-    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", padding: 16 }}>
       {/* Pravý <form> s autocomplete → prohlížeč nabídne uložení hesla. */}
-      <form className="panel" style={{ width: 380, padding: 28 }} onSubmit={submit}>
+      <form className="panel" style={{ width: "min(380px, 100%)", padding: 28 }} onSubmit={submit}>
         <div className="logo" style={{ padding: "0 0 8px" }}>🛎️ Hotelový systém</div>
         <div className="muted" style={{ marginBottom: 16 }}>Přihlášení správce</div>
         {error && <div className="error">{error}</div>}
