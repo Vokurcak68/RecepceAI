@@ -2,7 +2,7 @@
 // pobytů, trvalé preference/VIP a hodnocení pobytu (NPS). Host je globální entita
 // (může bydlet ve více provozovnách); přehledy se ale scopují na provozovny,
 // ke kterým má uživatel přístup.
-import { Prisma, ReservationStatus } from "@prisma/client";
+import { Prisma, ReservationStatus, DocumentType } from "@prisma/client";
 import { prisma } from "./prisma";
 
 export type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
@@ -87,8 +87,8 @@ export async function guestProfile(guestId: string, propertyIds: string[]) {
   return {
     guest: {
       id: guest.id, firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone,
-      language: guest.language, address: guest.address, vip: guest.vip, preferences: guest.preferences,
-      marketingConsent: guest.marketingConsent, createdAt: guest.createdAt,
+      language: guest.language, address: guest.address, documentType: guest.documentType, documentNumber: guest.documentNumber,
+      vip: guest.vip, preferences: guest.preferences, marketingConsent: guest.marketingConsent, createdAt: guest.createdAt,
     },
     stays: stays.map((s) => ({
       id: s.id, code: s.code, propertyName: s.property.name, roomType: s.roomType?.name ?? null,
@@ -98,22 +98,31 @@ export async function guestProfile(guestId: string, propertyIds: string[]) {
   };
 }
 
-/** Úprava CRM údajů hosta. Ověří, že host patří k některé přístupné provozovně. */
+/** Úprava údajů hosta (plný adresář). Ověří, že host patří k některé přístupné provozovně. */
 export async function updateGuestCrm(
   guestId: string, propertyIds: string[],
-  data: { preferences?: string | null; vip?: boolean; email?: string | null; phone?: string | null; firstName?: string; lastName?: string },
+  data: {
+    firstName?: string; lastName?: string; email?: string | null; phone?: string | null;
+    language?: string | null; address?: string | null; documentType?: string | null; documentNumber?: string | null;
+    vip?: boolean; preferences?: string | null; marketingConsent?: boolean;
+  },
 ) {
   const belongs = await prisma.reservation.findFirst({ where: { primaryGuestId: guestId, propertyId: { in: propertyIds } }, select: { id: true } });
   if (!belongs) throw Object.assign(new Error("not_found"), { code: "P2025" });
   return prisma.guest.update({
     where: { id: guestId },
     data: {
-      ...(data.preferences !== undefined ? { preferences: data.preferences || null } : {}),
-      ...(data.vip !== undefined ? { vip: data.vip } : {}),
-      ...(data.email !== undefined ? { email: data.email || null } : {}),
-      ...(data.phone !== undefined ? { phone: data.phone || null } : {}),
       ...(data.firstName ? { firstName: data.firstName } : {}),
       ...(data.lastName ? { lastName: data.lastName } : {}),
+      ...(data.email !== undefined ? { email: data.email || null } : {}),
+      ...(data.phone !== undefined ? { phone: data.phone || null } : {}),
+      ...(data.language !== undefined ? { language: data.language || null } : {}),
+      ...(data.address !== undefined ? { address: data.address || null } : {}),
+      ...(data.documentType !== undefined ? { documentType: data.documentType ? (data.documentType as DocumentType) : null } : {}),
+      ...(data.documentNumber !== undefined ? { documentNumber: data.documentNumber || null } : {}),
+      ...(data.vip !== undefined ? { vip: data.vip } : {}),
+      ...(data.preferences !== undefined ? { preferences: data.preferences || null } : {}),
+      ...(data.marketingConsent !== undefined ? { marketingConsent: data.marketingConsent } : {}),
     },
   });
 }

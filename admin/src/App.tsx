@@ -1132,37 +1132,62 @@ function GuestsView({ selId }: { selId: string }) {
   );
 }
 
+type GuestForm = { firstName: string; lastName: string; email: string; phone: string; language: string; address: string; documentType: string; documentNumber: string; vip: boolean; preferences: string; marketingConsent: boolean };
 function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   const { data, error, reload } = useAsync<GuestProfile>(() => api.guestProfile(id), [id]);
-  const [prefs, setPrefs] = useState("");
-  const [vip, setVip] = useState(false);
+  const [f, setF] = useState<GuestForm | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  useEffect(() => { if (data) { setPrefs(data.guest.preferences ?? ""); setVip(data.guest.vip); setDirty(false); } }, [data?.guest.id]); // eslint-disable-line
-  const save = async () => { setBusy(true); setMsg(""); try { await api.updateGuest(id, { preferences: prefs, vip }); setMsg("Uloženo."); setDirty(false); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const fromData = (): GuestForm | null => {
+    if (!data) return null;
+    const g = data.guest;
+    return { firstName: g.firstName, lastName: g.lastName, email: g.email ?? "", phone: g.phone ?? "", language: g.language ?? "", address: g.address ?? "", documentType: g.documentType ?? "", documentNumber: g.documentNumber ?? "", vip: g.vip, preferences: g.preferences ?? "", marketingConsent: g.marketingConsent };
+  };
+  useEffect(() => { setF(fromData()); setDirty(false); }, [data?.guest.id]); // eslint-disable-line
+  const upd = (patch: Partial<GuestForm>) => { setF((s) => (s ? { ...s, ...patch } : s)); setDirty(true); };
+  const save = async () => {
+    if (!f) return;
+    if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Jméno a příjmení jsou povinné."); return; }
+    setBusy(true); setMsg("");
+    try { await api.updateGuest(id, { firstName: f.firstName.trim(), lastName: f.lastName.trim(), email: f.email, phone: f.phone, language: f.language, address: f.address, documentType: f.documentType, documentNumber: f.documentNumber, vip: f.vip, preferences: f.preferences, marketingConsent: f.marketingConsent }); setMsg("Uloženo."); setDirty(false); reload(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
-  if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
-  const g = data.guest;
+  if (!data || !f) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
   return (
     <>
-      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}</span></div>
-      {msg && <div className="error" style={{ background: "#e6f7ee", color: "var(--ok)" }}>{msg}</div>}
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span></div>
+      {msg && <div className="error" style={msg === "Uloženo." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
       <div className="grid2">
-        <div className="panel"><h3>Kontakt</h3><div style={{ padding: 16 }}>
-          <div className="kvline"><span className="muted">E-mail</span><span>{g.email ?? "—"}</span></div>
-          <div className="kvline"><span className="muted">Telefon</span><span>{g.phone ?? "—"}</span></div>
-          <div className="kvline"><span className="muted">Jazyk</span><span>{g.language ?? "—"}</span></div>
-          <div className="kvline"><span className="muted">Adresa</span><span>{g.address ?? "—"}</span></div>
-          <div className="kvline"><span className="muted">Pobytů</span><b>{data.stays.length}</b></div>
+        <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16 }}>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            <label className="row">Jméno <input value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></label>
+            <label className="row">Příjmení <input value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></label>
+          </div>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            <label className="row" style={{ flex: 1 }}>E-mail <input style={{ minWidth: 180 }} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></label>
+            <label className="row">Telefon <input value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></label>
+          </div>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            <label className="row">Jazyk <input style={{ width: 70 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></label>
+            <label className="row" style={{ flex: 1 }}>Adresa <input style={{ minWidth: 200 }} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></label>
+          </div>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            <label className="row">Doklad <select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></label>
+            <label className="row">Číslo dokladu <input value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></label>
+          </div>
         </div></div>
         <div className="panel"><h3>CRM</h3><div style={{ padding: 16 }}>
-          <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={vip} onChange={(e) => { setVip(e.target.checked); setDirty(true); }} />&nbsp; VIP host</label>
+          <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={f.vip} onChange={(e) => upd({ vip: e.target.checked })} />&nbsp; VIP host</label>
+          <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={f.marketingConsent} onChange={(e) => upd({ marketingConsent: e.target.checked })} />&nbsp; Souhlas s marketingem</label>
           <div className="muted" style={{ marginBottom: 6 }}>Preference / poznámky (napříč pobyty):</div>
-          <textarea style={{ width: "100%", minHeight: 90, resize: "vertical" }} value={prefs} onChange={(e) => { setPrefs(e.target.value); setDirty(true); }} placeholder="Např.: alergie na ořechy, preferuje patro výš, manželská postel, tichý pokoj do dvora…" />
-          {dirty && <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={save}>Uložit</button></div>}
+          <textarea style={{ width: "100%", minHeight: 80, resize: "vertical" }} value={f.preferences} onChange={(e) => upd({ preferences: e.target.value })} placeholder="Např.: alergie na ořechy, preferuje patro výš, manželská postel, tichý pokoj do dvora…" />
+          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Pobytů: {data.stays.length} · v adresáři od {d(data.guest.createdAt)}</div>
         </div></div>
       </div>
+      {dirty && <div className="panel" style={{ padding: 12 }}><button className="btn" disabled={busy} onClick={save}>Uložit změny</button> <button className="btn ghost" onClick={() => { setF(fromData()); setDirty(false); setMsg(""); }}>Zrušit</button></div>}
       <div className="panel"><h3>Historie pobytů</h3>
         <Table cols={["Kód", "Termín", "Pokoj", "Stav", "Cena", "Hodnocení"]} rows={data.stays} empty="Žádné pobyty v této provozovně"
           render={(s: GuestStay) => (
