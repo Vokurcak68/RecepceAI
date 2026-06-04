@@ -1640,6 +1640,7 @@ function ReviewsView({ selId }: { selId: string }) {
 type PropEdit = {
   name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
   ico: string; dic: string; iban: string; vatPayer: boolean;
+  operatorName: string; operatorAddress: string; operatorRegistration: string; operatorAccount: string; operatorIco: string; operatorDic: string;
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; dailyCleaning: boolean; active: boolean; infoText: string;
   offeredServices: string[];
@@ -1661,6 +1662,7 @@ function PropertiesView() {
     setEf({
       name: p.name, identifier: p.identifier, type: p.type, street: p.street ?? "", city: p.city ?? "", country: p.country ?? "CZ",
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
+      operatorName: p.operatorName ?? "", operatorAddress: p.operatorAddress ?? "", operatorRegistration: p.operatorRegistration ?? "", operatorAccount: p.operatorAccount ?? "", operatorIco: p.operatorIco ?? "", operatorDic: p.operatorDic ?? "",
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
       offeredServices: p.offeredServices ?? ["cleaning", "laundry", "ironing", "minibar"],
@@ -1721,6 +1723,18 @@ function PropertiesView() {
               <FieldCol label="IBAN (QR platba)" span={2}><input style={fullInput} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} /></FieldCol>
             </FormGrid>
             <div style={{ marginTop: 12 }}><Chk label="Plátce DPH" checked={ef.vatPayer} onChange={(v) => setEf({ ...ef, vatPayer: v })} /></div>
+          </FormSection>
+
+          <FormSection title="Provozovatel (firma, která fakturuje)">
+            <div className="muted" style={{ marginBottom: 10 }}>Dodavatel uvedený na dokladech. Když zůstane prázdné, použijí se údaje provozovny výše.</div>
+            <FormGrid min={180}>
+              <FieldCol label="Název firmy" span={2}><input style={fullInput} value={ef.operatorName} onChange={(e) => setEf({ ...ef, operatorName: e.target.value })} /></FieldCol>
+              <FieldCol label="Sídlo (ulice, město, PSČ)" span={2}><input style={fullInput} value={ef.operatorAddress} onChange={(e) => setEf({ ...ef, operatorAddress: e.target.value })} /></FieldCol>
+              <FieldCol label="IČO"><input style={fullInput} value={ef.operatorIco} onChange={(e) => setEf({ ...ef, operatorIco: e.target.value })} /></FieldCol>
+              <FieldCol label="DIČ"><input style={fullInput} value={ef.operatorDic} onChange={(e) => setEf({ ...ef, operatorDic: e.target.value })} /></FieldCol>
+              <FieldCol label="Číslo účtu (na dokladech)"><input style={fullInput} value={ef.operatorAccount} onChange={(e) => setEf({ ...ef, operatorAccount: e.target.value })} /></FieldCol>
+              <FieldCol label="Dodatek — zápis v rejstříku" span={2}><input style={fullInput} value={ef.operatorRegistration} onChange={(e) => setEf({ ...ef, operatorRegistration: e.target.value })} placeholder="Zapsána u Městského soudu v Praze, oddíl C, vložka 12345" /></FieldCol>
+            </FormGrid>
           </FormSection>
 
           <FormSection title="Informace pro AI asistenta (FAQ)">
@@ -2365,6 +2379,8 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
               <b>{cur.supplierName}</b><br />
               {cur.supplierAddress}
               {(cur.supplierIco || cur.supplierDic) && <><br />{cur.supplierIco ? `IČO: ${cur.supplierIco}` : ""}{cur.supplierIco && cur.supplierDic ? " · " : ""}{cur.supplierDic ? `DIČ: ${cur.supplierDic}` : ""}</>}
+              {cur.supplierAccount && <><br />Účet: {cur.supplierAccount}</>}
+              {cur.supplierRegistration && <><br />{cur.supplierRegistration}</>}
               {!cur.vatPayer && <><br />Neplátce DPH</>}
             </div>
           </div>

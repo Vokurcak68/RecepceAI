@@ -25,6 +25,7 @@ export type PropertyType = "hotel" | "penzion" | "ubytovna";
 export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
   street: string | null; city: string | null; country: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; vatPayer: boolean; active: boolean; infoText: string | null;
+  operatorName: string | null; operatorAddress: string | null; operatorRegistration: string | null; operatorAccount: string | null; operatorIco: string | null; operatorDic: string | null;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money; cityTaxFreeAge: number;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number; dailyCleaning: boolean; offeredServices: string[];
   freeCancelDays: number; cancelFeePct: number; depositPct: number; reminderHours: number; noShowHours: number;
@@ -104,7 +105,7 @@ export const PAY_METHOD_LABEL: Record<string, string> = { card_terminal: "Karta"
 export type DocLine = { id: string; label: string; qty: Money; unitPrice: Money; vatRate: Money; lineTotal: Money };
 export type Doc = {
   id: string; type: string; number: string; status: string; issuedAt: string; taxDate: string | null; dueDate: string | null;
-  supplierName: string; supplierAddress: string | null; supplierIco: string | null; supplierDic: string | null; vatPayer: boolean;
+  supplierName: string; supplierAddress: string | null; supplierIco: string | null; supplierDic: string | null; supplierRegistration: string | null; supplierAccount: string | null; vatPayer: boolean;
   customerName: string; customerAddress: string | null; customerIco: string | null; customerDic: string | null;
   subtotal: Money; vatTotal: Money; total: Money; paidTotal: Money; note: string | null;
   lines?: DocLine[]; reservations?: { reservation: { code: string } }[]; qrPayment?: string | null;

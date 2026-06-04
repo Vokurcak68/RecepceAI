@@ -183,6 +183,14 @@ model Property {
   dic      String? // DIČ provozovny
   iban     String? // bankovní účet (IBAN) pro QR platbu na proformě
   vatPayer Boolean @default(false) // plátce DPH — určuje typy a náležitosti dokladů
+
+  // Provozovatel = firma, která fakturuje (dodavatel na dokladech). Když je vyplněn, má přednost před údaji provozovny.
+  operatorName         String? // název firmy provozovatele
+  operatorAddress      String? // sídlo (ulice, město, PSČ)
+  operatorRegistration String? // dodatek — zápis v rejstříku (např. „Zapsána u Městského soudu v Praze, oddíl C, vložka 12345")
+  operatorAccount      String? // číslo účtu (zobrazené na dokladech)
+  operatorIco          String? // IČO provozovatele
+  operatorDic          String? // DIČ provozovatele
   active   Boolean @default(true)
   infoText String? // volný text pro AI asistenta (FAQ, služby, pravidla)
 
@@ -714,12 +722,14 @@ model Document {
   taxDate  DateTime? @db.Date // DUZP — datum uskutečnění zdanitelného plnění
   dueDate  DateTime? @db.Date // splatnost (proforma / faktura)
 
-  // Snímek dodavatele (provozovna v čase vystavení).
-  supplierName    String
-  supplierAddress String?
-  supplierIco     String?
-  supplierDic     String?
-  vatPayer        Boolean @default(false) // vystaveno jako plátce DPH?
+  // Snímek dodavatele (provozovatel v čase vystavení).
+  supplierName         String
+  supplierAddress      String?
+  supplierIco          String?
+  supplierDic          String?
+  supplierRegistration String? // dodatek — zápis v rejstříku
+  supplierAccount      String? // číslo účtu na dokladu
+  vatPayer             Boolean @default(false) // vystaveno jako plátce DPH?
 
   // Odběratel (host nebo firma).
   customerName    String
