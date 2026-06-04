@@ -1726,7 +1726,7 @@ function PropertiesView() {
           </FormSection>
 
           <FormSection title="Provozovatel (firma, která fakturuje)">
-            <div className="muted" style={{ marginBottom: 10 }}>Dodavatel uvedený na dokladech. Když zůstane prázdné, použijí se údaje provozovny výše.</div>
+            <div className="muted" style={{ marginBottom: 10 }}>Dodavatel uvedený na dokladech. Když zůstane prázdné, použijí se údaje provozovny výše. Z čísla účtu se generuje i QR platba na proformě (IBAN nebo český formát 123456789/0800).</div>
             <FormGrid min={180}>
               <FieldCol label="Název firmy" span={2}><input style={fullInput} value={ef.operatorName} onChange={(e) => setEf({ ...ef, operatorName: e.target.value })} /></FieldCol>
               <FieldCol label="Sídlo (ulice, město, PSČ)" span={2}><input style={fullInput} value={ef.operatorAddress} onChange={(e) => setEf({ ...ef, operatorAddress: e.target.value })} /></FieldCol>

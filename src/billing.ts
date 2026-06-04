@@ -236,11 +236,32 @@ export function listDocuments(propertyId: string, filter: { type?: BillingDocTyp
   });
 }
 
-/** SPAYD řetězec pro QR platbu (jen proforma s vyplněným IBANem provozovny). */
-function spaydFor(doc: { type: BillingDocType; number: string; total: Prisma.Decimal; property: { iban: string | null } }): string | null {
-  if (doc.type !== BillingDocType.proforma || !doc.property.iban) return null;
+/** mod 97 nad libovolně dlouhým číselným řetězcem (pro IBAN kontrolní číslice). */
+function mod97(num: string): number {
+  let rem = 0;
+  for (let i = 0; i < num.length; i++) rem = (rem * 10 + (num.charCodeAt(i) - 48)) % 97;
+  return rem;
+}
+
+/** Normalizuje účet na IBAN. Přijme už hotový IBAN, nebo český formát [předčíslí-]číslo/kódbanky a převede ho. */
+export function toCzIban(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.replace(/\s+/g, "");
+  if (/^[A-Za-z]{2}\d{2}/.test(s)) return s.toUpperCase(); // už je IBAN
+  const m = s.match(/^(?:(\d{1,6})-)?(\d{1,10})\/(\d{4})$/);
+  if (!m) return null;
+  const bban = m[3] + (m[1] ?? "").padStart(6, "0") + m[2].padStart(10, "0"); // kódbanky(4)+předčíslí(6)+číslo(10)
+  const check = 98 - mod97(bban + "123500"); // CZ -> 1235, +"00"
+  return "CZ" + String(check).padStart(2, "0") + bban;
+}
+
+/** SPAYD řetězec pro QR platbu (jen proforma; účet provozovatele má přednost před IBANem provozovny). */
+function spaydFor(doc: { type: BillingDocType; number: string; total: Prisma.Decimal; supplierAccount: string | null; property: { iban: string | null } }): string | null {
+  if (doc.type !== BillingDocType.proforma) return null;
+  const acc = toCzIban(doc.supplierAccount) ?? toCzIban(doc.property.iban);
+  if (!acc) return null;
   const vs = doc.number.replace(/\D/g, "").slice(-10);
-  return `SPD*1.0*ACC:${doc.property.iban.replace(/\s/g, "")}*AM:${doc.total.toFixed(2)}*CC:CZK*X-VS:${vs}*MSG:Zaloha ${doc.number}`;
+  return `SPD*1.0*ACC:${acc}*AM:${doc.total.toFixed(2)}*CC:CZK*X-VS:${vs}*MSG:Zaloha ${doc.number}`;
 }
 
 export async function getDocument(propertyId: string, id: string) {
