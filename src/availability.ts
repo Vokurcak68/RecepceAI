@@ -45,6 +45,9 @@ export type AvailableUnit = {
   photos: string[];
   unit: InventoryUnit;
   freeUnits: number;
+  capacityAdults: number;
+  capacityChildren: number;
+  maxExtraBeds: number;
   roomTotal: Prisma.Decimal;
   cityTax: Prisma.Decimal;
   total: Prisma.Decimal;
@@ -79,6 +82,7 @@ async function roomAvailability(propertyId: string, from: Date, to: Date, guests
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.room, freeUnits: free,
+      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }
@@ -100,6 +104,7 @@ async function bedAvailability(propertyId: string, from: Date, to: Date): Promis
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.bed, freeUnits: free,
+      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }

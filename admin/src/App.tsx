@@ -1183,12 +1183,13 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
   const [msg, setMsg] = useState("");
   const [rate, setRate] = useState({ roomTypeId: "", date: todayIso(), price: "" });
-  const [nw, setNw] = useState({ name: "", capacityAdults: 2, basePrice: "", weeklyPrice: "", monthlyPrice: "" });
+  const [nw, setNw] = useState({ name: "", capacityAdults: 2, maxExtraBeds: 0, basePrice: "", weeklyPrice: "", monthlyPrice: "" });
+  const saveExtra = async (id: string, v: string) => { const n = parseInt(v, 10) || 0; await api.updateRoomType(id, { maxExtraBeds: n }); setMsg("Přistýlky uloženy."); reload(); };
 
   const saveBase = async (id: string, v: string) => { const n = parseFloat(v); if (isNaN(n)) return; await api.updateRoomType(id, { basePrice: n }); setMsg("Cena uložena."); reload(); };
   const saveLong = async (id: string, field: "weeklyPrice" | "monthlyPrice", v: string) => { const n = parseFloat(v); await api.updateRoomType(id, { [field]: isNaN(n) ? 0 : n }); setMsg("Dlouhodobá cena uložena."); reload(); };
   const saveRate = async () => { if (!rate.roomTypeId || !rate.price) return; await api.setRate({ roomTypeId: rate.roomTypeId, date: rate.date, price: parseFloat(rate.price) }); setMsg(`Cena na ${rate.date} nastavena.`); setRate({ ...rate, price: "" }); };
-  const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
+  const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), maxExtraBeds: Number(nw.maxExtraBeds), basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, maxExtraBeds: 0, basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
 
   return (
     <>
@@ -1201,7 +1202,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <Table cols={prop.allowLongTerm ? ["Název", "Kapacita", "Cena/noc", "Cena/týden", "Cena/měsíc"] : ["Název", "Kapacita", "Pokojů", "Cena/noc"]} rows={data ?? []} empty="Žádné typy"
           render={(t: RoomType) => prop.allowLongTerm ? (
             <tr key={t.id}>
-              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren}</td>
+              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 48 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /></span></td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
               <td><PriceCell v={t.weeklyPrice} onSave={(v) => saveLong(t.id, "weeklyPrice", v)} /></td>
               <td><PriceCell v={t.monthlyPrice} onSave={(v) => saveLong(t.id, "monthlyPrice", v)} /></td>
@@ -1209,7 +1210,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
           ) : (
             <tr key={t.id}>
               <td><b>{t.name}</b><div className="muted">{t.amenities.join(", ")}</div></td>
-              <td>{t.capacityAdults}+{t.capacityChildren}</td><td>{t._count?.rooms ?? "—"}</td>
+              <td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 48 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /></span></td><td>{t._count?.rooms ?? "—"}</td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
             </tr>
           )} />
@@ -1220,6 +1221,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <div className="toolbar" style={{ padding: 16 }}>
           <input placeholder="Název" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
           <label className="row">Kapacita <input type="number" min={1} style={{ width: 70 }} value={nw.capacityAdults} onChange={(e) => setNw({ ...nw, capacityAdults: Number(e.target.value) })} /></label>
+          <label className="row">Přistýlky <input type="number" min={0} style={{ width: 60 }} value={nw.maxExtraBeds} onChange={(e) => setNw({ ...nw, maxExtraBeds: Number(e.target.value) })} /></label>
           <input placeholder="Cena/noc" style={{ width: 110 }} value={nw.basePrice} onChange={(e) => setNw({ ...nw, basePrice: e.target.value })} />
           {prop.allowLongTerm && <input placeholder="Cena/týden" style={{ width: 110 }} value={nw.weeklyPrice} onChange={(e) => setNw({ ...nw, weeklyPrice: e.target.value })} />}
           {prop.allowLongTerm && <input placeholder="Cena/měsíc" style={{ width: 110 }} value={nw.monthlyPrice} onChange={(e) => setNw({ ...nw, monthlyPrice: e.target.value })} />}

@@ -570,13 +570,13 @@ export const listRoomTypes = (propertyId: string) =>
   prisma.roomType.findMany({ where: { propertyId }, include: { _count: { select: { rooms: true } } }, orderBy: { name: "asc" } });
 
 export const createRoomType = (propertyId: string, data: {
-  name: string; description?: string; capacityAdults: number; capacityChildren?: number;
+  name: string; description?: string; capacityAdults: number; capacityChildren?: number; maxExtraBeds?: number;
   basePrice: number; weeklyPrice?: number; monthlyPrice?: number; amenities?: string[];
 }) =>
   prisma.roomType.create({
     data: {
       propertyId, name: data.name, description: data.description, capacityAdults: data.capacityAdults,
-      capacityChildren: data.capacityChildren ?? 0, basePrice: new Prisma.Decimal(data.basePrice),
+      capacityChildren: data.capacityChildren ?? 0, maxExtraBeds: data.maxExtraBeds ?? 0, basePrice: new Prisma.Decimal(data.basePrice),
       weeklyPrice: data.weeklyPrice != null ? new Prisma.Decimal(data.weeklyPrice) : null,
       monthlyPrice: data.monthlyPrice != null ? new Prisma.Decimal(data.monthlyPrice) : null,
       amenities: data.amenities ?? [],
@@ -584,7 +584,7 @@ export const createRoomType = (propertyId: string, data: {
   });
 
 export const updateRoomType = (id: string, data: Partial<{
-  name: string; description: string; capacityAdults: number; capacityChildren: number;
+  name: string; description: string; capacityAdults: number; capacityChildren: number; maxExtraBeds: number;
   basePrice: number; weeklyPrice: number; monthlyPrice: number; amenities: string[];
 }>) =>
   prisma.roomType.update({
