@@ -924,7 +924,7 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
               <td><b>Pokoj {r.number}</b> <span className="muted">· {r.floor}.p</span></td>
               <td className="muted">{r.roomType ?? "—"}</td>
               <td><RoomPill s={r.status} /></td>
-              <td>{r.occupant ? <>👤 {r.occupant.name} <span className="muted">· do {d(r.occupant.checkOutDate)}</span></> : <span className="muted">Volný</span>}</td>
+              <td>{r.occupant ? <>👤 {r.occupant.name} <span className="muted">· do {d(r.occupant.checkOutDate)}</span>{r.occupant.dnd && <span className="chip chip-dnd">🚫 Nerušit</span>}</> : <span className="muted">Volný</span>}</td>
               <td>{r.occupant ? (Number(r.occupant.balance) > 0 ? <b style={{ color: "var(--warn)" }}>{money(r.occupant.balance)}</b> : <span className="muted">{money(r.occupant.balance)}</span>) : <span className="muted">—</span>}</td>
               <td className="muted">{[r.occupant?.departsToday ? "🔁 odjezd dnes" : "", r.arrival ? `→ příjezd: ${r.arrival.name}` : ""].filter(Boolean).join(" · ") || "—"}</td>
               <td>{r.openHousekeeping > 0 && <span className="rb-badge hk">🧹 {r.openHousekeeping}</span>}{r.openHousekeeping > 0 && r.openMaintenance > 0 ? " " : ""}{r.openMaintenance > 0 && <span className="rb-badge mt">🔧 {r.openMaintenance}</span>}{!r.openHousekeeping && !r.openMaintenance ? <span className="muted">—</span> : null}</td>

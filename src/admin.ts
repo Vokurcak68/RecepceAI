@@ -228,7 +228,7 @@ export async function roomBoard(propertyId: string) {
   const tomorrow = addDays(today, 1);
   const [rooms, inHouse, arrivals, reqGroups] = await Promise.all([
     prisma.room.findMany({ where: { propertyId }, include: { roomType: { select: { name: true } } }, orderBy: [{ floor: "asc" }, { number: "asc" }] }),
-    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in, roomId: { not: null }, checkInDate: { lt: tomorrow } }, select: { id: true, roomId: true, checkInDate: true, checkOutDate: true, primaryGuest: { select: { firstName: true, lastName: true } } }, orderBy: { checkInDate: "asc" } }),
+    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in, roomId: { not: null }, checkInDate: { lt: tomorrow } }, select: { id: true, roomId: true, checkInDate: true, checkOutDate: true, doNotDisturb: true, primaryGuest: { select: { firstName: true, lastName: true } } }, orderBy: { checkInDate: "asc" } }),
     prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.confirmed, roomId: { not: null }, checkInDate: { gte: today, lt: tomorrow } }, select: { id: true, roomId: true, primaryGuest: { select: { firstName: true, lastName: true } } } }),
     prisma.serviceRequest.groupBy({ by: ["roomId", "domain"], where: { propertyId, roomId: { not: null }, status: { in: ["open", "in_progress"] } }, _count: { _all: true } }),
   ]);
@@ -247,7 +247,7 @@ export async function roomBoard(propertyId: string) {
     const o = occ.get(r.id); const a = arr.get(r.id); const rq = reqs.get(r.id) ?? { housekeeping: 0, maintenance: 0 };
     return {
       id: r.id, number: r.number, floor: r.floor, roomType: r.roomType?.name ?? null, status: r.status,
-      occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs, balance: balances.get(r.id) ?? "0" } : null,
+      occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs, balance: balances.get(r.id) ?? "0", dnd: o.doNotDisturb } : null,
       arrival: a ? { reservationId: a.id, name: `${a.primaryGuest.firstName} ${a.primaryGuest.lastName}` } : null,
       openHousekeeping: rq.housekeeping, openMaintenance: rq.maintenance,
     };
