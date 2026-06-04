@@ -175,8 +175,8 @@ export const api = {
   invoice: (id: string) => req<Invoice>(`/admin/reservations/${id}/invoice`),
 
   rooms: () => req<Room[]>(`/admin/rooms`),
-  roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board`),
-  roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail`),
+  roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board?_=${Date.now()}`),
+  roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail?_=${Date.now()}`),
   setDnd: (reservationId: string, on: boolean) => req(`/admin/reservations/${reservationId}/dnd`, { method: "POST", body: JSON.stringify({ on }) }),
   roomCandidates: (reservationId: string) => req<RoomCandidate[]>(`/admin/reservations/${reservationId}/room-candidates`),
   roomUnassigned: (id: string) => req<UnassignedRes[]>(`/admin/rooms/${id}/unassigned`),
@@ -269,7 +269,7 @@ export const api = {
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),
-  staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests${status ? `?status=${status}` : ""}`),
+  staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests?${status ? `status=${status}&` : ""}_=${Date.now()}`),
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
   staffRequestPhotos: (id: string, images: string[]) => req<ServiceRequest>(`/staff/requests/${id}/photos`, { method: "POST", body: JSON.stringify({ images }) }),
@@ -297,13 +297,13 @@ export const api = {
   // housekeeping dispečer (prioritizovaný plán úklidu)
   housekeepingPlan: () => req<HousekeepingPlan>(`/admin/housekeeping/plan`),
   housekeepingBrief: (lang = "cs") => req<{ brief: string }>(`/admin/housekeeping/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
-  staffPlan: () => req<HousekeepingPlan>(`/staff/plan`),
+  staffPlan: () => req<HousekeepingPlan>(`/staff/plan?_=${Date.now()}`),
   staffBrief: (lang = "cs") => req<{ brief: string }>(`/staff/plan/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
 
   // údržba triage (prioritizovaná fronta údržby)
   maintenancePlan: () => req<MaintenancePlan>(`/admin/maintenance/plan`),
   maintenanceBrief: (lang = "cs") => req<{ brief: string }>(`/admin/maintenance/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
-  staffMaintPlan: () => req<MaintenancePlan>(`/staff/maintenance/plan`),
+  staffMaintPlan: () => req<MaintenancePlan>(`/staff/maintenance/plan?_=${Date.now()}`),
   staffMaintBrief: (lang = "cs") => req<{ brief: string }>(`/staff/maintenance/plan/brief`, { method: "POST", body: JSON.stringify({ lang }) }),
 
   // vybavení — provozovna
