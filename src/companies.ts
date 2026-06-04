@@ -9,7 +9,7 @@ const NOT_FOUND = () => Object.assign(new Error("not_found"), { code: "P2025" })
 export type CompanyInput = {
   name: string; ico?: string | null; dic?: string | null; account?: string | null;
   street?: string | null; city?: string | null; zip?: string | null; country?: string | null;
-  email?: string | null; phone?: string | null; note?: string | null; active?: boolean;
+  email?: string | null; phone?: string | null; note?: string | null; vatPayer?: boolean; active?: boolean;
 };
 
 /** Seznam firem (volitelně hledání dle názvu/IČO). */

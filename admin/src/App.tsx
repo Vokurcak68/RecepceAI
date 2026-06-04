@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -2595,9 +2595,21 @@ function CompaniesView({ selId }: { selId: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
-  const [nw, setNw] = useState({ name: "", ico: "", dic: "", email: "", phone: "" });
+  const emptyNw = { ico: "", name: "", dic: "", street: "", city: "", zip: "", country: "CZ", email: "", phone: "", vatPayer: false };
+  const [nw, setNw] = useState(emptyNw);
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState("");
 
-  const add = async () => { if (!nw.name.trim()) return; const c = await api.createCompany(nw); setNw({ name: "", ico: "", dic: "", email: "", phone: "" }); setAdding(false); reload(); setOpenId(c.id); };
+  const lookup = async () => {
+    if (!nw.ico.trim()) return;
+    setLookupBusy(true); setLookupMsg("");
+    try {
+      const a: AresResult = await api.companyLookup(nw.ico);
+      setNw({ ...nw, name: a.name ?? nw.name, dic: a.dic ?? "", street: a.street ?? "", city: a.city ?? "", zip: a.zip ?? "", country: a.country ?? "CZ", vatPayer: a.vatPayer });
+      setLookupMsg(`✓ ${a.name ?? "?"}` + (a.viesValid === true ? " · plátce DPH (VIES ✓)" : a.viesValid === false ? " · DIČ neplatné ve VIES" : a.dic ? ` · DIČ ${a.dic}` : " · neplátce DPH"));
+    } catch (e) { setLookupMsg(e instanceof Error ? e.message : String(e)); } finally { setLookupBusy(false); }
+  };
+  const add = async () => { if (!nw.name.trim()) return; const c = await api.createCompany(nw); setNw(emptyNw); setLookupMsg(""); setAdding(false); reload(); setOpenId(c.id); };
   if (openId) return <CompanyDetailView id={openId} selId={selId} onBack={() => { setOpenId(null); reload(); }} />;
   const list = (data ?? []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || (c.ico ?? "").includes(q));
   return (
@@ -2609,14 +2621,23 @@ function CompaniesView({ selId }: { selId: string }) {
         <button className="btn" onClick={() => setAdding((a) => !a)}>+ Nová firma</button>
       </div>
       {adding && (
-        <div className="panel"><h3>Nová firma</h3><div className="toolbar" style={{ padding: 16, flexWrap: "wrap" }}>
-          <input placeholder="Název *" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
-          <input placeholder="IČO" value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} />
-          <input placeholder="DIČ" value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} />
-          <input placeholder="E-mail" value={nw.email} onChange={(e) => setNw({ ...nw, email: e.target.value })} />
-          <input placeholder="Telefon" value={nw.phone} onChange={(e) => setNw({ ...nw, phone: e.target.value })} />
-          <button className="btn" onClick={add}>Založit</button>
-        </div></div>
+        <div className="panel"><h3>Nová firma</h3>
+          <div className="toolbar" style={{ padding: "16px 16px 0", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input placeholder="IČO" value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} onKeyDown={(e) => e.key === "Enter" && lookup()} style={{ width: 130 }} />
+            <button className="btn ghost" disabled={lookupBusy || !nw.ico.trim()} onClick={lookup}>{lookupBusy ? "Načítám…" : "🔍 Načíst z ARES"}</button>
+            {lookupMsg && <span className="muted">{lookupMsg}</span>}
+          </div>
+          <div className="toolbar" style={{ padding: 16, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input placeholder="Název *" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
+            <input placeholder="DIČ" value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} style={{ width: 130 }} />
+            <input placeholder="Ulice" value={nw.street} onChange={(e) => setNw({ ...nw, street: e.target.value })} style={{ width: 180 }} />
+            <input placeholder="Město" value={nw.city} onChange={(e) => setNw({ ...nw, city: e.target.value })} style={{ width: 140 }} />
+            <input placeholder="PSČ" value={nw.zip} onChange={(e) => setNw({ ...nw, zip: e.target.value })} style={{ width: 90 }} />
+            <input placeholder="Země" value={nw.country} onChange={(e) => setNw({ ...nw, country: e.target.value })} style={{ width: 70 }} />
+            <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={nw.vatPayer} onChange={(e) => setNw({ ...nw, vatPayer: e.target.checked })} /> plátce DPH</label>
+            <button className="btn" onClick={add}>Založit</button>
+          </div>
+        </div>
       )}
       <div className="panel">
         <Table cols={["Firma", "IČO", "Kontakt", ""]} rows={list} empty="Žádné firmy" render={(c: Company) => (
@@ -2635,7 +2656,7 @@ function CompaniesView({ selId }: { selId: string }) {
 function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; onBack: () => void }) {
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<CompanyDetail>(() => api.company(id), [id]);
-  type CEf = { name: string; ico: string; dic: string; account: string; street: string; city: string; zip: string; country: string; email: string; phone: string; note: string; active: boolean };
+  type CEf = { name: string; ico: string; dic: string; account: string; street: string; city: string; zip: string; country: string; email: string; phone: string; note: string; vatPayer: boolean; active: boolean };
   const [ef, setEf] = useState<CEf | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -2643,7 +2664,8 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
   const [doc, setDoc] = useState<Doc | null>(null);
   const occA = useAsync<BedOccupancyItem[]>(() => api.companyOccupancies(id), [id]);
   const [occSel, setOccSel] = useState<Record<string, boolean>>({});
-  useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", active: data.active }); }, [data?.id]); // eslint-disable-line
+  useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", vatPayer: data.vatPayer, active: data.active }); }, [data?.id]); // eslint-disable-line
+  const aresFill = async () => { if (!ef?.ico.trim()) return; setBusy(true); setMsg(""); try { const a: AresResult = await api.companyLookup(ef.ico); setEf({ ...ef, name: a.name ?? ef.name, dic: a.dic ?? ef.dic, street: a.street ?? ef.street, city: a.city ?? ef.city, zip: a.zip ?? ef.zip, country: a.country ?? ef.country, vatPayer: a.vatPayer }); setMsg("Načteno z ARES — zkontroluj a ulož."); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
 
   const save = async () => { if (!ef) return; setBusy(true); setMsg(""); try { await api.updateCompany(id, ef); setMsg("Uloženo."); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const del = async () => { if (await confirm({ title: "Smazat firmu", message: <>Smazat firmu <b>{data?.name}</b>? Rezervace zůstanou, jen se od firmy odpojí.</>, danger: true, confirmLabel: "Smazat" })) { await api.deleteCompany(id); onBack(); } };
@@ -2686,7 +2708,11 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
             <FieldCol label="Telefon"><input style={fullInput} value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} /></FieldCol>
           </FormGrid>
           <div style={{ marginTop: 12 }}><FieldCol label="Poznámka"><textarea style={{ ...fullInput, minHeight: 60, resize: "vertical" }} value={ef.note} onChange={(e) => setEf({ ...ef, note: e.target.value })} /></FieldCol></div>
-          <div style={{ marginTop: 12 }}><Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} /></div>
+          <div style={{ marginTop: 12, display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+            <Chk label="Plátce DPH" checked={ef.vatPayer} onChange={(v) => setEf({ ...ef, vatPayer: v })} />
+            <Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} />
+            <button className="btn ghost sm" disabled={busy || !ef.ico.trim()} onClick={aresFill} style={{ marginLeft: "auto" }}>🔍 Načíst z ARES (dle IČO)</button>
+          </div>
         </FormSection>
         <div className="toolbar" style={{ marginTop: 14 }}>
           <button className="btn" disabled={busy} onClick={save}>Uložit</button>

@@ -476,10 +476,11 @@ model Company {
   city    String?
   zip     String?
   country String? @default("CZ")
-  email   String?
-  phone   String?
-  note    String?
-  active  Boolean @default(true)
+  email    String?
+  phone    String?
+  note     String?
+  vatPayer Boolean @default(false) // plátce DPH (ověřeno přes VIES / dle DIČ)
+  active   Boolean @default(true)
 
   reservations Reservation[]
   occupancies  BedOccupancy[]

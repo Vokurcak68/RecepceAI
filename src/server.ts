@@ -17,6 +17,7 @@ import * as admin from "./admin";
 import * as companies from "./companies";
 import * as occupancy from "./occupancy";
 import * as deposits from "./deposits";
+import { lookupAres } from "./ares";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
@@ -364,8 +365,9 @@ adminRouter.post("/reservations/:id/dnd", h((req, res) => admin.setDoNotDisturb(
 const companyBody = z.object({
   name: z.string().min(1), ico: z.string().optional().nullable(), dic: z.string().optional().nullable(), account: z.string().optional().nullable(),
   street: z.string().optional().nullable(), city: z.string().optional().nullable(), zip: z.string().optional().nullable(), country: z.string().optional().nullable(),
-  email: z.string().optional().nullable(), phone: z.string().optional().nullable(), note: z.string().optional().nullable(), active: z.boolean().optional(),
+  email: z.string().optional().nullable(), phone: z.string().optional().nullable(), note: z.string().optional().nullable(), vatPayer: z.boolean().optional(), active: z.boolean().optional(),
 });
+adminRouter.get("/companies/lookup", h((req) => lookupAres(z.object({ ico: z.string() }).parse(req.query).ico)));
 adminRouter.get("/companies", h((req) => companies.listCompanies(req.query.q ? String(req.query.q) : undefined)));
 adminRouter.post("/companies", h((req) => companies.createCompany(companyBody.parse(req.body))));
 adminRouter.get("/companies/:id", h((req) => companies.getCompany(req.params.id)));
