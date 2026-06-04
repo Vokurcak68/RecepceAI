@@ -361,6 +361,7 @@ adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(re
 adminRouter.patch("/reservations/:id", h((req, res) => admin.updateReservationNote(pid(res), req.params.id, z.object({ note: z.string() }).parse(req.body).note)));
 adminRouter.patch("/reservations/:id/primary-guest", h((req, res) => admin.setPrimaryGuest(pid(res), req.params.id, z.object({ guestId: z.string().uuid() }).parse(req.body).guestId)));
 adminRouter.post("/reservations/:id/dnd", h((req, res) => admin.setDoNotDisturb(pid(res), req.params.id, z.object({ on: z.boolean() }).parse(req.body).on)));
+adminRouter.post("/reservations/:id/person-rate", h((req, res) => { const b = z.object({ personRateId: z.string().uuid().nullable(), applyPrice: z.boolean().optional() }).parse(req.body); return admin.setReservationPersonRate(pid(res), req.params.id, b.personRateId, b.applyPrice ?? true); }));
 
 // ── Firmy (centrální adresář odběratelů) ──
 const companyBody = z.object({

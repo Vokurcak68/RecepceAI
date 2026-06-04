@@ -95,6 +95,7 @@ export async function getReservation(propertyId: string, id: string) {
       payments: { orderBy: { createdAt: "asc" } }, registrationEntries: true, review: true,
       group: { select: { id: true, code: true, name: true } },
       company: { select: { id: true, name: true } },
+      personRate: { select: { id: true, name: true, pricePerNight: true } },
     },
   });
   if (!r) throw NOT_FOUND();
@@ -291,6 +292,19 @@ export async function roomDetail(propertyId: string, roomId: string) {
     reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, balance: balances.get(r.id) ?? "0" })),
     requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, note: q.note, imageUrls: q.imageUrls, resolvedAt: q.resolvedAt, resolvedByName: q.resolvedBy?.name ?? null, createdAt: q.createdAt })),
   };
+}
+
+/** Přiřadí typ osoby (číselník) k rezervaci; volitelně přepočítá cenu ubytování = sazba × nocí (+ pobyt. poplatek). */
+export async function setReservationPersonRate(propertyId: string, id: string, personRateId: string | null, applyPrice = true) {
+  const r = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, nights: true, cityTax: true } });
+  if (!r) throw NOT_FOUND();
+  let totalAmount: Prisma.Decimal | undefined;
+  if (personRateId && applyPrice) {
+    const rate = await prisma.personRate.findFirst({ where: { id: personRateId, propertyId }, select: { pricePerNight: true } });
+    if (!rate) throw NOT_FOUND();
+    totalAmount = rate.pricePerNight.mul(r.nights).add(r.cityTax);
+  }
+  return prisma.reservation.update({ where: { id }, data: { personRateId, ...(totalAmount !== undefined ? { totalAmount } : {}) }, select: { id: true, personRateId: true, totalAmount: true } });
 }
 
 /** Report příchodů/odchodů za období — rezervace (hotel) i lůžková obsazenost (ubytovna). */

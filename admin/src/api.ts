@@ -129,6 +129,7 @@ export type ReservationDetail = Reservation & {
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
   previousStays?: number; review?: GuestReview | null; group?: { id: string; code: string; name: string } | null;
   companyId?: string | null; company?: { id: string; name: string } | null;
+  personRateId?: string | null; personRate?: { id: string; name: string; pricePerNight: Money } | null;
 };
 export type Invoice = {
   number: string; property: Property; reservation: { code: string; checkInDate: string; checkOutDate: string; nights: number };
@@ -295,6 +296,7 @@ export const api = {
   createPersonRate: (b: unknown) => req<PersonRate>(`/admin/person-rates`, { method: "POST", body: JSON.stringify(b) }),
   updatePersonRate: (id: string, b: unknown) => req<PersonRate>(`/admin/person-rates/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deletePersonRate: (id: string) => req(`/admin/person-rates/${id}`, { method: "DELETE" }),
+  setReservationPersonRate: (id: string, personRateId: string | null, applyPrice = true) => req(`/admin/reservations/${id}/person-rate`, { method: "POST", body: JSON.stringify({ personRateId, applyPrice }) }),
 
   // report příchodů/odchodů
   movements: (from: string, to: string) => req<MovementsReport>(`/admin/reports/movements?from=${from}&to=${to}&_=${Date.now()}`),

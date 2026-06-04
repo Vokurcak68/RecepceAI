@@ -410,7 +410,8 @@ model PersonRate {
   sortOrder     Int     @default(0)
   active        Boolean @default(true)
 
-  occupancies BedOccupancy[]
+  occupancies  BedOccupancy[]
+  reservations Reservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -559,6 +560,8 @@ model Reservation {
   billingDic     String?
   company        Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyId      String?
+  personRate     PersonRate? @relation(fields: [personRateId], references: [id], onDelete: SetNull)
+  personRateId   String?
 
   holdExpiresAt DateTime?
 

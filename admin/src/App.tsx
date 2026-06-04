@@ -1953,6 +1953,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [busy, setBusy] = useState(false);
   const [actErr, setActErr] = useState("");
   const svc = useAsync<ServiceItem[]>(() => api.serviceItems(), [id]);
+  const personRates = useAsync<PersonRate[]>(() => api.personRates(), [id]);
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
   const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
   const [reg, setReg] = useState({ primary: true, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
@@ -2047,6 +2048,18 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {data.company && <button className="btn sm ghost" disabled={busy} onClick={() => run(async () => { await api.setReservationCompany(id, null); })}>Odebrat</button>}
         </div>
       </div>
+
+      {(personRates.data ?? []).length > 0 && (
+        <div className="panel"><h3>Typ osoby (ceník) <span className="muted" style={{ fontSize: 14 }}>přepočítá cenu ubytování dle sazby × nocí</span></h3>
+          <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={data.personRateId ?? ""} onChange={(e) => run(async () => { await api.setReservationPersonRate(id, e.target.value || null); })}>
+              <option value="">— bez typu —</option>
+              {(personRates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
+            </select>
+            {data.personRate && <span className="muted">Cena dle „{data.personRate.name}" — {money(data.personRate.pricePerNight)}/noc × {data.nights} nocí</span>}
+          </div>
+        </div>
+      )}
 
       <DepositsPanel reservationId={id} suggested={data.property?.depositPct ? Math.round(Number(data.totalAmount) * data.property.depositPct / 100) : undefined} />
 
