@@ -2595,7 +2595,7 @@ function CompaniesView({ selId }: { selId: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
-  const emptyNw = { ico: "", name: "", dic: "", street: "", city: "", zip: "", country: "CZ", email: "", phone: "", vatPayer: false };
+  const emptyNw = { ico: "", name: "", dic: "", account: "", street: "", city: "", zip: "", country: "CZ", email: "", phone: "", vatPayer: false };
   const [nw, setNw] = useState(emptyNw);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupMsg, setLookupMsg] = useState("");
@@ -2605,8 +2605,8 @@ function CompaniesView({ selId }: { selId: string }) {
     setLookupBusy(true); setLookupMsg("");
     try {
       const a: AresResult = await api.companyLookup(nw.ico);
-      setNw({ ...nw, name: a.name ?? nw.name, dic: a.dic ?? "", street: a.street ?? "", city: a.city ?? "", zip: a.zip ?? "", country: a.country ?? "CZ", vatPayer: a.vatPayer });
-      setLookupMsg(`✓ ${a.name ?? "?"}` + (a.viesValid === true ? " · plátce DPH (VIES ✓)" : a.viesValid === false ? " · DIČ neplatné ve VIES" : a.dic ? ` · DIČ ${a.dic}` : " · neplátce DPH"));
+      setNw({ ...nw, name: a.name ?? nw.name, dic: a.dic ?? "", account: a.account ?? "", street: a.street ?? "", city: a.city ?? "", zip: a.zip ?? "", country: a.country ?? "CZ", vatPayer: a.vatPayer });
+      setLookupMsg(`✓ ${a.name ?? "?"}` + (a.viesValid === true ? " · plátce DPH (VIES ✓)" : a.viesValid === false ? " · DIČ neplatné ve VIES" : a.dic ? ` · DIČ ${a.dic}` : " · neplátce DPH") + (a.account ? ` · účet ${a.account}` : ""));
     } catch (e) { setLookupMsg(e instanceof Error ? e.message : String(e)); } finally { setLookupBusy(false); }
   };
   const add = async () => { if (!nw.name.trim()) return; const c = await api.createCompany(nw); setNw(emptyNw); setLookupMsg(""); setAdding(false); reload(); setOpenId(c.id); };
@@ -2638,6 +2638,7 @@ function CompaniesView({ selId }: { selId: string }) {
               <FieldCol label="Název" span={2}><input style={fullInput} value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} /></FieldCol>
               <FieldCol label="IČO"><input style={fullInput} value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} /></FieldCol>
               <FieldCol label="DIČ"><input style={fullInput} value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} /></FieldCol>
+              <FieldCol label="Číslo účtu" span={2}><input style={fullInput} value={nw.account} onChange={(e) => setNw({ ...nw, account: e.target.value })} /></FieldCol>
               <FieldCol label="Ulice" span={2}><input style={fullInput} value={nw.street} onChange={(e) => setNw({ ...nw, street: e.target.value })} /></FieldCol>
               <FieldCol label="Město"><input style={fullInput} value={nw.city} onChange={(e) => setNw({ ...nw, city: e.target.value })} /></FieldCol>
               <FieldCol label="PSČ"><input style={fullInput} value={nw.zip} onChange={(e) => setNw({ ...nw, zip: e.target.value })} /></FieldCol>
@@ -2680,7 +2681,7 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
   const occA = useAsync<BedOccupancyItem[]>(() => api.companyOccupancies(id), [id]);
   const [occSel, setOccSel] = useState<Record<string, boolean>>({});
   useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", vatPayer: data.vatPayer, active: data.active }); }, [data?.id]); // eslint-disable-line
-  const aresFill = async () => { if (!ef?.ico.trim()) return; setBusy(true); setMsg(""); try { const a: AresResult = await api.companyLookup(ef.ico); setEf({ ...ef, name: a.name ?? ef.name, dic: a.dic ?? ef.dic, street: a.street ?? ef.street, city: a.city ?? ef.city, zip: a.zip ?? ef.zip, country: a.country ?? ef.country, vatPayer: a.vatPayer }); setMsg("Načteno z ARES — zkontroluj a ulož."); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const aresFill = async () => { if (!ef?.ico.trim()) return; setBusy(true); setMsg(""); try { const a: AresResult = await api.companyLookup(ef.ico); setEf({ ...ef, name: a.name ?? ef.name, dic: a.dic ?? ef.dic, account: a.account ?? ef.account, street: a.street ?? ef.street, city: a.city ?? ef.city, zip: a.zip ?? ef.zip, country: a.country ?? ef.country, vatPayer: a.vatPayer }); setMsg("Načteno z ARES — zkontroluj a ulož." + (a.account ? ` Účet: ${a.account}.` : "")); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
 
   const save = async () => { if (!ef) return; setBusy(true); setMsg(""); try { await api.updateCompany(id, ef); setMsg("Uloženo."); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const del = async () => { if (await confirm({ title: "Smazat firmu", message: <>Smazat firmu <b>{data?.name}</b>? Rezervace zůstanou, jen se od firmy odpojí.</>, danger: true, confirmLabel: "Smazat" })) { await api.deleteCompany(id); onBack(); } };

@@ -11,6 +11,8 @@ export type AresResult = {
   country: string;
   vatPayer: boolean; // dle VIES (nebo přítomnosti DIČ, když VIES nedostupné)
   viesValid: boolean | null; // true/false z VIES, null = neověřeno (DIČ chybí / VIES nedostupné)
+  account: string | null; // první zveřejněný bankovní účet z registru plátců DPH (MFČR/ADIS)
+  accounts: string[]; // všechny zveřejněné účty
   found: boolean;
 };
 
@@ -47,6 +49,36 @@ export async function checkVies(dic: string | null | undefined): Promise<boolean
   } catch { return null; }
 }
 
+/** Zveřejněné bankovní účty plátce z registru DPH (MFČR/ADIS, SOAP). Vrací formátované účty. */
+export async function adisAccounts(dic: string | null | undefined): Promise<string[]> {
+  if (!dic) return [];
+  const num = dic.replace(/\s/g, "").replace(/^CZ/i, "");
+  if (!/^\d+$/.test(num)) return [];
+  const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="http://adis.mfcr.cz/rozhraniCRPDPH/">
+  <soapenv:Body><urn:StatusNespolehlivyPlatceRequest><urn:dic>${num}</urn:dic></urn:StatusNespolehlivyPlatceRequest></soapenv:Body>
+</soapenv:Envelope>`;
+  try {
+    const r = await fetch("https://adisrws.mfcr.cz/adistc/axis2/services/rozhraniCRPDPH.rozhraniCRPDPHPort", {
+      method: "POST", headers: { "Content-Type": "text/xml; charset=UTF-8", SOAPAction: "" }, body: envelope, signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return [];
+    const xml = await r.text();
+    const attr = (s: string, name: string) => s.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? "";
+    const accounts: string[] = [];
+    for (const m of xml.matchAll(/<[^>]*standardniUcet\b([^>]*)\/?>/g)) {
+      const a = m[1];
+      const cislo = attr(a, "cislo"); const kod = attr(a, "kodBanky"); const pre = attr(a, "predcisli");
+      if (cislo && kod) accounts.push(`${pre ? pre + "-" : ""}${cislo}/${kod}`);
+    }
+    for (const m of xml.matchAll(/<[^>]*nestandardniUcet\b([^>]*)\/?>/g)) {
+      const iban = attr(m[1], "IBAN") || attr(m[1], "iban");
+      if (iban) accounts.push(iban);
+    }
+    return [...new Set(accounts)];
+  } catch { return []; }
+}
+
 /** Načte subjekt z ARES dle IČO a doplní ověření DPH z VIES. */
 export async function lookupAres(icoRaw: string): Promise<AresResult> {
   const ico = onlyDigits(icoRaw).padStart(8, "0");
@@ -69,8 +101,10 @@ export async function lookupAres(icoRaw: string): Promise<AresResult> {
 
   const sidlo = data.sidlo as Record<string, unknown> | undefined;
   const dic = (data.dic as string) || null;
-  const viesValid = await checkVies(dic);
+  const [viesValid, accounts] = await Promise.all([checkVies(dic), adisAccounts(dic)]);
   return {
+    account: accounts[0] ?? null,
+    accounts,
     ico,
     name: (data.obchodniJmeno as string) || null,
     dic,
