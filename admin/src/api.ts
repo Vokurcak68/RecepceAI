@@ -279,6 +279,14 @@ export const api = {
   companyInvoice: (id: string, reservationIds: string[]) => req<Doc>(`/admin/companies/${id}/invoice`, { method: "POST", body: JSON.stringify({ reservationIds }) }),
   setReservationCompany: (id: string, companyId: string | null) => req(`/admin/reservations/${id}/company`, { method: "POST", body: JSON.stringify({ companyId }) }),
 
+  // lůžková obsazenost (firemní ubytovny)
+  bedBoard: () => req<BedBoardItem[]>(`/admin/beds/board?_=${Date.now()}`),
+  bedOccupancies: (bedId: string) => req<BedOccupanciesData>(`/admin/beds/${bedId}/occupancies?_=${Date.now()}`),
+  createOccupancy: (b: unknown) => req<BedOccupancyItem>(`/admin/occupancies`, { method: "POST", body: JSON.stringify(b) }),
+  updateOccupancy: (id: string, b: unknown) => req(`/admin/occupancies/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  endOccupancy: (id: string, toDate?: string) => req(`/admin/occupancies/${id}/end`, { method: "POST", body: JSON.stringify(toDate ? { toDate } : {}) }),
+  deleteOccupancy: (id: string) => req(`/admin/occupancies/${id}`, { method: "DELETE" }),
+
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),
   staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests?${status ? `status=${status}&` : ""}_=${Date.now()}`),
@@ -367,6 +375,9 @@ export type RoomCandidate = { id: string; number: string; floor: number; free: b
 export type Company = { id: string; name: string; ico: string | null; dic: string | null; account: string | null; street: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; note: string | null; active: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
 export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBalance: Money };
+export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null };
+export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
+export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };
 export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Uklizeno", dirty: "K úklidu", to_inspect: "Zkontrolovat", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };

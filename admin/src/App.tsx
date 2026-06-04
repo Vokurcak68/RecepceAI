@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -105,6 +105,7 @@ export function App() {
       { id: "companies", label: "Firmy" },
     ] },
     { label: "Provoz", icon: "🧹", items: [
+      ...(prop?.inventoryUnit === "bed" ? [{ id: "bedboard", label: "Obsazení lůžek" }] : []),
       { id: "roomstatus", label: "Přehled pokojů" },
       { id: "housekeeping", label: "Dispečink úklidu" },
       { id: "maintenance", label: "Dispečink údržby" },
@@ -201,6 +202,7 @@ export function App() {
         {prop && tab === "cashregister" && <CashRegisterView selId={selId} />}
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
+        {prop && tab === "bedboard" && <BedBoardView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
         {isSuper && tab === "users" && <UsersView currentUserId={session.user.id} />}
@@ -2397,6 +2399,104 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 }
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
+// ── Obsazení lůžek (firemní ubytovny) ────────────────────────
+function BedBoardView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<BedBoardItem[]>(() => api.bedBoard(), [selId]);
+  const [openBed, setOpenBed] = useState<{ id: string; label: string } | null>(null);
+  const beds = data ?? [];
+  const occupied = beds.filter((b) => b.current).length;
+  return (
+    <>
+      <div className="h1"><span>Obsazení lůžek</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· kdo na kterém lůžku bydlí (pracovníci se střídají)</span> <button className="btn ghost sm" onClick={reload}>↻</button></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar"><span className="muted">Obsazeno {occupied} / {beds.length} lůžek</span></div>
+      <div className="panel">
+        <Table cols={["Lůžko", "Pokoj", "Aktuální obyvatel", "Firma", "Do", "Další", ""]} rows={beds} empty="Žádná lůžka (provozovna nemá jednotku = lůžko)" render={(b: BedBoardItem) => (
+          <tr key={b.bedId} className="row-click" onClick={() => setOpenBed({ id: b.bedId, label: b.label })}>
+            <td><b>{b.label}</b></td>
+            <td className="muted">{b.roomNumber} · {b.floor}.p</td>
+            <td>{b.current ? <>👤 {b.current.occupantName}</> : <span className="muted">volné</span>}</td>
+            <td className="muted">{b.current?.companyName ?? "—"}</td>
+            <td className="muted">{b.current ? d(b.current.toDate) : "—"}</td>
+            <td className="muted">{b.upcoming > 0 ? `${b.upcoming}× (od ${d(b.nextFrom!)})` : "—"}</td>
+            <td className="right"><button className="btn sm ghost">Spravovat</button></td>
+          </tr>
+        )} />
+      </div>
+      {openBed && <BedOccupancyOverlay bedId={openBed.id} label={openBed.label} onClose={() => { setOpenBed(null); reload(); }} />}
+    </>
+  );
+}
+
+function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: string; onClose: () => void }) {
+  const confirm = useConfirm();
+  const { data, error, reload } = useAsync<BedOccupanciesData>(() => api.bedOccupancies(bedId), [bedId]);
+  const companies = useAsync<Company[]>(() => api.companies(), []);
+  const today = todayIso();
+  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), note: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const add = async () => {
+    if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Vyplň jméno a příjmení."); return; }
+    setBusy(true); setMsg("");
+    try {
+      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, note: f.note || null });
+      setF({ ...f, firstName: "", lastName: "", phone: "", note: "" }); reload();
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  const end = async (o: BedOccupancyItem) => { if (await confirm({ title: "Ukončit obsazení", message: <>Ukončit pobyt <b>{o.occupantName}</b> na lůžku {label} (dnešním dnem)?</>, confirmLabel: "Ukončit" })) { setBusy(true); try { await api.endOccupancy(o.id); reload(); } finally { setBusy(false); } } };
+  const del = async (o: BedOccupancyItem) => { if (await confirm({ title: "Smazat záznam", message: <>Smazat obsazení <b>{o.occupantName}</b>? (jen pro opravu chyby)</>, danger: true, confirmLabel: "Smazat" })) { setBusy(true); try { await api.deleteOccupancy(o.id); reload(); } finally { setBusy(false); } } };
+
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div><h2 style={{ margin: 0 }}>Lůžko {label}</h2><div className="muted" style={{ marginTop: 4 }}>Obsazení a střídání osob.</div></div>
+          <button className="linkx" onClick={onClose}>zavřít</button>
+        </div>
+        {error && <div className="error">{error}</div>}
+        {msg && <div className="error">{msg}</div>}
+
+        <div className="panel" style={{ padding: 14, marginTop: 8 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 8 }}>Umístit osobu</h3>
+          <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+            <input placeholder="Jméno" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} style={{ width: 130 }} />
+            <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} style={{ width: 140 }} />
+            <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} style={{ width: 130 }} />
+            <select value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}><option value="">— firma —</option>{(companies.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          </div>
+          <div className="toolbar" style={{ flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
+            <label className="muted">Od <input type="date" value={f.fromDate} onChange={(e) => setF({ ...f, fromDate: e.target.value })} /></label>
+            <label className="muted">Do <input type="date" value={f.toDate} onChange={(e) => setF({ ...f, toDate: e.target.value })} /></label>
+            <input placeholder="Poznámka" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+            <button className="btn" disabled={busy} onClick={add}>Umístit</button>
+          </div>
+        </div>
+
+        <table style={{ marginTop: 12 }}>
+          <thead><tr><th>Osoba</th><th>Firma</th><th>Od → Do</th><th>Stav</th><th className="right"></th></tr></thead>
+          <tbody>
+            {(data?.items ?? []).map((o) => (
+              <tr key={o.id}>
+                <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
+                <td className="muted">{o.companyName ?? "—"}</td>
+                <td>{d(o.fromDate)} → {d(o.toDate)}</td>
+                <td>{o.status === "ended" ? <span className="muted">ukončeno</span> : <b style={{ color: "var(--ok)" }}>aktivní</b>}</td>
+                <td className="right" style={{ whiteSpace: "nowrap" }}>
+                  {o.status === "active" && <><button className="btn sm" disabled={busy} onClick={() => end(o)}>Ukončit</button>{" "}</>}
+                  <button className="btn sm ghost" disabled={busy} onClick={() => del(o)} style={{ color: "var(--danger)" }}>✕</button>
+                </td>
+              </tr>
+            ))}
+            {data && data.items.length === 0 && <tr><td colSpan={5} className="muted">Zatím žádné obsazení.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Firmy (centrální adresář odběratelů) ─────────────────────
 function CompaniesView({ selId }: { selId: string }) {
   const { data, error, reload } = useAsync<Company[]>(() => api.companies(), [selId]);

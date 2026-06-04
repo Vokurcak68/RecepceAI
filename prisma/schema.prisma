@@ -331,6 +331,7 @@ model Bed {
   status     RoomStatus @default(clean)
 
   reservations Reservation[]
+  occupancies  BedOccupancy[]
 
   createdAt DateTime @default(now())
 
@@ -367,6 +368,7 @@ model Guest {
   registrationEntries   RegistrationEntry[]
   reviews               GuestReview[]
   organizedGroups       ReservationGroup[]
+  bedOccupancies        BedOccupancy[]      @relation("OccupantBed")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -390,6 +392,42 @@ model GuestReview {
   @@index([propertyId, createdAt])
 }
 
+enum OccupancyStatus {
+  active // probíhá / naplánováno (zatím neukončeno)
+  ended  // ukončeno (pracovník odešel / vystřídán)
+}
+
+// Obsazení lůžka konkrétní osobou v daném období (firemní ubytovny). Osoby se na lůžku střídají
+// nezávisle na rezervaci — tohle je „kdo reálně spí v lůžku od–do".
+model BedOccupancy {
+  id         String @id @default(uuid())
+  propertyId String // denormalizováno pro scoping (lůžko nese FK na provozovnu)
+
+  bed   Bed    @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  bedId String
+
+  occupant        Guest  @relation("OccupantBed", fields: [occupantGuestId], references: [id])
+  occupantGuestId String
+
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId String?
+
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  reservationId String?
+
+  fromDate DateTime        @db.Date
+  toDate   DateTime        @db.Date
+  status   OccupancyStatus @default(active)
+  note     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, status])
+  @@index([bedId, fromDate, toDate])
+  @@index([companyId])
+}
+
 // Firma / odběratel (centrální adresář, sdílený napříč provozovnami) — pro firemní ubytovny i služební pobyty.
 model Company {
   id      String  @id @default(uuid())
@@ -407,6 +445,7 @@ model Company {
   active  Boolean @default(true)
 
   reservations Reservation[]
+  occupancies  BedOccupancy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -476,6 +515,7 @@ model Reservation {
   documents           DocumentReservation[]
   emailLogs           EmailLog[]
   review              GuestReview?
+  bedOccupancies      BedOccupancy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

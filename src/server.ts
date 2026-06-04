@@ -15,6 +15,7 @@ import {
 import { serialize } from "./serialize";
 import * as admin from "./admin";
 import * as companies from "./companies";
+import * as occupancy from "./occupancy";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
@@ -372,6 +373,19 @@ adminRouter.delete("/companies/:id", h((req) => companies.deleteCompany(req.para
 adminRouter.get("/companies/:id/reservations", h((req, res) => companies.companyReservationsForProperty(pid(res), req.params.id)));
 adminRouter.post("/companies/:id/invoice", h((req, res) => billing.issueBulkInvoice(pid(res), z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body).reservationIds)));
 adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReservationCompany(pid(res), req.params.id, z.object({ companyId: z.string().uuid().nullable() }).parse(req.body).companyId)));
+
+// ── Lůžková obsazenost (firemní ubytovny) ──
+adminRouter.get("/beds/board", h((_req, res) => occupancy.bedBoard(pid(res))));
+adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupancies(pid(res), req.params.id)));
+const occBody = z.object({
+  bedId: z.string().uuid(), fromDate: dateStr, toDate: dateStr,
+  occupantGuestId: z.string().uuid().optional(), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(), reservationId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(),
+});
+adminRouter.post("/occupancies", h((req, res) => occupancy.createOccupancy(pid(res), occBody.parse(req.body))));
+adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional() }).parse(req.body))));
+adminRouter.post("/occupancies/:id/end", h((req, res) => occupancy.endOccupancy(pid(res), req.params.id, z.object({ toDate: dateStr.optional() }).parse(req.body ?? {}).toDate)));
+adminRouter.delete("/occupancies/:id", h((req, res) => occupancy.deleteOccupancy(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/registration", h((req, res) => {
   const b = z.object({ primary: z.boolean().optional(), fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2), documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional() }).parse(req.body);
   return admin.addRegistration(pid(res), req.params.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });
