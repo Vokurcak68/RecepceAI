@@ -2621,21 +2621,36 @@ function CompaniesView({ selId }: { selId: string }) {
         <button className="btn" onClick={() => setAdding((a) => !a)}>+ Nová firma</button>
       </div>
       {adding && (
-        <div className="panel"><h3>Nová firma</h3>
-          <div className="toolbar" style={{ padding: "16px 16px 0", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <input placeholder="IČO" value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} onKeyDown={(e) => e.key === "Enter" && lookup()} style={{ width: 130 }} />
-            <button className="btn ghost" disabled={lookupBusy || !nw.ico.trim()} onClick={lookup}>{lookupBusy ? "Načítám…" : "🔍 Načíst z ARES"}</button>
-            {lookupMsg && <span className="muted">{lookupMsg}</span>}
-          </div>
-          <div className="toolbar" style={{ padding: 16, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <input placeholder="Název *" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
-            <input placeholder="DIČ" value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} style={{ width: 130 }} />
-            <input placeholder="Ulice" value={nw.street} onChange={(e) => setNw({ ...nw, street: e.target.value })} style={{ width: 180 }} />
-            <input placeholder="Město" value={nw.city} onChange={(e) => setNw({ ...nw, city: e.target.value })} style={{ width: 140 }} />
-            <input placeholder="PSČ" value={nw.zip} onChange={(e) => setNw({ ...nw, zip: e.target.value })} style={{ width: 90 }} />
-            <input placeholder="Země" value={nw.country} onChange={(e) => setNw({ ...nw, country: e.target.value })} style={{ width: 70 }} />
-            <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={nw.vatPayer} onChange={(e) => setNw({ ...nw, vatPayer: e.target.checked })} /> plátce DPH</label>
-            <button className="btn" onClick={add}>Založit</button>
+        <div className="panel" style={{ padding: 18 }}>
+          <h3 style={{ border: "none", padding: 0, marginBottom: 4 }}>Nová firma</h3>
+          <div className="muted" style={{ marginBottom: 14 }}>Zadej IČO a načti údaje z ARES (název, adresa, DIČ, plátce DPH dle VIES), nebo vyplň ručně.</div>
+
+          <FormSection title="Načtení z rejstříku (ARES)">
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input style={{ ...fullInput, maxWidth: 200 }} placeholder="IČO" value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} onKeyDown={(e) => e.key === "Enter" && lookup()} />
+              <button className="btn" disabled={lookupBusy || !nw.ico.trim()} onClick={lookup}>{lookupBusy ? "Načítám…" : "🔍 Načíst z ARES"}</button>
+              {lookupMsg && <span className="muted" style={{ flex: 1, minWidth: 200 }}>{lookupMsg}</span>}
+            </div>
+          </FormSection>
+
+          <FormSection title="Údaje firmy">
+            <FormGrid min={200}>
+              <FieldCol label="Název" span={2}><input style={fullInput} value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} /></FieldCol>
+              <FieldCol label="IČO"><input style={fullInput} value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} /></FieldCol>
+              <FieldCol label="DIČ"><input style={fullInput} value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} /></FieldCol>
+              <FieldCol label="Ulice" span={2}><input style={fullInput} value={nw.street} onChange={(e) => setNw({ ...nw, street: e.target.value })} /></FieldCol>
+              <FieldCol label="Město"><input style={fullInput} value={nw.city} onChange={(e) => setNw({ ...nw, city: e.target.value })} /></FieldCol>
+              <FieldCol label="PSČ"><input style={fullInput} value={nw.zip} onChange={(e) => setNw({ ...nw, zip: e.target.value })} /></FieldCol>
+              <FieldCol label="Země"><input style={fullInput} value={nw.country} onChange={(e) => setNw({ ...nw, country: e.target.value })} /></FieldCol>
+              <FieldCol label="E-mail"><input style={fullInput} value={nw.email} onChange={(e) => setNw({ ...nw, email: e.target.value })} /></FieldCol>
+              <FieldCol label="Telefon"><input style={fullInput} value={nw.phone} onChange={(e) => setNw({ ...nw, phone: e.target.value })} /></FieldCol>
+            </FormGrid>
+            <div style={{ marginTop: 12 }}><Chk label="Plátce DPH" checked={nw.vatPayer} onChange={(v) => setNw({ ...nw, vatPayer: v })} /></div>
+          </FormSection>
+
+          <div className="toolbar" style={{ marginTop: 14 }}>
+            <button className="btn" disabled={!nw.name.trim()} onClick={add}>Založit firmu</button>
+            <button className="btn ghost" onClick={() => { setAdding(false); setNw(emptyNw); setLookupMsg(""); }}>Zrušit</button>
           </div>
         </div>
       )}
