@@ -3109,7 +3109,16 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const [brief, setBrief] = useState(""); const [briefing, setBriefing] = useState(false);
 
   const reloadAll = () => { reload(); plan.reload(); mplan.reload(); };
-  const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
+  const act = async (id: string, st: string) => {
+    let note: string | undefined;
+    if (st === "done") {
+      const r = prompt("Poznámka (nepovinné):");
+      if (r === null) return; // Zrušit → úkol NEoznačovat hotový
+      note = r || undefined;
+    }
+    await api.staffSetStatus(id, { status: st, note });
+    reloadAll();
+  };
   const addPhotos = async (id: string, dataUrls: string[]) => { setPhotoBusy(id); try { await api.staffRequestPhotos(id, dataUrls); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Foto se nepodařilo nahrát."); } finally { setPhotoBusy(""); } };
   const setDnd = async (reservationId: string, on: boolean) => { try { await api.staffSetDnd(reservationId, on); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Nepodařilo se uložit."); } };
   const addMaint = async () => {
