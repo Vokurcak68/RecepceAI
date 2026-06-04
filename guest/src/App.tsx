@@ -224,7 +224,7 @@ export function App() {
         <h2>{t("myTitle")}</h2>
         {data.requests.length === 0 ? <p className="muted">{t("myEmpty")}</p> : data.requests.map((q) => (
           <div key={q.id} className="req">
-            <div className="req-l"><span className="ico">{ICON[q.type]}</span><div><b>{t(TYPE_KEY[q.type] ?? "tOther")}</b>{q.description && <div className="muted">{q.description}</div>}</div></div>
+            <div className="req-l"><span className="ico">{ICON[q.type]}</span><div><b>{t(TYPE_KEY[q.type] ?? "tOther")}</b>{q.description && <div className="muted">{q.description}</div>}<div className="muted" style={{ fontSize: 12 }}>{new Date(q.createdAt).toLocaleString(lang, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div></div></div>
             <span className={`st st-${q.status}`}>{t(STATUS_KEY[q.status] ?? "sOpen")}</span>
           </div>
         ))}
