@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -92,6 +92,7 @@ export function App() {
       { id: "tapechart", label: "Plán pokojů" },
       { id: "occupancy", label: "Obsazení" },
       { id: "reservations", label: "Rezervace" },
+      { id: "movements", label: "Příjezdy/odjezdy" },
       { id: "groups", label: "Skupiny" },
       { id: "guests", label: "Profily hostů" },
       { id: "reviews", label: "Hodnocení" },
@@ -203,6 +204,7 @@ export function App() {
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "bedboard" && <BedBoardView selId={selId} />}
+        {prop && tab === "movements" && <MovementsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
         {isSuper && tab === "users" && <UsersView currentUserId={session.user.id} />}
@@ -2402,6 +2404,49 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 }
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
+// ── Report příchodů/odchodů za období ────────────────────────
+function MovementsView({ selId }: { selId: string }) {
+  const today = todayIso();
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10));
+  const { data, error } = useAsync<MovementsReport>(() => api.movements(from, to), [selId, from, to]);
+  const kind = (k: string) => k === "occupancy" ? "lůžko" : "rezervace";
+  const exportCsv = () => {
+    const rows = [
+      ["Pohyb", "Datum", "Jméno", "Kde", "Typ", "Firma", "Kód"],
+      ...(data?.arrivals ?? []).map((m) => ["Příjezd", d(m.date), m.name, m.where, kind(m.kind), m.companyName ?? "", m.code ?? ""]),
+      ...(data?.departures ?? []).map((m) => ["Odjezd", d(m.date), m.name, m.where, kind(m.kind), m.companyName ?? "", m.code ?? ""]),
+    ];
+    const csv = "﻿" + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `prijezdy-odjezdy_${from}_${to}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
+  const tbl = (title: string, items: MoveItem[]) => (
+    <div className="panel"><h3>{title} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {items.length}</span></h3>
+      <Table cols={["Datum", "Jméno", "Kde", "Typ", "Firma", "Kód"]} rows={items} empty="Žádné" render={(m: MoveItem) => (
+        <tr key={`${m.kind}-${m.code ?? m.name}-${m.date}-${m.where}`}>
+          <td>{d(m.date)}</td><td>{m.name}</td><td className="muted">{m.where}</td>
+          <td className="muted">{kind(m.kind)}</td><td className="muted">{m.companyName ?? "—"}</td><td className="muted">{m.code ?? "—"}</td>
+        </tr>
+      )} />
+    </div>
+  );
+  return (
+    <>
+      <div className="h1"><span>Příjezdy / odjezdy</span></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <label className="muted">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="muted">Do <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <button className="btn ghost sm" onClick={exportCsv} style={{ marginLeft: "auto" }}>⬇ Export CSV</button>
+      </div>
+      {tbl("Příjezdy", data?.arrivals ?? [])}
+      {tbl("Odjezdy", data?.departures ?? [])}
+    </>
+  );
+}
+
 // ── Vratná kauce (jistota) — sdílený panel pro rezervaci i firmu ──
 function DepositsPanel({ reservationId, companyId, suggested }: { reservationId?: string; companyId?: string; suggested?: number }) {
   const confirm = useConfirm();

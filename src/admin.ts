@@ -293,6 +293,24 @@ export async function roomDetail(propertyId: string, roomId: string) {
   };
 }
 
+/** Report příchodů/odchodů za období — rezervace (hotel) i lůžková obsazenost (ubytovna). */
+export async function movementsReport(propertyId: string, from: Date, to: Date) {
+  const between = { gte: from, lte: to };
+  const [resArr, resDep, occArr, occDep] = await Promise.all([
+    prisma.reservation.findMany({ where: { propertyId, status: { not: ReservationStatus.cancelled }, checkInDate: between }, include: { primaryGuest: { select: { firstName: true, lastName: true } }, room: { select: { number: true } }, bed: { select: { label: true } }, roomType: { select: { name: true } }, company: { select: { name: true } } } }),
+    prisma.reservation.findMany({ where: { propertyId, status: { not: ReservationStatus.cancelled }, checkOutDate: between }, include: { primaryGuest: { select: { firstName: true, lastName: true } }, room: { select: { number: true } }, bed: { select: { label: true } }, roomType: { select: { name: true } }, company: { select: { name: true } } } }),
+    prisma.bedOccupancy.findMany({ where: { propertyId, fromDate: between }, include: { occupant: { select: { firstName: true, lastName: true } }, bed: { select: { label: true } }, company: { select: { name: true } } } }),
+    prisma.bedOccupancy.findMany({ where: { propertyId, toDate: between }, include: { occupant: { select: { firstName: true, lastName: true } }, bed: { select: { label: true } }, company: { select: { name: true } } } }),
+  ]);
+  const resWhere = (r: { room: { number: string } | null; bed: { label: string } | null; roomType: { name: string } | null }) => r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : (r.roomType?.name ?? "—") + " (nepřiřazeno)";
+  const mapRes = (list: typeof resArr, dateOf: (r: typeof resArr[number]) => Date) => list.map((r) => ({ date: dateOf(r), kind: "reservation" as const, name: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, where: resWhere(r), code: r.code, companyName: r.company?.name ?? null }));
+  const mapOcc = (list: typeof occArr, dateOf: (o: typeof occArr[number]) => Date) => list.map((o) => ({ date: dateOf(o), kind: "occupancy" as const, name: `${o.occupant.firstName} ${o.occupant.lastName}`, where: `Lůžko ${o.bed.label}`, code: null as string | null, companyName: o.company?.name ?? null }));
+  const byDate = <T extends { date: Date; name: string }>(a: T, b: T) => a.date.getTime() - b.date.getTime() || a.name.localeCompare(b.name);
+  const arrivals = [...mapRes(resArr, (r) => r.checkInDate), ...mapOcc(occArr, (o) => o.fromDate)].sort(byDate);
+  const departures = [...mapRes(resDep, (r) => r.checkOutDate), ...mapOcc(occDep, (o) => o.toDate)].sort(byDate);
+  return { from, to, arrivals, departures };
+}
+
 /** Nastaví „Nerušit" na rezervaci (host si nepřeje úklid). Scopováno na provozovnu. */
 export async function setDoNotDisturb(propertyId: string, reservationId: string, on: boolean) {
   const res = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId }, select: { id: true } });

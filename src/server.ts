@@ -378,6 +378,7 @@ adminRouter.post("/companies/:id/occupancy-invoice", h((req, res) => billing.iss
 adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReservationCompany(pid(res), req.params.id, z.object({ companyId: z.string().uuid().nullable() }).parse(req.body).companyId)));
 
 // ── Lůžková obsazenost (firemní ubytovny) ──
+adminRouter.get("/reports/movements", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return admin.movementsReport(pid(res), new Date(q.from), new Date(q.to)); }));
 adminRouter.get("/beds/board", h((_req, res) => occupancy.bedBoard(pid(res))));
 adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupancies(pid(res), req.params.id)));
 const occBody = z.object({
