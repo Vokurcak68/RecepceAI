@@ -15,16 +15,21 @@ const OCC_INCLUDE = {
 
 const nightsBetween = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 86_400_000));
 
-function fmt(o: Prisma.BedOccupancyGetPayload<{ include: typeof OCC_INCLUDE }>) {
+function fmt(o: Prisma.BedOccupancyGetPayload<{ include: typeof OCC_INCLUDE }>, energyPerNight = 0) {
   const nights = nightsBetween(o.fromDate, o.toDate);
   const ppn = Number(o.pricePerNight);
+  const energyAmount = o.energyFeeExempt ? 0 : nights * energyPerNight;
   return {
     id: o.id, bedId: o.bedId, fromDate: o.fromDate, toDate: o.toDate, status: o.status, note: o.note,
     occupantId: o.occupantGuestId, occupantName: `${o.occupant.firstName} ${o.occupant.lastName}`, occupantPhone: o.occupant.phone,
     companyId: o.companyId, companyName: o.company?.name ?? null,
     pricePerNight: ppn.toFixed(2), nights, amount: (nights * ppn).toFixed(2), invoicedAt: o.invoicedAt,
+    energyFeeExempt: o.energyFeeExempt, energyPerNight: energyPerNight.toFixed(2), energyAmount: energyAmount.toFixed(2),
+    total: (nights * ppn + energyAmount).toFixed(2),
   };
 }
+
+const energyRate = async (propertyId: string) => Number((await prisma.property.findUnique({ where: { id: propertyId }, select: { energyFeePerNight: true } }))?.energyFeePerNight ?? 0);
 
 /** Konflikt: jiná NEUKONČENÁ obsazenost téhož lůžka, jejíž interval se překrývá s [from, to). */
 async function hasOverlap(bedId: string, from: Date, to: Date, exceptId?: string) {
@@ -50,6 +55,7 @@ export async function bedBoard(propertyId: string) {
     where: { propertyId, status: OccupancyStatus.active, toDate: { gt: today } },
     include: OCC_INCLUDE, orderBy: { fromDate: "asc" },
   });
+  const rate = await energyRate(propertyId);
   const byBed = new Map<string, typeof occ>();
   for (const o of occ) { const a = byBed.get(o.bedId) ?? []; a.push(o); byBed.set(o.bedId, a); }
   return beds.map((b) => {
@@ -58,7 +64,7 @@ export async function bedBoard(propertyId: string) {
     const upcoming = list.filter((o) => o.fromDate > today);
     return {
       bedId: b.id, label: b.label, roomNumber: b.room.number, floor: b.room.floor, status: b.status,
-      current: current ? fmt(current) : null,
+      current: current ? fmt(current, rate) : null,
       upcoming: upcoming.length,
       nextFrom: upcoming[0]?.fromDate ?? null,
     };
@@ -70,13 +76,14 @@ export async function listBedOccupancies(propertyId: string, bedId: string) {
   const bed = await prisma.bed.findFirst({ where: { id: bedId, propertyId }, select: { id: true, label: true } });
   if (!bed) throw NOT_FOUND();
   const items = await prisma.bedOccupancy.findMany({ where: { propertyId, bedId }, include: OCC_INCLUDE, orderBy: { fromDate: "desc" } });
-  return { bed, items: items.map(fmt) };
+  const rate = await energyRate(propertyId);
+  return { bed, items: items.map((o) => fmt(o, rate)) };
 }
 
 export type CreateOccupancyInput = {
   bedId: string; fromDate: string; toDate: string;
   occupantGuestId?: string; firstName?: string; lastName?: string; phone?: string;
-  companyId?: string | null; reservationId?: string | null; note?: string | null; pricePerNight?: number;
+  companyId?: string | null; reservationId?: string | null; note?: string | null; pricePerNight?: number; energyFeeExempt?: boolean;
 };
 
 /** Umístí osobu na lůžko (check-in pracovníka). Buď existující host, nebo se založí nový jen se jménem. */
@@ -98,10 +105,10 @@ export async function createOccupancy(propertyId: string, input: CreateOccupancy
     if (!c) throw NOT_FOUND();
   }
   const created = await prisma.bedOccupancy.create({
-    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, pricePerNight: input.pricePerNight ?? 0, note: input.note ?? null },
+    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, pricePerNight: input.pricePerNight ?? 0, energyFeeExempt: input.energyFeeExempt ?? false, note: input.note ?? null },
     include: OCC_INCLUDE,
   });
-  return fmt(created);
+  return fmt(created, await energyRate(propertyId));
 }
 
 /** Ukončí obsazenost (pracovník odešel / vystřídán). toDate volitelně zkrátí na skutečný odchod. */
@@ -114,10 +121,10 @@ export async function endOccupancy(propertyId: string, id: string, toDate?: stri
     data: { status: OccupancyStatus.ended, toDate: end < o.fromDate ? o.fromDate : end },
     include: OCC_INCLUDE,
   });
-  return fmt(updated);
+  return fmt(updated, await energyRate(propertyId));
 }
 
-export async function updateOccupancy(propertyId: string, id: string, patch: { fromDate?: string; toDate?: string; companyId?: string | null; note?: string | null; pricePerNight?: number }) {
+export async function updateOccupancy(propertyId: string, id: string, patch: { fromDate?: string; toDate?: string; companyId?: string | null; note?: string | null; pricePerNight?: number; energyFeeExempt?: boolean }) {
   const o = await prisma.bedOccupancy.findFirst({ where: { id, propertyId } });
   if (!o) throw NOT_FOUND();
   const from = patch.fromDate ? dateOnly(patch.fromDate) : o.fromDate;
@@ -126,10 +133,10 @@ export async function updateOccupancy(propertyId: string, id: string, patch: { f
   if (o.status === OccupancyStatus.active && await hasOverlap(o.bedId, from, to, id)) throw new Error("Lůžko je v tomto termínu už obsazené.");
   const updated = await prisma.bedOccupancy.update({
     where: { id },
-    data: { fromDate: from, toDate: to, companyId: patch.companyId === undefined ? undefined : patch.companyId, note: patch.note === undefined ? undefined : patch.note, pricePerNight: patch.pricePerNight === undefined ? undefined : patch.pricePerNight },
+    data: { fromDate: from, toDate: to, companyId: patch.companyId === undefined ? undefined : patch.companyId, note: patch.note === undefined ? undefined : patch.note, pricePerNight: patch.pricePerNight === undefined ? undefined : patch.pricePerNight, energyFeeExempt: patch.energyFeeExempt === undefined ? undefined : patch.energyFeeExempt },
     include: OCC_INCLUDE,
   });
-  return fmt(updated);
+  return fmt(updated, await energyRate(propertyId));
 }
 
 /** Obsazení dané firmy v provozovně — pro fakturaci (s příznakem, zda už vyfakturováno). */
@@ -137,7 +144,8 @@ export async function companyOccupanciesForProperty(propertyId: string, companyI
   const items = await prisma.bedOccupancy.findMany({
     where: { propertyId, companyId }, include: { ...OCC_INCLUDE, bed: { select: { label: true } } }, orderBy: { fromDate: "asc" },
   });
-  return items.map((o) => ({ ...fmt(o), bedLabel: o.bed.label }));
+  const rate = await energyRate(propertyId);
+  return items.map((o) => ({ ...fmt(o, rate), bedLabel: o.bed.label }));
 }
 
 export async function deleteOccupancy(propertyId: string, id: string) {

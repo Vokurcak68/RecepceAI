@@ -26,7 +26,7 @@ export type Property = {
   id: string; identifier: string; name: string; type: PropertyType;
   street: string | null; city: string | null; country: string | null; phone: string | null; email: string | null; ico: string | null; dic: string | null; iban: string | null; vatPayer: boolean; active: boolean; infoText: string | null;
   operatorName: string | null; operatorAddress: string | null; operatorRegistration: string | null; operatorAccount: string | null; operatorIco: string | null; operatorDic: string | null;
-  kioskKeyInfo: string | null; kioskWifi: string | null;
+  kioskKeyInfo: string | null; kioskWifi: string | null; energyFeePerNight: Money;
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; cityTaxPerPersonNight: Money; cityTaxFreeAge: number;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; onlineCheckinHours: number; dailyCleaning: boolean; offeredServices: string[];
   freeCancelDays: number; cancelFeePct: number; depositPct: number; reminderHours: number; noShowHours: number;
@@ -385,7 +385,7 @@ export type RoomCandidate = { id: string; number: string; floor: number; free: b
 export type Company = { id: string; name: string; ico: string | null; dic: string | null; account: string | null; street: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; note: string | null; active: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
 export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBalance: Money };
-export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string };
+export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string; energyFeeExempt: boolean; energyPerNight: Money; energyAmount: Money; total: Money };
 export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
 export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
 export type Deposit = { id: string; amount: Money; method: string; status: "held" | "returned" | "forfeited"; takenAt: string; returnedAt: string | null; returnedAmount: Money | null; note: string | null; reservationId: string | null; companyId: string | null };

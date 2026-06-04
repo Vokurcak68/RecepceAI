@@ -239,10 +239,14 @@ export async function issueCompanyOccupancyInvoice(propertyId: string, companyId
     include: { bed: { select: { label: true } }, occupant: { select: { firstName: true, lastName: true } } },
   });
   if (!occ.length) throw new Error("Žádné nevyfakturované obsazení k fakturaci.");
-  const lines: LineInput[] = occ.map((o) => {
+  const energyRate = Number((await prisma.property.findUnique({ where: { id: propertyId }, select: { energyFeePerNight: true } }))?.energyFeePerNight ?? 0);
+  const lines: LineInput[] = [];
+  for (const o of occ) {
     const nights = Math.max(0, Math.round((o.toDate.getTime() - o.fromDate.getTime()) / 86_400_000));
-    return { label: `Lůžko ${o.bed.label} — ${o.occupant.firstName} ${o.occupant.lastName} (${iso(o.fromDate)}–${iso(o.toDate)})`, qty: nights, unitPrice: o.pricePerNight, vatRate: VAT_ACCOMMODATION };
-  });
+    const who = `Lůžko ${o.bed.label} — ${o.occupant.firstName} ${o.occupant.lastName} (${iso(o.fromDate)}–${iso(o.toDate)})`;
+    lines.push({ label: who, qty: nights, unitPrice: o.pricePerNight, vatRate: VAT_ACCOMMODATION });
+    if (!o.energyFeeExempt && energyRate > 0) lines.push({ label: `Energie (vzdušné) — ${o.bed.label} (${nights} ${nights === 1 ? "noc" : "nocí"})`, qty: nights, unitPrice: energyRate, vatRate: VAT_DEFAULT });
+  }
   const address = [company.street, [company.zip, company.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null;
   const doc = await createDocument({
     propertyId, type: BillingDocType.invoice,

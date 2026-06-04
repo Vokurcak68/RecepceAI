@@ -208,6 +208,8 @@ model Property {
   // Texty zobrazené na kiosku po ubytování (výsledková obrazovka). Volné, per provozovna.
   kioskKeyInfo String? // instrukce k vyzvednutí klíče (např. „Klíč je pod monitorem")
   kioskWifi    String? // Wi-Fi údaj (např. „PenzionWifi / vitejte")
+
+  energyFeePerNight Decimal @default(0) @db.Decimal(10, 2) // „vzdušné" — energetický poplatek za lůžko/noc (firemní ubytovny)
   onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
   // Storno / zálohové politiky + automatika (0 = vypnuto).
@@ -451,6 +453,7 @@ model BedOccupancy {
   toDate       DateTime        @db.Date
   status       OccupancyStatus @default(active)
   pricePerNight Decimal        @default(0) @db.Decimal(10, 2) // cena za lůžko/noc pro fakturaci firmě
+  energyFeeExempt Boolean      @default(false) // osvobozeno od energetického poplatku („vzdušné")
   invoicedAt   DateTime? // kdy byla obsazenost zahrnuta do faktury firmě (zamezí dvojí fakturaci)
   note         String?
 

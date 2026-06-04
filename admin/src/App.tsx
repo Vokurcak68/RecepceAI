@@ -1689,7 +1689,7 @@ type PropEdit = {
   ico: string; dic: string; iban: string; vatPayer: boolean;
   operatorName: string; operatorAddress: string; operatorRegistration: string; operatorAccount: string; operatorIco: string; operatorDic: string;
   kioskKeyInfo: string; kioskWifi: string;
-  inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
+  inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string; energyFeePerNight: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; dailyCleaning: boolean; active: boolean; infoText: string;
   offeredServices: string[];
   onlineCheckinHours: string;
@@ -1713,7 +1713,7 @@ function PropertiesView() {
       operatorName: p.operatorName ?? "", operatorAddress: p.operatorAddress ?? [p.street, p.city].filter(Boolean).join(", "), operatorRegistration: p.operatorRegistration ?? "",
       operatorAccount: p.operatorAccount ?? (p.iban ?? ""), operatorIco: p.operatorIco ?? (p.ico ?? ""), operatorDic: p.operatorDic ?? (p.dic ?? ""),
       kioskKeyInfo: p.kioskKeyInfo ?? "", kioskWifi: p.kioskWifi ?? "",
-      inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
+      inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18), energyFeePerNight: parseFloat(p.energyFeePerNight ?? "0").toString(),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
       offeredServices: p.offeredServices ?? ["cleaning", "laundry", "ironing", "minibar"],
       onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
@@ -1722,7 +1722,7 @@ function PropertiesView() {
   };
   const saveEdit = async () => {
     if (!editId || !ef) return;
-    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), cityTaxFreeAge: Number(ef.cityTaxFreeAge), onlineCheckinHours: Number(ef.onlineCheckinHours), freeCancelDays: Number(ef.freeCancelDays), cancelFeePct: Number(ef.cancelFeePct), depositPct: Number(ef.depositPct), reminderHours: Number(ef.reminderHours), noShowHours: Number(ef.noShowHours) });
+    await api.updateProperty(editId, { ...ef, cityTaxPerPersonNight: Number(ef.cityTaxPerPersonNight), cityTaxFreeAge: Number(ef.cityTaxFreeAge), energyFeePerNight: Number(ef.energyFeePerNight), onlineCheckinHours: Number(ef.onlineCheckinHours), freeCancelDays: Number(ef.freeCancelDays), cancelFeePct: Number(ef.cancelFeePct), depositPct: Number(ef.depositPct), reminderHours: Number(ef.reminderHours), noShowHours: Number(ef.noShowHours) });
     setMsg("Provozovna uložena."); setEditId(null); setEf(null); reload();
   };
 
@@ -1797,6 +1797,7 @@ function PropertiesView() {
               <FieldCol label="Pobyt. poplatek (Kč / os. / noc)"><input style={fullInput} type="number" min={0} value={ef.cityTaxPerPersonNight} disabled={!ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxPerPersonNight: e.target.value })} /></FieldCol>
               <FieldCol label="Děti neplatí do (let)"><input style={fullInput} type="number" min={0} value={ef.cityTaxFreeAge} disabled={!ef.cityTaxEnabled} onChange={(e) => setEf({ ...ef, cityTaxFreeAge: e.target.value })} /></FieldCol>
               <FieldCol label="Online check-in (h před příjezdem)"><input style={fullInput} type="number" min={0} value={ef.onlineCheckinHours} disabled={!ef.selfCheckin} onChange={(e) => setEf({ ...ef, onlineCheckinHours: e.target.value })} /></FieldCol>
+              <FieldCol label="Energie / vzdušné (Kč/lůžko/noc)"><input style={fullInput} type="number" min={0} value={ef.energyFeePerNight} onChange={(e) => setEf({ ...ef, energyFeePerNight: e.target.value })} /></FieldCol>
             </FormGrid>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 14 }}>
               <Chk label="Pobytový poplatek" checked={ef.cityTaxEnabled} onChange={(v) => setEf({ ...ef, cityTaxEnabled: v })} />
@@ -2476,7 +2477,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
   const { data, error, reload } = useAsync<BedOccupanciesData>(() => api.bedOccupancies(bedId), [bedId]);
   const companies = useAsync<Company[]>(() => api.companies(), []);
   const today = todayIso();
-  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", note: "" });
+  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", energyExempt: false, note: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -2484,7 +2485,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
     if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Vyplň jméno a příjmení."); return; }
     setBusy(true); setMsg("");
     try {
-      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, note: f.note || null });
+      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, energyFeeExempt: f.energyExempt, note: f.note || null });
       setF({ ...f, firstName: "", lastName: "", phone: "", note: "" }); reload();
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -2513,6 +2514,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
             <label className="muted">Od <input type="date" value={f.fromDate} onChange={(e) => setF({ ...f, fromDate: e.target.value })} /></label>
             <label className="muted">Do <input type="date" value={f.toDate} onChange={(e) => setF({ ...f, toDate: e.target.value })} /></label>
             <input type="number" min={0} placeholder="Kč/noc" value={f.ppn} onChange={(e) => setF({ ...f, ppn: e.target.value })} style={{ width: 90 }} />
+            <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={f.energyExempt} onChange={(e) => setF({ ...f, energyExempt: e.target.checked })} /> energie zdarma</label>
             <input placeholder="Poznámka" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
             <button className="btn" disabled={busy} onClick={add}>Umístit</button>
           </div>
@@ -2526,7 +2528,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
                 <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
                 <td className="muted">{o.companyName ?? "—"}</td>
                 <td>{d(o.fromDate)} → {d(o.toDate)}</td>
-                <td className="muted">{o.nights}× {money(o.pricePerNight)} = <b>{money(o.amount)}</b>{o.invoicedAt ? <div style={{ fontSize: 12, color: "var(--ok)" }}>vyfakturováno</div> : null}</td>
+                <td className="muted">{o.nights}× {money(o.pricePerNight)}{Number(o.energyAmount) > 0 ? <> + energie {money(o.energyAmount)}</> : o.energyFeeExempt ? <span title="osvobozeno od energie"> · bez energie</span> : null} = <b>{money(o.total)}</b>{o.invoicedAt ? <div style={{ fontSize: 12, color: "var(--ok)" }}>vyfakturováno</div> : null}</td>
                 <td>{o.status === "ended" ? <span className="muted">ukončeno</span> : <b style={{ color: "var(--ok)" }}>aktivní</b>}</td>
                 <td className="right" style={{ whiteSpace: "nowrap" }}>
                   {o.status === "active" && <><button className="btn sm" disabled={busy} onClick={() => end(o)}>Ukončit</button>{" "}</>}
@@ -2673,8 +2675,8 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
               <td>{o.invoicedAt ? <span className="muted" title="vyfakturováno">·</span> : <input type="checkbox" checked={!!occSel[o.id]} onChange={(e) => setOccSel({ ...occSel, [o.id]: e.target.checked })} />}</td>
               <td className="muted">{o.bedLabel ?? "—"}</td><td>{o.occupantName}</td>
               <td>{d(o.fromDate)} → {d(o.toDate)}</td>
-              <td className="muted">{o.nights}× {money(o.pricePerNight)}</td>
-              <td><b>{money(o.amount)}</b></td>
+              <td className="muted">{o.nights}× {money(o.pricePerNight)}{Number(o.energyAmount) > 0 ? ` + energie ${money(o.energyAmount)}` : ""}</td>
+              <td><b>{money(o.total)}</b></td>
               <td>{o.invoicedAt ? <span style={{ color: "var(--ok)" }}>vyfakturováno</span> : <span className="muted">{o.status === "ended" ? "ukončeno" : "aktivní"}</span>}</td>
             </tr>
           )} />
