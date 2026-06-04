@@ -372,6 +372,8 @@ adminRouter.patch("/companies/:id", h((req) => companies.updateCompany(req.param
 adminRouter.delete("/companies/:id", h((req) => companies.deleteCompany(req.params.id)));
 adminRouter.get("/companies/:id/reservations", h((req, res) => companies.companyReservationsForProperty(pid(res), req.params.id)));
 adminRouter.post("/companies/:id/invoice", h((req, res) => billing.issueBulkInvoice(pid(res), z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body).reservationIds)));
+adminRouter.get("/companies/:id/occupancies", h((req, res) => occupancy.companyOccupanciesForProperty(pid(res), req.params.id)));
+adminRouter.post("/companies/:id/occupancy-invoice", h((req, res) => billing.issueCompanyOccupancyInvoice(pid(res), req.params.id, z.object({ occupancyIds: z.array(z.string().uuid()).min(1) }).parse(req.body).occupancyIds)));
 adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReservationCompany(pid(res), req.params.id, z.object({ companyId: z.string().uuid().nullable() }).parse(req.body).companyId)));
 
 // ── Lůžková obsazenost (firemní ubytovny) ──
@@ -380,10 +382,10 @@ adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupa
 const occBody = z.object({
   bedId: z.string().uuid(), fromDate: dateStr, toDate: dateStr,
   occupantGuestId: z.string().uuid().optional(), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(),
-  companyId: z.string().uuid().nullable().optional(), reservationId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(),
+  companyId: z.string().uuid().nullable().optional(), reservationId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional(),
 });
 adminRouter.post("/occupancies", h((req, res) => occupancy.createOccupancy(pid(res), occBody.parse(req.body))));
-adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional() }).parse(req.body))));
+adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional() }).parse(req.body))));
 adminRouter.post("/occupancies/:id/end", h((req, res) => occupancy.endOccupancy(pid(res), req.params.id, z.object({ toDate: dateStr.optional() }).parse(req.body ?? {}).toDate)));
 adminRouter.delete("/occupancies/:id", h((req, res) => occupancy.deleteOccupancy(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/registration", h((req, res) => {

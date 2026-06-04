@@ -286,6 +286,8 @@ export const api = {
   updateOccupancy: (id: string, b: unknown) => req(`/admin/occupancies/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   endOccupancy: (id: string, toDate?: string) => req(`/admin/occupancies/${id}/end`, { method: "POST", body: JSON.stringify(toDate ? { toDate } : {}) }),
   deleteOccupancy: (id: string) => req(`/admin/occupancies/${id}`, { method: "DELETE" }),
+  companyOccupancies: (id: string) => req<BedOccupancyItem[]>(`/admin/companies/${id}/occupancies?_=${Date.now()}`),
+  companyOccupancyInvoice: (id: string, occupancyIds: string[]) => req<Doc>(`/admin/companies/${id}/occupancy-invoice`, { method: "POST", body: JSON.stringify({ occupancyIds }) }),
 
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),
@@ -375,7 +377,7 @@ export type RoomCandidate = { id: string; number: string; floor: number; free: b
 export type Company = { id: string; name: string; ico: string | null; dic: string | null; account: string | null; street: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; note: string | null; active: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
 export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBalance: Money };
-export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null };
+export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string };
 export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
 export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };

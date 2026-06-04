@@ -13,11 +13,16 @@ const OCC_INCLUDE = {
   company: { select: { id: true, name: true } },
 } as const;
 
+const nightsBetween = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+
 function fmt(o: Prisma.BedOccupancyGetPayload<{ include: typeof OCC_INCLUDE }>) {
+  const nights = nightsBetween(o.fromDate, o.toDate);
+  const ppn = Number(o.pricePerNight);
   return {
     id: o.id, bedId: o.bedId, fromDate: o.fromDate, toDate: o.toDate, status: o.status, note: o.note,
     occupantId: o.occupantGuestId, occupantName: `${o.occupant.firstName} ${o.occupant.lastName}`, occupantPhone: o.occupant.phone,
     companyId: o.companyId, companyName: o.company?.name ?? null,
+    pricePerNight: ppn.toFixed(2), nights, amount: (nights * ppn).toFixed(2), invoicedAt: o.invoicedAt,
   };
 }
 
@@ -71,7 +76,7 @@ export async function listBedOccupancies(propertyId: string, bedId: string) {
 export type CreateOccupancyInput = {
   bedId: string; fromDate: string; toDate: string;
   occupantGuestId?: string; firstName?: string; lastName?: string; phone?: string;
-  companyId?: string | null; reservationId?: string | null; note?: string | null;
+  companyId?: string | null; reservationId?: string | null; note?: string | null; pricePerNight?: number;
 };
 
 /** Umístí osobu na lůžko (check-in pracovníka). Buď existující host, nebo se založí nový jen se jménem. */
@@ -93,7 +98,7 @@ export async function createOccupancy(propertyId: string, input: CreateOccupancy
     if (!c) throw NOT_FOUND();
   }
   const created = await prisma.bedOccupancy.create({
-    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, note: input.note ?? null },
+    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, pricePerNight: input.pricePerNight ?? 0, note: input.note ?? null },
     include: OCC_INCLUDE,
   });
   return fmt(created);
@@ -112,7 +117,7 @@ export async function endOccupancy(propertyId: string, id: string, toDate?: stri
   return fmt(updated);
 }
 
-export async function updateOccupancy(propertyId: string, id: string, patch: { fromDate?: string; toDate?: string; companyId?: string | null; note?: string | null }) {
+export async function updateOccupancy(propertyId: string, id: string, patch: { fromDate?: string; toDate?: string; companyId?: string | null; note?: string | null; pricePerNight?: number }) {
   const o = await prisma.bedOccupancy.findFirst({ where: { id, propertyId } });
   if (!o) throw NOT_FOUND();
   const from = patch.fromDate ? dateOnly(patch.fromDate) : o.fromDate;
@@ -121,10 +126,18 @@ export async function updateOccupancy(propertyId: string, id: string, patch: { f
   if (o.status === OccupancyStatus.active && await hasOverlap(o.bedId, from, to, id)) throw new Error("Lůžko je v tomto termínu už obsazené.");
   const updated = await prisma.bedOccupancy.update({
     where: { id },
-    data: { fromDate: from, toDate: to, companyId: patch.companyId === undefined ? undefined : patch.companyId, note: patch.note === undefined ? undefined : patch.note },
+    data: { fromDate: from, toDate: to, companyId: patch.companyId === undefined ? undefined : patch.companyId, note: patch.note === undefined ? undefined : patch.note, pricePerNight: patch.pricePerNight === undefined ? undefined : patch.pricePerNight },
     include: OCC_INCLUDE,
   });
   return fmt(updated);
+}
+
+/** Obsazení dané firmy v provozovně — pro fakturaci (s příznakem, zda už vyfakturováno). */
+export async function companyOccupanciesForProperty(propertyId: string, companyId: string) {
+  const items = await prisma.bedOccupancy.findMany({
+    where: { propertyId, companyId }, include: { ...OCC_INCLUDE, bed: { select: { label: true } } }, orderBy: { fromDate: "asc" },
+  });
+  return items.map((o) => ({ ...fmt(o), bedLabel: o.bed.label }));
 }
 
 export async function deleteOccupancy(propertyId: string, id: string) {

@@ -2433,7 +2433,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
   const { data, error, reload } = useAsync<BedOccupanciesData>(() => api.bedOccupancies(bedId), [bedId]);
   const companies = useAsync<Company[]>(() => api.companies(), []);
   const today = todayIso();
-  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), note: "" });
+  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -2441,7 +2441,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
     if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Vyplň jméno a příjmení."); return; }
     setBusy(true); setMsg("");
     try {
-      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, note: f.note || null });
+      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, note: f.note || null });
       setF({ ...f, firstName: "", lastName: "", phone: "", note: "" }); reload();
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -2469,19 +2469,21 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
           <div className="toolbar" style={{ flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
             <label className="muted">Od <input type="date" value={f.fromDate} onChange={(e) => setF({ ...f, fromDate: e.target.value })} /></label>
             <label className="muted">Do <input type="date" value={f.toDate} onChange={(e) => setF({ ...f, toDate: e.target.value })} /></label>
-            <input placeholder="Poznámka" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+            <input type="number" min={0} placeholder="Kč/noc" value={f.ppn} onChange={(e) => setF({ ...f, ppn: e.target.value })} style={{ width: 90 }} />
+            <input placeholder="Poznámka" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
             <button className="btn" disabled={busy} onClick={add}>Umístit</button>
           </div>
         </div>
 
         <table style={{ marginTop: 12 }}>
-          <thead><tr><th>Osoba</th><th>Firma</th><th>Od → Do</th><th>Stav</th><th className="right"></th></tr></thead>
+          <thead><tr><th>Osoba</th><th>Firma</th><th>Od → Do</th><th>Částka</th><th>Stav</th><th className="right"></th></tr></thead>
           <tbody>
             {(data?.items ?? []).map((o) => (
               <tr key={o.id}>
                 <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
                 <td className="muted">{o.companyName ?? "—"}</td>
                 <td>{d(o.fromDate)} → {d(o.toDate)}</td>
+                <td className="muted">{o.nights}× {money(o.pricePerNight)} = <b>{money(o.amount)}</b>{o.invoicedAt ? <div style={{ fontSize: 12, color: "var(--ok)" }}>vyfakturováno</div> : null}</td>
                 <td>{o.status === "ended" ? <span className="muted">ukončeno</span> : <b style={{ color: "var(--ok)" }}>aktivní</b>}</td>
                 <td className="right" style={{ whiteSpace: "nowrap" }}>
                   {o.status === "active" && <><button className="btn sm" disabled={busy} onClick={() => end(o)}>Ukončit</button>{" "}</>}
@@ -2489,7 +2491,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
                 </td>
               </tr>
             ))}
-            {data && data.items.length === 0 && <tr><td colSpan={5} className="muted">Zatím žádné obsazení.</td></tr>}
+            {data && data.items.length === 0 && <tr><td colSpan={6} className="muted">Zatím žádné obsazení.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2549,6 +2551,8 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
   const [msg, setMsg] = useState("");
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [doc, setDoc] = useState<Doc | null>(null);
+  const occA = useAsync<BedOccupancyItem[]>(() => api.companyOccupancies(id), [id]);
+  const [occSel, setOccSel] = useState<Record<string, boolean>>({});
   useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", active: data.active }); }, [data?.id]); // eslint-disable-line
 
   const save = async () => { if (!ef) return; setBusy(true); setMsg(""); try { await api.updateCompany(id, ef); setMsg("Uloženo."); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
@@ -2559,6 +2563,14 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
     if (!selectedIds.length) return;
     if (await confirm({ title: "Souhrnná faktura", message: <>Vystavit jednu fakturu za <b>{selectedIds.length}</b> rezervací firmě <b>{data?.name}</b>?</>, confirmLabel: "Vystavit" })) {
       setBusy(true); try { const dc = await api.companyInvoice(id, selectedIds); setDoc(dc); setSel({}); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }
+  };
+  const occBillable = (occA.data ?? []).filter((o) => !o.invoicedAt);
+  const occSelIds = occBillable.filter((o) => occSel[o.id]).map((o) => o.id);
+  const invoiceOcc = async () => {
+    if (!occSelIds.length) return;
+    if (await confirm({ title: "Faktura za obsazenost", message: <>Vystavit fakturu firmě <b>{data?.name}</b> za <b>{occSelIds.length}</b> obsazení lůžek?</>, confirmLabel: "Vystavit" })) {
+      setBusy(true); try { const dc = await api.companyOccupancyInvoice(id, occSelIds); setDoc(dc); setOccSel({}); occA.reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }
   };
 
@@ -2610,6 +2622,25 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
           <button className="btn" disabled={busy || !selectedIds.length} onClick={invoice} style={{ marginLeft: "auto" }}>Vystavit souhrnnou fakturu ({selectedIds.length})</button>
         </div>
       </div>
+
+      {(occA.data ?? []).length > 0 && (
+        <div className="panel"><h3>Lůžková obsazenost <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· této provozovny · fakturace po lůžko-nocích</span></h3>
+          <Table cols={["", "Lůžko", "Osoba", "Od → Do", "Nocí × cena", "Částka", "Stav"]} rows={occA.data ?? []} empty="—" render={(o: BedOccupancyItem) => (
+            <tr key={o.id}>
+              <td>{o.invoicedAt ? <span className="muted" title="vyfakturováno">·</span> : <input type="checkbox" checked={!!occSel[o.id]} onChange={(e) => setOccSel({ ...occSel, [o.id]: e.target.checked })} />}</td>
+              <td className="muted">{o.bedLabel ?? "—"}</td><td>{o.occupantName}</td>
+              <td>{d(o.fromDate)} → {d(o.toDate)}</td>
+              <td className="muted">{o.nights}× {money(o.pricePerNight)}</td>
+              <td><b>{money(o.amount)}</b></td>
+              <td>{o.invoicedAt ? <span style={{ color: "var(--ok)" }}>vyfakturováno</span> : <span className="muted">{o.status === "ended" ? "ukončeno" : "aktivní"}</span>}</td>
+            </tr>
+          )} />
+          <div className="toolbar" style={{ padding: 16 }}>
+            <span className="muted">Zaškrtni nevyfakturovaná obsazení a vystav fakturu firmě.</span>
+            <button className="btn" disabled={busy || !occSelIds.length} onClick={invoiceOcc} style={{ marginLeft: "auto" }}>Vystavit fakturu za obsazenost ({occSelIds.length})</button>
+          </div>
+        </div>
+      )}
 
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>

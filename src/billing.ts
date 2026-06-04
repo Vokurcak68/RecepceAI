@@ -229,6 +229,30 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
   return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 });
 }
 
+/** Faktura firmě za lůžkovou obsazenost (bed-nights). Sečte vybraná obsazení a označí je jako vyfakturovaná. */
+export async function issueCompanyOccupancyInvoice(propertyId: string, companyId: string, occupancyIds: string[]) {
+  if (!occupancyIds.length) throw new Error("Vyber alespoň jedno obsazení.");
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) throw NOT_FOUND();
+  const occ = await prisma.bedOccupancy.findMany({
+    where: { id: { in: occupancyIds }, propertyId, companyId, invoicedAt: null },
+    include: { bed: { select: { label: true } }, occupant: { select: { firstName: true, lastName: true } } },
+  });
+  if (!occ.length) throw new Error("Žádné nevyfakturované obsazení k fakturaci.");
+  const lines: LineInput[] = occ.map((o) => {
+    const nights = Math.max(0, Math.round((o.toDate.getTime() - o.fromDate.getTime()) / 86_400_000));
+    return { label: `Lůžko ${o.bed.label} — ${o.occupant.firstName} ${o.occupant.lastName} (${iso(o.fromDate)}–${iso(o.toDate)})`, qty: nights, unitPrice: o.pricePerNight, vatRate: VAT_ACCOMMODATION };
+  });
+  const address = [company.street, [company.zip, company.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null;
+  const doc = await createDocument({
+    propertyId, type: BillingDocType.invoice,
+    customer: { name: company.name, address, ico: company.ico, dic: company.dic },
+    lines, paidTotal: 0, dueInDays: 14, note: `Ubytování — ${company.name}`,
+  });
+  await prisma.bedOccupancy.updateMany({ where: { id: { in: occ.map((o) => o.id) } }, data: { invoicedAt: new Date() } });
+  return doc;
+}
+
 // ── Čtení ────────────────────────────────────────────────────
 export function listDocuments(propertyId: string, filter: { type?: BillingDocType; from?: Date; to?: Date } = {}) {
   const where: Prisma.DocumentWhereInput = { propertyId };
