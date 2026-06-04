@@ -1875,10 +1875,11 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
   const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
   const [reg, setReg] = useState({ primary: true, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
+  const [offerReg, setOfferReg] = useState(false);
   const [gEdit, setGEdit] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteDirty, setNoteDirty] = useState(false);
-  useEffect(() => { if (data) { setNoteText(data.note ?? ""); setNoteDirty(false); } }, [data?.id]); // eslint-disable-line
+  useEffect(() => { if (data) { setNoteText(data.note ?? ""); setNoteDirty(false); setReg((s) => (s.fullName ? s : { ...s, fullName: `${data.primaryGuest?.firstName ?? ""} ${data.primaryGuest?.lastName ?? ""}`.trim() })); } }, [data?.id]); // eslint-disable-line
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
   const [guestQr, setGuestQr] = useState(false);
@@ -1938,7 +1939,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       <div className="panel" style={{ padding: 16 }}>
         <h3 style={{ border: "none", padding: 0, marginBottom: 12 }}>Akce</h3>
         <div className="toolbar">
-          {canCheckIn && <button className="btn ok" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{r.code}</b> ({r.primaryGuest?.firstName} {r.primaryGuest?.lastName})?</>, confirmLabel: "Check-in" })) run(() => api.checkin(id)); }}>Check-in</button>}
+          {canCheckIn && <button className="btn ok" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{r.code}</b> ({r.primaryGuest?.firstName} {r.primaryGuest?.lastName})?</>, confirmLabel: "Check-in" })) { setBusy(true); setActErr(""); try { await api.checkin(id); setOfferReg(true); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } } }}>Check-in</button>}
           {canCheckOut && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{r.code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(id); if (x.document) setIssuedDoc(x.document); }); }}>Check-out</button>}
           {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Úhrada kartou", message: <>Zaúčtovat úhradu <b>{money(bal)}</b> kartou?</>, confirmLabel: "Zaúčtovat" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" })); }}>Doplatit {money(bal)} kartou</button>}
           {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={async () => { if (await confirm({ title: "Platba fakturou", message: <>Označit <b>{money(bal)}</b> jako zaplaceno fakturou?</>, confirmLabel: "Označit zaplaceno" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` })); }}>Zaplaceno fakturou</button>}
@@ -2016,6 +2017,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       </div>
 
       <div className="panel"><h3>Evidenční kniha <span className="muted" style={{ fontSize: 14 }}>zápis ubytovaných osob</span></h3>
+        {offerReg && r.registrationEntries.length === 0 && <div className="error" style={{ background: "#fff4e0", color: "#9a6b00", margin: "0 0 4px" }}>✓ Host odbaven (check-in). Nezapomeňte ho zapsat do evidenční knihy níže.</div>}
         <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap", alignItems: "center" }}>
           <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={reg.primary} onChange={(e) => setReg({ ...reg, primary: e.target.checked, fullName: e.target.checked ? `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() : "" })} /> hlavní host</label>
           <input placeholder="Jméno a příjmení" style={{ minWidth: 180 }} value={reg.fullName} onChange={(e) => setReg({ ...reg, fullName: e.target.value })} />
