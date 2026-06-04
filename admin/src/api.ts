@@ -177,6 +177,7 @@ export const api = {
   rooms: () => req<Room[]>(`/admin/rooms`),
   roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board`),
   roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail`),
+  setDnd: (reservationId: string, on: boolean) => req(`/admin/reservations/${reservationId}/dnd`, { method: "POST", body: JSON.stringify({ on }) }),
   roomCandidates: (reservationId: string) => req<RoomCandidate[]>(`/admin/reservations/${reservationId}/room-candidates`),
   roomUnassigned: (id: string) => req<UnassignedRes[]>(`/admin/rooms/${id}/unassigned`),
   createRoomRequest: (id: string, b: { type: string; description?: string }) => req(`/admin/rooms/${id}/request`, { method: "POST", body: JSON.stringify(b) }),
@@ -272,6 +273,7 @@ export const api = {
   staffCreateRequest: (b: unknown) => req<ServiceRequest>(`/staff/requests`, { method: "POST", body: JSON.stringify(b) }),
   staffSetStatus: (id: string, b: unknown) => req(`/staff/requests/${id}/status`, { method: "POST", body: JSON.stringify(b) }),
   staffRequestPhotos: (id: string, images: string[]) => req<ServiceRequest>(`/staff/requests/${id}/photos`, { method: "POST", body: JSON.stringify({ images }) }),
+  staffSetDnd: (reservationId: string, on: boolean) => req(`/staff/reservations/${reservationId}/dnd`, { method: "POST", body: JSON.stringify({ on }) }),
   staffServiceItems: () => req<ServiceItem[]>(`/staff/service-items`),
   staffChargeRequest: (id: string, b: { serviceItemId: string; quantity: number; markDone?: boolean }) => req(`/staff/requests/${id}/charge`, { method: "POST", body: JSON.stringify(b) }),
   staffRooms: () => req<StaffRoom[]>(`/staff/rooms`),
@@ -348,7 +350,7 @@ export type StaffRoom = { id: string; number: string; status: string; roomType?:
 export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean; balance: Money } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
 export type RoomResItem = { id: string; code: string; guestName: string; status: string; checkInDate: string; checkOutDate: string; balance: Money };
 export type RoomReqItem = { id: string; type: string; domain: string; status: string; description: string | null; createdAt: string };
-export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; reservations: RoomResItem[]; requests: RoomReqItem[] };
+export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; occupantDnd?: boolean; reservations: RoomResItem[]; requests: RoomReqItem[] };
 export type RoomCandidate = { id: string; number: string; floor: number; free: boolean; current: boolean };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };
 export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Uklizeno", dirty: "K úklidu", to_inspect: "Zkontrolovat", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
@@ -359,7 +361,7 @@ export type Priority = "urgent" | "high" | "normal";
 export type PlanItem = {
   id: string; type: string; status: string; priority: Priority; reason: string;
   roomNumber: string | null; bedLabel: string | null; roomTypeName: string | null;
-  guestName: string | null; fromGuest: boolean; description: string | null; imageUrls?: string[]; ageMinutes: number; createdAt: string;
+  guestName: string | null; fromGuest: boolean; description: string | null; imageUrls?: string[]; dnd?: boolean; reservationId?: string | null; ageMinutes: number; createdAt: string;
 };
 export type HousekeepingPlan = {
   generatedAt: string;

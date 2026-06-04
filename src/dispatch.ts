@@ -31,6 +31,8 @@ export type PlanItem = {
   fromGuest: boolean;
   description: string | null;
   imageUrls: string[];
+  dnd: boolean; // host má „Nerušit" — úklid zatím nelze provést
+  reservationId: string | null;
   ageMinutes: number;
   createdAt: Date;
 };
@@ -108,8 +110,12 @@ export async function buildHousekeepingPlan(propertyId: string): Promise<Houseke
     let reason = "Běžný úklid po odhlášení.";
 
     const isCleaning = r.type === ServiceType.cleaning;
+    // „Nerušit": host je ubytovaný a nepřeje si úklid → úkol zůstává ve frontě, ale odsune se na konec.
+    const dnd = r.reservation?.status === ReservationStatus.checked_in && r.reservation?.doNotDisturb === true;
 
-    if (isCleaning && r.roomId && arrivalRoomIds.has(r.roomId)) {
+    if (dnd) {
+      reason = "Host má Nerušit — úklid zkusit později.";
+    } else if (isCleaning && r.roomId && arrivalRoomIds.has(r.roomId)) {
       priority = "urgent";
       reason = "Do tohoto pokoje dnes přijíždí host — musí být uklizený před příjezdem.";
     } else if (isCleaning && roomTypeId && (deficitByType.get(roomTypeId) ?? 0) > (deficitUsed.get(roomTypeId) ?? 0)) {
@@ -137,13 +143,16 @@ export async function buildHousekeepingPlan(propertyId: string): Promise<Houseke
       fromGuest: r.fromGuest,
       description: r.description,
       imageUrls: r.imageUrls,
+      dnd,
+      reservationId: r.reservationId,
       ageMinutes,
       createdAt: r.createdAt,
     };
   });
 
-  // Řazení: priorita → rozdělaný před otevřeným → nejstarší první.
+  // Řazení: „Nerušit" vždy na konec → priorita → rozdělaný před otevřeným → nejstarší první.
   items.sort((a, b) =>
+    (a.dnd ? 1 : 0) - (b.dnd ? 1 : 0) ||
     RANK[a.priority] - RANK[b.priority] ||
     (a.status === ServiceStatus.in_progress ? 0 : 1) - (b.status === ServiceStatus.in_progress ? 0 : 1) ||
     a.createdAt.getTime() - b.createdAt.getTime(),

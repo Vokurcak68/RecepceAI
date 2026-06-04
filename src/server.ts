@@ -353,6 +353,7 @@ adminRouter.post("/reservations", h((req, res) => {
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
 adminRouter.patch("/reservations/:id", h((req, res) => admin.updateReservationNote(pid(res), req.params.id, z.object({ note: z.string() }).parse(req.body).note)));
 adminRouter.patch("/reservations/:id/primary-guest", h((req, res) => admin.setPrimaryGuest(pid(res), req.params.id, z.object({ guestId: z.string().uuid() }).parse(req.body).guestId)));
+adminRouter.post("/reservations/:id/dnd", h((req, res) => admin.setDoNotDisturb(pid(res), req.params.id, z.object({ on: z.boolean() }).parse(req.body).on)));
 adminRouter.post("/reservations/:id/registration", h((req, res) => {
   const b = z.object({ primary: z.boolean().optional(), fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2), documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional() }).parse(req.body);
   return admin.addRegistration(pid(res), req.params.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });
@@ -633,6 +634,7 @@ app.get("/guest/:code", h(async (req) => {
     canRequestAll: inHouse,
     // Služby, které tato provozovna hostům nabízí (maintenance/other jsou vždy k dispozici).
     services: r.property.offeredServices,
+    doNotDisturb: r.doNotDisturb,
     requests,
   };
 }));
@@ -653,6 +655,15 @@ app.post("/guest/:code/checkin", h(async (req) => {
   const b = z.object({ persons: z.array(person).min(1) }).parse(req.body);
   await completeOnlineCheckin(r.id, b.persons.map((p) => ({ ...p, dateOfBirth: new Date(p.dateOfBirth) })));
   return { ok: true };
+}));
+// Host si přepne „Nerušit" (Do Not Disturb) — jen po ubytování.
+app.post("/guest/:code/dnd", h(async (req) => {
+  const r = await service.loadReservationByCode(req.params.code);
+  if (!r) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const on = z.object({ on: z.boolean() }).parse(req.body).on;
+  if (r.status !== "checked_in") throw new Error("Nerušit lze nastavit až po ubytování.");
+  await prisma.reservation.update({ where: { id: r.id }, data: { doNotDisturb: on, dndSince: on ? new Date() : null } });
+  return { doNotDisturb: on };
 }));
 app.post("/guest/:code/requests", h(async (req) => {
   const r = await service.loadReservationByCode(req.params.code);
@@ -723,6 +734,9 @@ staffRouter.post("/rooms/:id/status", h(async (req, res) => {
   const b = z.object({ status: z.nativeEnum(RoomStatus) }).parse(req.body);
   return prisma.room.update({ where: { id: req.params.id }, data: { status: b.status }, select: { id: true, number: true, status: true } });
 }));
+
+// „Nerušit" — uklízečka označí, že host si nepřeje úklid (visačka na dveřích).
+staffRouter.post("/reservations/:id/dnd", h((req, res) => admin.setDoNotDisturb(pid(res), req.params.id, z.object({ on: z.boolean() }).parse(req.body).on)));
 
 // Prioritizovaný plán úklidu pro uklízečku (housekeeping dispečer).
 staffRouter.get("/plan", h((_req, res) => buildHousekeepingPlan(pid(res))));

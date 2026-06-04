@@ -7,7 +7,7 @@ type Person = { fullName: string; dateOfBirth: string; nationality: string; docu
 const emptyPerson = (): Person => ({ fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
 type Request = { id: string; type: string; status: string; description: string | null; createdAt: string };
 type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
-type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; services?: string[]; requests: Request[] };
+type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; services?: string[]; doNotDisturb?: boolean; requests: Request[] };
 
 const inputStyle: CSSProperties = { width: "100%", minWidth: 0, height: 44, padding: "0 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
 const dateStyle: CSSProperties = { ...inputStyle, marginTop: 4, appearance: "none", WebkitAppearance: "none" };
@@ -111,6 +111,14 @@ export function App() {
     finally { setBusy(false); }
   };
 
+  const toggleDnd = async () => {
+    if (!data) return;
+    setBusy(true); setError("");
+    try { await api(`/guest/${encodeURIComponent(code.trim())}/dnd`, { method: "POST", body: JSON.stringify({ on: !data.doNotDisturb }) }); await load(code); }
+    catch (e) { setError(e instanceof Error ? e.message : t("reqFail")); }
+    finally { setBusy(false); }
+  };
+
   const LangSwitch = () => (
     <div className="langs">
       {LANGS.map((l) => (
@@ -183,6 +191,16 @@ export function App() {
           <button className="btn ghost block" style={{ marginTop: 12 }} onClick={() => setPersons((ps) => [...ps, emptyPerson()])}>+ {t("ocPerson")}</button>
           {ciErr && <div className="error" style={{ marginTop: 12 }}>{ciErr}</div>}
           <button className="btn block" style={{ marginTop: 12 }} disabled={ciBusy || !personsValid} onClick={submitCheckin}>{ciBusy ? t("ocSending") : t("ocSubmit")}</button>
+        </div>
+      )}
+
+      {data.canRequestAll && (
+        <div className="card">
+          <h2>{t("dndTitle")}</h2>
+          <p className="muted">{t("dndHint")}</p>
+          <button className={`btn block ${data.doNotDisturb ? "" : "ghost"}`} disabled={busy} onClick={toggleDnd}>
+            {data.doNotDisturb ? t("dndOn") : t("dndOff")}
+          </button>
         </div>
       )}
 

@@ -274,10 +274,21 @@ export async function roomDetail(propertyId: string, roomId: string) {
   await Promise.all(reservations.map(async (r) => { balances.set(r.id, (await computeFolio(r.id)).balance.toFixed(2)); }));
   return {
     room: { id: room.id, number: room.number, floor: room.floor, status: room.status, lockType: room.lockType, notes: room.notes ?? "", roomType: { id: room.roomType.id, name: room.roomType.name } },
-    occupantId: occ?.id ?? null, occupantBalance: occ ? (balances.get(occ.id) ?? null) : null,
+    occupantId: occ?.id ?? null, occupantBalance: occ ? (balances.get(occ.id) ?? null) : null, occupantDnd: occ?.doNotDisturb ?? false,
     reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, balance: balances.get(r.id) ?? "0" })),
     requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, createdAt: q.createdAt })),
   };
+}
+
+/** Nastaví „Nerušit" na rezervaci (host si nepřeje úklid). Scopováno na provozovnu. */
+export async function setDoNotDisturb(propertyId: string, reservationId: string, on: boolean) {
+  const res = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId }, select: { id: true } });
+  if (!res) throw NOT_FOUND();
+  return prisma.reservation.update({
+    where: { id: reservationId },
+    data: { doNotDisturb: on, dndSince: on ? new Date() : null },
+    select: { id: true, doNotDisturb: true, dndSince: true },
+  });
 }
 
 /** Pokoje téhož typu vhodné pro přesun rezervace (volné = bez kolize v termínu). */

@@ -418,6 +418,9 @@ model Reservation {
 
   note String? // poznámka recepce — přání a požadavky hosta
 
+  doNotDisturb Boolean   @default(false) // „Nerušit" — host si nepřeje úklid (nastaví host/recepce/úklid)
+  dndSince     DateTime? // od kdy je Nerušit aktivní
+
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
   cityTax     Decimal @default(0) @db.Decimal(10, 2)
 

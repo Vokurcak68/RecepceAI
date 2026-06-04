@@ -963,6 +963,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const checkin = async (rid: string, code: string) => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{code}</b>?</>, confirmLabel: "Check-in" })) run(() => api.checkin(rid), "Check-in proveden."); };
   const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
   const pay = async (rid: string, method: string, amount: number) => { if (!Number.isFinite(amount) || amount <= 0) { setMsg("Zadej platnou částku."); return; } if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) { run(() => api.addPayment(rid, { type: "balance", amount, method }), "Úhrada zaúčtována."); setPayAmt(""); setPayFor(null); } };
+  const toggleDnd = (rid: string, on: boolean) => run(() => api.setDnd(rid, on), on ? "Nastaveno Nerušit." : "Nerušit zrušeno.");
 
   if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
@@ -983,11 +984,13 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
             <div className="kvline"><span className="muted">Host</span><b>{occ.guestName}</b></div>
             <div className="kvline"><span className="muted">Pobyt</span><span>{d(occ.checkInDate)} → {d(occ.checkOutDate)}</span></div>
             <div className="kvline"><span className="muted">Zůstatek</span><b style={{ color: Number(data.occupantBalance) > 0 ? "var(--warn)" : "var(--ok)" }}>{money(data.occupantBalance ?? 0)}</b></div>
+            <div className="kvline"><span className="muted">Úklid</span>{data.occupantDnd ? <b style={{ color: "var(--warn)" }}>🚫 Nerušit</b> : <span>povolen</span>}</div>
             <div className="req-actions" style={{ marginTop: 10 }}>
               <button className="btn sm" onClick={() => setResId(occ.id)}>Detail rezervace</button>
               {Number(data.occupantBalance) > 0 && <button className="btn sm" disabled={busy} onClick={() => { setPayFor(occ.id); setPayAmt(""); }}>Doplatit</button>}
               <button className="btn sm ok" disabled={busy} onClick={() => checkout(occ.id, occ.code)}>Check-out</button>
               <button className="btn sm ghost" disabled={busy} onClick={() => openMove(occ.id)}>Přemístit</button>
+              <button className="btn sm ghost" disabled={busy} onClick={() => toggleDnd(occ.id, !data.occupantDnd)}>{data.occupantDnd ? "Zrušit Nerušit" : "🚫 Nerušit"}</button>
             </div>
           </> : <>
             <div className="muted">Pokoj není obsazen.</div>
@@ -3108,6 +3111,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
   const reloadAll = () => { reload(); plan.reload(); mplan.reload(); };
   const act = async (id: string, st: string) => { const note = st === "done" ? (prompt("Poznámka (nepovinné):") ?? undefined) : undefined; await api.staffSetStatus(id, { status: st, note }); reloadAll(); };
   const addPhotos = async (id: string, dataUrls: string[]) => { setPhotoBusy(id); try { await api.staffRequestPhotos(id, dataUrls); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Foto se nepodařilo nahrát."); } finally { setPhotoBusy(""); } };
+  const setDnd = async (reservationId: string, on: boolean) => { try { await api.staffSetDnd(reservationId, on); reloadAll(); } catch (e) { alert(e instanceof Error ? e.message : "Nepodařilo se uložit."); } };
   const addMaint = async () => {
     if (!nd.trim()) return;
     const r = await api.staffCreateRequest({ type: "maintenance", description: nd });
@@ -3145,7 +3149,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
             brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} onPhoto={addPhotos} photoBusy={photoBusy} />
         ) : (
           <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
-            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} onPhoto={addPhotos} photoBusy={photoBusy} />
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} onPhoto={addPhotos} photoBusy={photoBusy} onDnd={setDnd} />
         )
       ) : (
       <div className="staff-list">
@@ -3176,7 +3180,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
 function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items, onPhoto, photoBusy }: {
   plan: HousekeepingPlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
   brief: string; briefing: boolean; onBrief: () => void; onReload: () => void; items: ServiceItem[];
-  onPhoto: (id: string, dataUrls: string[]) => void; photoBusy: string;
+  onPhoto: (id: string, dataUrls: string[]) => void; photoBusy: string; onDnd: (reservationId: string, on: boolean) => void;
 }) {
   const c = plan?.counts;
   return (
@@ -3197,14 +3201,15 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, 
       {brief && <div className="staff-add" style={{ background: "#f6f8ff", whiteSpace: "pre-wrap", display: "block" }}>{brief}</div>}
       <div className="staff-list">
         {!plan?.items.length ? <div className="empty">Fronta úklidu je prázdná 🎉</div> : plan.items.map((i) => (
-          <div key={i.id} className={`req-card s-${i.status} row-${i.priority}`}>
-            <div className="req-top"><span className="req-type">{taskIcon(i.type, i.description)} {SERVICE_LABEL[i.type]}{isDailyTask(i.type, i.description) && <> <span className="chip chip-daily">denní</span></>}</span><PrioBadge p={i.priority} /></div>
+          <div key={i.id} className={`req-card s-${i.status} row-${i.priority}${i.dnd ? " dnd" : ""}`}>
+            <div className="req-top"><span className="req-type">{taskIcon(i.type, i.description)} {SERVICE_LABEL[i.type]}{isDailyTask(i.type, i.description) && <> <span className="chip chip-daily">denní</span></>}{i.dnd && <> <span className="chip chip-dnd">🚫 Nerušit</span></>}</span><PrioBadge p={i.priority} /></div>
             <div className="req-loc">{planLoc(i)}{i.roomTypeName ? ` · ${i.roomTypeName}` : ""}{i.guestName ? ` · ${i.guestName}` : ""}</div>
             <div className="req-desc">{i.reason}{i.description ? ` — ${i.description}` : ""}</div>
             <div className="req-actions">
-              {i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
-              <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
-              {BILLABLE.includes(i.type) && <BillRequest reqId={i.id} type={i.type} items={items} onDone={onReload} />}
+              {!i.dnd && i.status === "open" && <button className="btn sm" onClick={() => onStart(i.id)}>Začít</button>}
+              {!i.dnd && <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>}
+              {!i.dnd && BILLABLE.includes(i.type) && <BillRequest reqId={i.id} type={i.type} items={items} onDone={onReload} />}
+              {i.reservationId && <button className="btn sm ghost" onClick={() => onDnd(i.reservationId!, !i.dnd)}>{i.dnd ? "Zrušit Nerušit" : "🚫 Nerušit"}</button>}
             </div>
             <PhotoStrip urls={i.imageUrls} onUpload={(d) => onPhoto(i.id, d)} busy={photoBusy === i.id} />
           </div>
