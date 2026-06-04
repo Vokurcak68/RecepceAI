@@ -3177,7 +3177,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
 }
 
 // Karty prioritizovaného plánu úklidu (sdílené v portálu uklízečky).
-function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items, onPhoto, photoBusy }: {
+function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items, onPhoto, photoBusy, onDnd }: {
   plan: HousekeepingPlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
   brief: string; briefing: boolean; onBrief: () => void; onReload: () => void; items: ServiceItem[];
   onPhoto: (id: string, dataUrls: string[]) => void; photoBusy: string; onDnd: (reservationId: string, on: boolean) => void;
