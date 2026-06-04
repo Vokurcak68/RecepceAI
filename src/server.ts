@@ -238,7 +238,7 @@ centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
     name: z.string().optional(), identifier: z.string().optional(), type: z.nativeEnum(PropertyType).optional(), street: z.string().optional(), city: z.string().optional(), country: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(), cityTaxFreeAge: z.number().int().min(0).max(26).optional(),
-    allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(), dailyCleaning: z.boolean().optional(),
+    allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(), dailyCleaning: z.boolean().optional(), offeredServices: z.array(z.nativeEnum(ServiceType)).optional(),
     onlineCheckinHours: z.number().int().min(0).optional(),
     freeCancelDays: z.number().int().min(0).max(365).optional(), cancelFeePct: z.number().int().min(0).max(100).optional(), depositPct: z.number().int().min(0).max(100).optional(),
     reminderHours: z.number().int().min(0).max(720).optional(), noShowHours: z.number().int().min(0).max(168).optional(),
@@ -630,6 +630,8 @@ app.get("/guest/:code", h(async (req) => {
     onlineCheckin: onlineCheckinInfo(r, r.property),
     // Požadavky (úklid apod.) až po ubytování; před příjezdem jen „Jiné".
     canRequestAll: inHouse,
+    // Služby, které tato provozovna hostům nabízí (maintenance/other jsou vždy k dispozici).
+    services: r.property.offeredServices,
     requests,
   };
 }));
@@ -658,6 +660,10 @@ app.post("/guest/:code/requests", h(async (req) => {
   // Před ubytováním (host ještě nedorazil) povolíme jen obecný požadavek „Jiné".
   if (r.status !== "checked_in" && b.type !== ServiceType.other)
     throw new Error("Tento typ požadavku bude dostupný po vašem příjezdu. Nyní můžete poslat jen obecný požadavek (Jiné).");
+  // Volitelné služby (úklid/praní/žehlení/minibar) lze žádat jen pokud je provozovna nabízí; údržba a „Jiné" vždy.
+  const optional: ServiceType[] = [ServiceType.cleaning, ServiceType.laundry, ServiceType.ironing, ServiceType.minibar];
+  if (optional.includes(b.type) && !r.property.offeredServices.includes(b.type))
+    throw new Error("Tuto službu provozovna momentálně nenabízí.");
   return service.createRequest({ propertyId: r.propertyId, reservationId: r.id, roomId: r.roomId, bedId: r.bedId, type: b.type, description: b.description, fromGuest: true });
 }));
 // Hodnocení pobytu (NPS) — odkaz z check-out e-mailu, bez přihlášení.

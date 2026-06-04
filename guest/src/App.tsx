@@ -7,7 +7,7 @@ type Person = { fullName: string; dateOfBirth: string; nationality: string; docu
 const emptyPerson = (): Person => ({ fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
 type Request = { id: string; type: string; status: string; description: string | null; createdAt: string };
 type OnlineCheckin = { enabled: boolean; available: boolean; done: boolean; opensAt: string };
-type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; requests: Request[] };
+type Data = { reservation: Reservation; lang?: string | null; onlineCheckin: OnlineCheckin; canRequestAll: boolean; services?: string[]; requests: Request[] };
 
 const inputStyle: CSSProperties = { width: "100%", minWidth: 0, height: 44, padding: "0 12px", marginTop: 8, borderRadius: 8, border: "1px solid #cfd6dd", fontSize: 15, boxSizing: "border-box", fontFamily: "inherit", background: "#fff" };
 const dateStyle: CSSProperties = { ...inputStyle, marginTop: 4, appearance: "none", WebkitAppearance: "none" };
@@ -141,7 +141,11 @@ export function App() {
 
   const r = data.reservation;
   const oc = data.onlineCheckin;
-  const reqTypes = data.canRequestAll ? TYPES : TYPES.filter((t) => t.id === "other");
+  // Volitelné služby (úklid/praní/žehlení/minibar) ukážeme jen pokud je provozovna nabízí; údržba a „Jiné" vždy.
+  const offered = data.services ?? ["cleaning", "laundry", "ironing", "minibar"];
+  const OPTIONAL = ["cleaning", "laundry", "ironing", "minibar"];
+  const available = TYPES.filter((t) => !OPTIONAL.includes(t.id) || offered.includes(t.id));
+  const reqTypes = data.canRequestAll ? available : available.filter((t) => t.id === "other");
   return (
     <div className="wrap">
       <div className="header">

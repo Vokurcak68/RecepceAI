@@ -1642,6 +1642,7 @@ type PropEdit = {
   ico: string; dic: string; iban: string; vatPayer: boolean;
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; dailyCleaning: boolean; active: boolean; infoText: string;
+  offeredServices: string[];
   onlineCheckinHours: string;
   freeCancelDays: string; cancelFeePct: string; depositPct: string; reminderHours: string; noShowHours: string;
 };
@@ -1662,6 +1663,7 @@ function PropertiesView() {
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
+      offeredServices: p.offeredServices ?? ["cleaning", "laundry", "ironing", "minibar"],
       onlineCheckinHours: String(p.onlineCheckinHours ?? 48),
       freeCancelDays: String(p.freeCancelDays ?? 0), cancelFeePct: String(p.cancelFeePct ?? 0), depositPct: String(p.depositPct ?? 0), reminderHours: String(p.reminderHours ?? 0), noShowHours: String(p.noShowHours ?? 0),
     });
@@ -1739,6 +1741,16 @@ function PropertiesView() {
               <Chk label="Snídaně v ceně" checked={ef.breakfastIncluded} onChange={(v) => setEf({ ...ef, breakfastIncluded: v })} />
               <Chk label="Úklid každý den" checked={ef.dailyCleaning} onChange={(v) => setEf({ ...ef, dailyCleaning: v })} />
               <Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} />
+            </div>
+          </FormSection>
+
+          <FormSection title="Služby nabízené hostům (host.recepceai.cz)">
+            <div className="muted" style={{ marginBottom: 10 }}>Které služby si může host vyžádat v portálu. Údržba a obecný požadavek „Jiné" jsou vždy dostupné.</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+              {[{ id: "cleaning", label: "Úklid na požádání" }, { id: "laundry", label: "Praní" }, { id: "ironing", label: "Žehlení" }, { id: "minibar", label: "Minibar" }].map((s) => (
+                <Chk key={s.id} label={s.label} checked={ef.offeredServices.includes(s.id)}
+                  onChange={(v) => setEf({ ...ef, offeredServices: v ? [...ef.offeredServices, s.id] : ef.offeredServices.filter((x) => x !== s.id) })} />
+              ))}
             </div>
           </FormSection>
 

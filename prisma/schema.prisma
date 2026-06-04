@@ -195,6 +195,7 @@ model Property {
   selfCheckin           Boolean       @default(false) // ubytovna: plně samoobslužné
   breakfastIncluded     Boolean       @default(false)
   dailyCleaning         Boolean       @default(false) // hotel: denní úklid → obsazené pokoje bez odjezdu se ráno označí „Zkontrolovat"
+  offeredServices       String[]      @default(["cleaning", "laundry", "ironing", "minibar"]) // služby nabízené hostům v portálu (ServiceType)
   onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
   // Storno / zálohové politiky + automatika (0 = vypnuto).
