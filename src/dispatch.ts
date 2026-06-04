@@ -30,6 +30,7 @@ export type PlanItem = {
   guestName: string | null;
   fromGuest: boolean;
   description: string | null;
+  imageUrls: string[];
   ageMinutes: number;
   createdAt: Date;
 };
@@ -135,6 +136,7 @@ export async function buildHousekeepingPlan(propertyId: string): Promise<Houseke
       guestName,
       fromGuest: r.fromGuest,
       description: r.description,
+      imageUrls: r.imageUrls,
       ageMinutes,
       createdAt: r.createdAt,
     };

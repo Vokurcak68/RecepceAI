@@ -3145,7 +3145,7 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
             brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} onPhoto={addPhotos} photoBusy={photoBusy} />
         ) : (
           <PlanCards plan={plan.data} onStart={(id) => act(id, "in_progress")} onDone={(id) => act(id, "done")}
-            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} />
+            brief={brief} briefing={briefing} onBrief={aiBrief} onReload={reloadAll} items={priceList.data ?? []} onPhoto={addPhotos} photoBusy={photoBusy} />
         )
       ) : (
       <div className="staff-list">
@@ -3173,9 +3173,10 @@ function StaffPortal({ session, onLogout }: { session: LoginResult; onLogout: ()
 }
 
 // Karty prioritizovaného plánu úklidu (sdílené v portálu uklízečky).
-function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items }: {
+function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, items, onPhoto, photoBusy }: {
   plan: HousekeepingPlan | null; onStart: (id: string) => void; onDone: (id: string) => void;
   brief: string; briefing: boolean; onBrief: () => void; onReload: () => void; items: ServiceItem[];
+  onPhoto: (id: string, dataUrls: string[]) => void; photoBusy: string;
 }) {
   const c = plan?.counts;
   return (
@@ -3205,6 +3206,7 @@ function PlanCards({ plan, onStart, onDone, brief, briefing, onBrief, onReload, 
               <button className="btn sm ok" onClick={() => onDone(i.id)}>Hotovo</button>
               {BILLABLE.includes(i.type) && <BillRequest reqId={i.id} type={i.type} items={items} onDone={onReload} />}
             </div>
+            <PhotoStrip urls={i.imageUrls} onUpload={(d) => onPhoto(i.id, d)} busy={photoBusy === i.id} />
           </div>
         ))}
       </div>

@@ -359,7 +359,7 @@ export type Priority = "urgent" | "high" | "normal";
 export type PlanItem = {
   id: string; type: string; status: string; priority: Priority; reason: string;
   roomNumber: string | null; bedLabel: string | null; roomTypeName: string | null;
-  guestName: string | null; fromGuest: boolean; description: string | null; ageMinutes: number; createdAt: string;
+  guestName: string | null; fromGuest: boolean; description: string | null; imageUrls?: string[]; ageMinutes: number; createdAt: string;
 };
 export type HousekeepingPlan = {
   generatedAt: string;
