@@ -18,6 +18,7 @@ import * as companies from "./companies";
 import * as occupancy from "./occupancy";
 import * as deposits from "./deposits";
 import { lookupAres } from "./ares";
+import * as personrates from "./personrates";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
@@ -381,12 +382,20 @@ adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReser
 
 // ── Lůžková obsazenost (firemní ubytovny) ──
 adminRouter.get("/reports/movements", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return admin.movementsReport(pid(res), new Date(q.from), new Date(q.to)); }));
+
+// ── Číselník typů osob (ceny dle věku/kategorie) ──
+const personRateBody = z.object({ name: z.string().min(1), ageFrom: z.number().int().min(0).max(120).nullable().optional(), ageTo: z.number().int().min(0).max(120).nullable().optional(), pricePerNight: z.number().nonnegative(), sortOrder: z.number().int().optional(), active: z.boolean().optional() });
+adminRouter.get("/person-rates", h((req, res) => personrates.listPersonRates(pid(res), req.query.all === "1")));
+adminRouter.post("/person-rates", h((req, res) => personrates.createPersonRate(pid(res), personRateBody.parse(req.body))));
+adminRouter.patch("/person-rates/:id", h((req, res) => personrates.updatePersonRate(pid(res), req.params.id, personRateBody.partial().parse(req.body))));
+adminRouter.delete("/person-rates/:id", h((req, res) => personrates.deletePersonRate(pid(res), req.params.id)));
 adminRouter.get("/beds/board", h((_req, res) => occupancy.bedBoard(pid(res))));
 adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupancies(pid(res), req.params.id)));
 const occBody = z.object({
   bedId: z.string().uuid(), fromDate: dateStr, toDate: dateStr,
   occupantGuestId: z.string().uuid().optional(), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(),
   companyId: z.string().uuid().nullable().optional(), reservationId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional(), energyFeeExempt: z.boolean().optional(),
+  personRateId: z.string().uuid().nullable().optional(), dateOfBirth: dateStr.optional(),
 });
 adminRouter.post("/occupancies", h((req, res) => occupancy.createOccupancy(pid(res), occBody.parse(req.body))));
 adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional(), energyFeeExempt: z.boolean().optional() }).parse(req.body))));

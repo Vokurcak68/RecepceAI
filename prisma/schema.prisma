@@ -399,6 +399,25 @@ enum OccupancyStatus {
   ended  // ukončeno (pracovník odešel / vystřídán)
 }
 
+// Číselník typů osob s cenou za noc (děti dle věku, senior, uprchlík…). Volně přidatelný, per provozovna.
+model PersonRate {
+  id            String  @id @default(uuid())
+  propertyId    String
+  name          String // např. „Dítě do 10 let", „Senior nad 65", „Uprchlík"
+  ageFrom       Int? // věk od (včetně); null = bez spodní hranice
+  ageTo         Int? // věk do (včetně); null = bez horní hranice
+  pricePerNight Decimal @default(0) @db.Decimal(10, 2)
+  sortOrder     Int     @default(0)
+  active        Boolean @default(true)
+
+  occupancies BedOccupancy[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, active])
+}
+
 enum DepositStatus {
   held      // kauce přijata a držena
   returned  // vrácena hostovi (celá nebo částečně)
@@ -448,6 +467,10 @@ model BedOccupancy {
 
   reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
   reservationId String?
+
+  personRate   PersonRate? @relation(fields: [personRateId], references: [id], onDelete: SetNull)
+  personRateId String?
+  dateOfBirth  DateTime?   @db.Date // datum narození osoby — pro automatický výběr cenové kategorie dle věku
 
   fromDate     DateTime        @db.Date
   toDate       DateTime        @db.Date

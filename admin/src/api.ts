@@ -290,6 +290,12 @@ export const api = {
   companyOccupancies: (id: string) => req<BedOccupancyItem[]>(`/admin/companies/${id}/occupancies?_=${Date.now()}`),
   companyOccupancyInvoice: (id: string, occupancyIds: string[]) => req<Doc>(`/admin/companies/${id}/occupancy-invoice`, { method: "POST", body: JSON.stringify({ occupancyIds }) }),
 
+  // číselník typů osob
+  personRates: (all = false) => req<PersonRate[]>(`/admin/person-rates${all ? "?all=1" : ""}`),
+  createPersonRate: (b: unknown) => req<PersonRate>(`/admin/person-rates`, { method: "POST", body: JSON.stringify(b) }),
+  updatePersonRate: (id: string, b: unknown) => req<PersonRate>(`/admin/person-rates/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  deletePersonRate: (id: string) => req(`/admin/person-rates/${id}`, { method: "DELETE" }),
+
   // report příchodů/odchodů
   movements: (from: string, to: string) => req<MovementsReport>(`/admin/reports/movements?from=${from}&to=${to}&_=${Date.now()}`),
 
@@ -390,7 +396,8 @@ export type Company = { id: string; name: string; ico: string | null; dic: strin
 export type AresResult = { ico: string; name: string | null; dic: string | null; street: string | null; city: string | null; zip: string | null; country: string; vatPayer: boolean; viesValid: boolean | null; account: string | null; accounts: string[]; found: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
 export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBalance: Money };
-export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string; energyFeeExempt: boolean; energyPerNight: Money; energyAmount: Money; total: Money };
+export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string; energyFeeExempt: boolean; energyPerNight: Money; energyAmount: Money; total: Money; personRateId: string | null; personRateName: string | null; dateOfBirth: string | null };
+export type PersonRate = { id: string; name: string; ageFrom: number | null; ageTo: number | null; pricePerNight: Money; sortOrder: number; active: boolean };
 export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
 export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
 export type Deposit = { id: string; amount: Money; method: string; status: "held" | "returned" | "forfeited"; takenAt: string; returnedAt: string | null; returnedAmount: Money | null; note: string | null; reservationId: string | null; companyId: string | null };

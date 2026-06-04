@@ -3,6 +3,7 @@
 // Nezávislé na Reservation — samostatná operativa pro ubytovny (inventoryUnit = bed).
 import { OccupancyStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import { resolveRate } from "./personrates";
 
 const NOT_FOUND = () => Object.assign(new Error("not_found"), { code: "P2025" });
 const dateOnly = (s: string | Date) => new Date(new Date(s).toISOString().slice(0, 10));
@@ -11,6 +12,7 @@ const todayDate = () => dateOnly(new Date());
 const OCC_INCLUDE = {
   occupant: { select: { id: true, firstName: true, lastName: true, phone: true } },
   company: { select: { id: true, name: true } },
+  personRate: { select: { id: true, name: true } },
 } as const;
 
 const nightsBetween = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 86_400_000));
@@ -23,6 +25,7 @@ function fmt(o: Prisma.BedOccupancyGetPayload<{ include: typeof OCC_INCLUDE }>, 
     id: o.id, bedId: o.bedId, fromDate: o.fromDate, toDate: o.toDate, status: o.status, note: o.note,
     occupantId: o.occupantGuestId, occupantName: `${o.occupant.firstName} ${o.occupant.lastName}`, occupantPhone: o.occupant.phone,
     companyId: o.companyId, companyName: o.company?.name ?? null,
+    personRateId: o.personRateId, personRateName: o.personRate?.name ?? null, dateOfBirth: o.dateOfBirth,
     pricePerNight: ppn.toFixed(2), nights, amount: (nights * ppn).toFixed(2), invoicedAt: o.invoicedAt,
     energyFeeExempt: o.energyFeeExempt, energyPerNight: energyPerNight.toFixed(2), energyAmount: energyAmount.toFixed(2),
     total: (nights * ppn + energyAmount).toFixed(2),
@@ -84,6 +87,7 @@ export type CreateOccupancyInput = {
   bedId: string; fromDate: string; toDate: string;
   occupantGuestId?: string; firstName?: string; lastName?: string; phone?: string;
   companyId?: string | null; reservationId?: string | null; note?: string | null; pricePerNight?: number; energyFeeExempt?: boolean;
+  personRateId?: string | null; dateOfBirth?: string | null;
 };
 
 /** Umístí osobu na lůžko (check-in pracovníka). Buď existující host, nebo se založí nový jen se jménem. */
@@ -104,8 +108,9 @@ export async function createOccupancy(propertyId: string, input: CreateOccupancy
     const c = await prisma.company.findUnique({ where: { id: input.companyId }, select: { id: true } });
     if (!c) throw NOT_FOUND();
   }
+  const rate = await resolveRate(propertyId, { personRateId: input.personRateId, dateOfBirth: input.dateOfBirth, pricePerNight: input.pricePerNight });
   const created = await prisma.bedOccupancy.create({
-    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, pricePerNight: input.pricePerNight ?? 0, energyFeeExempt: input.energyFeeExempt ?? false, note: input.note ?? null },
+    data: { propertyId, bedId: input.bedId, occupantGuestId, companyId: input.companyId ?? null, reservationId: input.reservationId ?? null, fromDate: from, toDate: to, pricePerNight: rate.pricePerNight, personRateId: rate.personRateId, dateOfBirth: input.dateOfBirth ? dateOnly(input.dateOfBirth) : null, energyFeeExempt: input.energyFeeExempt ?? false, note: input.note ?? null },
     include: OCC_INCLUDE,
   });
   return fmt(created, await energyRate(propertyId));

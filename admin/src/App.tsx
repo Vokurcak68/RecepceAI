@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -116,6 +116,7 @@ export function App() {
     { label: "Nastavení", icon: "🏨", items: [
       roomsTab,
       { id: "types", label: "Typy & ceny" },
+      ...(prop?.inventoryUnit === "bed" ? [{ id: "personrates", label: "Číselník osob" }] : []),
       { id: "equipment", label: "Vybavení" },
       { id: "ical", label: "iCal synchronizace" },
     ] },
@@ -204,6 +205,7 @@ export function App() {
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "bedboard" && <BedBoardView selId={selId} />}
+        {prop && tab === "personrates" && <PersonRatesView selId={selId} />}
         {prop && tab === "movements" && <MovementsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
@@ -2404,6 +2406,53 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 }
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
+// ── Číselník typů osob (ceny dle věku) ───────────────────────
+function PersonRateRow({ r, onSave, onDelete }: { r: PersonRate; onSave: (id: string, patch: unknown) => void; onDelete: (r: PersonRate) => void }) {
+  const [e, setE] = useState({ name: r.name, ageFrom: r.ageFrom?.toString() ?? "", ageTo: r.ageTo?.toString() ?? "", price: parseFloat(r.pricePerNight).toString() });
+  const dirty = e.name !== r.name || e.ageFrom !== (r.ageFrom?.toString() ?? "") || e.ageTo !== (r.ageTo?.toString() ?? "") || e.price !== parseFloat(r.pricePerNight).toString();
+  return (
+    <tr>
+      <td><input value={e.name} onChange={(ev) => setE({ ...e, name: ev.target.value })} style={{ width: "100%", minWidth: 140 }} /></td>
+      <td><input type="number" value={e.ageFrom} onChange={(ev) => setE({ ...e, ageFrom: ev.target.value })} style={{ width: 70 }} placeholder="—" /></td>
+      <td><input type="number" value={e.ageTo} onChange={(ev) => setE({ ...e, ageTo: ev.target.value })} style={{ width: 70 }} placeholder="—" /></td>
+      <td><input type="number" value={e.price} onChange={(ev) => setE({ ...e, price: ev.target.value })} style={{ width: 90 }} /></td>
+      <td><input type="checkbox" checked={r.active} onChange={(ev) => onSave(r.id, { active: ev.target.checked })} /></td>
+      <td className="right" style={{ whiteSpace: "nowrap" }}>
+        {dirty && <><button className="btn sm" onClick={() => onSave(r.id, { name: e.name, ageFrom: e.ageFrom === "" ? null : Number(e.ageFrom), ageTo: e.ageTo === "" ? null : Number(e.ageTo), pricePerNight: Number(e.price.replace(",", ".")) || 0 })}>Uložit</button>{" "}</>}
+        <button className="btn sm ghost" onClick={() => onDelete(r)} style={{ color: "var(--danger)" }}>✕</button>
+      </td>
+    </tr>
+  );
+}
+
+function PersonRatesView({ selId }: { selId: string }) {
+  const confirm = useConfirm();
+  const { data, reload } = useAsync<PersonRate[]>(() => api.personRates(true), [selId]);
+  const [nw, setNw] = useState({ name: "", ageFrom: "", ageTo: "", price: "" });
+  const [busy, setBusy] = useState(false);
+  const add = async () => { if (!nw.name.trim()) return; setBusy(true); try { await api.createPersonRate({ name: nw.name.trim(), ageFrom: nw.ageFrom === "" ? null : Number(nw.ageFrom), ageTo: nw.ageTo === "" ? null : Number(nw.ageTo), pricePerNight: Number(nw.price.replace(",", ".")) || 0 }); setNw({ name: "", ageFrom: "", ageTo: "", price: "" }); reload(); } finally { setBusy(false); } };
+  const save = async (id: string, patch: unknown) => { await api.updatePersonRate(id, patch); reload(); };
+  const del = async (r: PersonRate) => { if (await confirm({ title: "Smazat kategorii", message: <>Smazat <b>{r.name}</b>?</>, danger: true, confirmLabel: "Smazat" })) { await api.deletePersonRate(r.id); reload(); } };
+  return (
+    <>
+      <div className="h1"><span>Číselník osob</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· cena za noc dle typu/věku</span></div>
+      <div className="panel"><h3>Nová kategorie</h3>
+        <div className="toolbar" style={{ padding: 16, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <input placeholder="Název (např. Dítě do 10 let)" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} style={{ flex: 1, minWidth: 220 }} />
+          <input type="number" placeholder="věk od" value={nw.ageFrom} onChange={(e) => setNw({ ...nw, ageFrom: e.target.value })} style={{ width: 90 }} />
+          <input type="number" placeholder="věk do" value={nw.ageTo} onChange={(e) => setNw({ ...nw, ageTo: e.target.value })} style={{ width: 90 }} />
+          <input type="number" placeholder="Kč/noc" value={nw.price} onChange={(e) => setNw({ ...nw, price: e.target.value })} style={{ width: 110 }} />
+          <button className="btn" disabled={busy} onClick={add}>Přidat</button>
+        </div>
+        <div className="muted" style={{ padding: "0 16px 16px" }}>Věk od/do je nepovinný. Když ho vyplníš, kategorie se při umístění osoby vybere automaticky podle data narození a doplní cenu.</div>
+      </div>
+      <div className="panel">
+        <Table cols={["Název", "Věk od", "Věk do", "Kč/noc", "Aktivní", ""]} rows={data ?? []} empty="Žádné kategorie" render={(r: PersonRate) => <PersonRateRow key={r.id} r={r} onSave={save} onDelete={del} />} />
+      </div>
+    </>
+  );
+}
+
 // ── Report příchodů/odchodů za období ────────────────────────
 function MovementsView({ selId }: { selId: string }) {
   const today = todayIso();
@@ -2521,8 +2570,13 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<BedOccupanciesData>(() => api.bedOccupancies(bedId), [bedId]);
   const companies = useAsync<Company[]>(() => api.companies(), []);
+  const rates = useAsync<PersonRate[]>(() => api.personRates(), []);
   const today = todayIso();
-  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", energyExempt: false, note: "" });
+  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", energyExempt: false, note: "", personRateId: "", dob: "" });
+  const ageOf = (dob: string) => { const b = new Date(dob), n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a; };
+  const matchRateByDob = (dob: string): PersonRate | null => { if (!dob) return null; const age = ageOf(dob); const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0] ?? null; };
+  const pickRate = (id: string) => { const r = (rates.data ?? []).find((x) => x.id === id); setF((s) => ({ ...s, personRateId: id, ppn: r ? parseFloat(r.pricePerNight).toString() : s.ppn })); };
+  const onDob = (dob: string) => { const r = matchRateByDob(dob); setF((s) => ({ ...s, dob, ...(r ? { personRateId: r.id, ppn: parseFloat(r.pricePerNight).toString() } : {}) })); };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -2530,8 +2584,8 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
     if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Vyplň jméno a příjmení."); return; }
     setBusy(true); setMsg("");
     try {
-      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, energyFeeExempt: f.energyExempt, note: f.note || null });
-      setF({ ...f, firstName: "", lastName: "", phone: "", note: "" }); reload();
+      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, energyFeeExempt: f.energyExempt, note: f.note || null, personRateId: f.personRateId || null, dateOfBirth: f.dob || undefined });
+      setF({ ...f, firstName: "", lastName: "", phone: "", note: "", personRateId: "", dob: "" }); reload();
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const end = async (o: BedOccupancyItem) => { if (await confirm({ title: "Ukončit obsazení", message: <>Ukončit pobyt <b>{o.occupantName}</b> na lůžku {label} (dnešním dnem)?</>, confirmLabel: "Ukončit" })) { setBusy(true); try { await api.endOccupancy(o.id); reload(); } finally { setBusy(false); } } };
@@ -2554,6 +2608,8 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
             <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} style={{ width: 140 }} />
             <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} style={{ width: 130 }} />
             <select value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}><option value="">— firma —</option>{(companies.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            {(rates.data ?? []).length > 0 && <select value={f.personRateId} onChange={(e) => pickRate(e.target.value)}><option value="">— typ osoby —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)})</option>)}</select>}
+            <label className="row" style={{ gap: 4 }}>nar. <input type="date" value={f.dob} onChange={(e) => onDob(e.target.value)} /></label>
           </div>
           <div className="toolbar" style={{ flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
             <label className="muted">Od <input type="date" value={f.fromDate} onChange={(e) => setF({ ...f, fromDate: e.target.value })} /></label>
@@ -2570,7 +2626,7 @@ function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: 
           <tbody>
             {(data?.items ?? []).map((o) => (
               <tr key={o.id}>
-                <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
+                <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.personRateName ? <span className="muted"> · {o.personRateName}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
                 <td className="muted">{o.companyName ?? "—"}</td>
                 <td>{d(o.fromDate)} → {d(o.toDate)}</td>
                 <td className="muted">{o.nights}× {money(o.pricePerNight)}{Number(o.energyAmount) > 0 ? <> + energie {money(o.energyAmount)}</> : o.energyFeeExempt ? <span title="osvobozeno od energie"> · bez energie</span> : null} = <b>{money(o.total)}</b>{o.invoicedAt ? <div style={{ fontSize: 12, color: "var(--ok)" }}>vyfakturováno</div> : null}</td>
