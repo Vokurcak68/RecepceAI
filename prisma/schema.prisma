@@ -390,6 +390,30 @@ model GuestReview {
   @@index([propertyId, createdAt])
 }
 
+// Firma / odběratel (centrální adresář, sdílený napříč provozovnami) — pro firemní ubytovny i služební pobyty.
+model Company {
+  id      String  @id @default(uuid())
+  name    String
+  ico     String? // IČO
+  dic     String? // DIČ
+  account String? // číslo účtu
+  street  String?
+  city    String?
+  zip     String?
+  country String? @default("CZ")
+  email   String?
+  phone   String?
+  note    String?
+  active  Boolean @default(true)
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
 model Reservation {
   id   String @id @default(uuid())
   code String @unique
@@ -428,10 +452,12 @@ model Reservation {
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
   cityTax     Decimal @default(0) @db.Decimal(10, 2)
 
-  // Fakturace firmě (ubytovny / služební pobyty).
+  // Fakturace firmě (ubytovny / služební pobyty). Volný text = starší override; companyId = centrální firma.
   billingCompany String?
   billingIco     String?
   billingDic     String?
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId      String?
 
   holdExpiresAt DateTime?
 
@@ -458,6 +484,7 @@ model Reservation {
   @@index([propertyId, status])
   @@index([externalRef])
   @@index([groupId])
+  @@index([companyId])
 }
 
 /// Skupinová rezervace — blok více pokojů/jednotek pod jedním kontaktem

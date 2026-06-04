@@ -14,6 +14,7 @@ import {
 } from "./index";
 import { serialize } from "./serialize";
 import * as admin from "./admin";
+import * as companies from "./companies";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
@@ -356,6 +357,21 @@ adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(re
 adminRouter.patch("/reservations/:id", h((req, res) => admin.updateReservationNote(pid(res), req.params.id, z.object({ note: z.string() }).parse(req.body).note)));
 adminRouter.patch("/reservations/:id/primary-guest", h((req, res) => admin.setPrimaryGuest(pid(res), req.params.id, z.object({ guestId: z.string().uuid() }).parse(req.body).guestId)));
 adminRouter.post("/reservations/:id/dnd", h((req, res) => admin.setDoNotDisturb(pid(res), req.params.id, z.object({ on: z.boolean() }).parse(req.body).on)));
+
+// ── Firmy (centrální adresář odběratelů) ──
+const companyBody = z.object({
+  name: z.string().min(1), ico: z.string().optional().nullable(), dic: z.string().optional().nullable(), account: z.string().optional().nullable(),
+  street: z.string().optional().nullable(), city: z.string().optional().nullable(), zip: z.string().optional().nullable(), country: z.string().optional().nullable(),
+  email: z.string().optional().nullable(), phone: z.string().optional().nullable(), note: z.string().optional().nullable(), active: z.boolean().optional(),
+});
+adminRouter.get("/companies", h((req) => companies.listCompanies(req.query.q ? String(req.query.q) : undefined)));
+adminRouter.post("/companies", h((req) => companies.createCompany(companyBody.parse(req.body))));
+adminRouter.get("/companies/:id", h((req) => companies.getCompany(req.params.id)));
+adminRouter.patch("/companies/:id", h((req) => companies.updateCompany(req.params.id, companyBody.partial().parse(req.body))));
+adminRouter.delete("/companies/:id", h((req) => companies.deleteCompany(req.params.id)));
+adminRouter.get("/companies/:id/reservations", h((req, res) => companies.companyReservationsForProperty(pid(res), req.params.id)));
+adminRouter.post("/companies/:id/invoice", h((req, res) => billing.issueBulkInvoice(pid(res), z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body).reservationIds)));
+adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReservationCompany(pid(res), req.params.id, z.object({ companyId: z.string().uuid().nullable() }).parse(req.body).companyId)));
 adminRouter.post("/reservations/:id/registration", h((req, res) => {
   const b = z.object({ primary: z.boolean().optional(), fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2), documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional() }).parse(req.body);
   return admin.addRegistration(pid(res), req.params.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });

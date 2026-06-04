@@ -103,13 +103,18 @@ export async function createDocument(input: CreateDocInput) {
 async function loadReservationForDoc(propertyId: string, reservationId: string) {
   const r = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId },
-    include: { primaryGuest: true, roomType: true, payments: true, charges: true },
+    include: { primaryGuest: true, roomType: true, payments: true, charges: true, company: true },
   });
   if (!r) throw NOT_FOUND();
   return r;
 }
 
 function customerFromReservation(r: Awaited<ReturnType<typeof loadReservationForDoc>>) {
+  // Přednost má přiřazená firma (centrální), pak starší volný override, jinak host.
+  if (r.company) {
+    const address = [r.company.street, [r.company.zip, r.company.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null;
+    return { name: r.company.name, address, ico: r.company.ico, dic: r.company.dic };
+  }
   if (r.billingCompany) return { name: r.billingCompany, ico: r.billingIco, dic: r.billingDic };
   return { name: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}` };
 }

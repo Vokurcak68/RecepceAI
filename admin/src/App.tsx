@@ -10,6 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
+  type Company, type CompanyDetail, type CompanyResItem,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -101,6 +102,7 @@ export function App() {
       { id: "payments", label: "Úhrady" },
       { id: "cashregister", label: "Pokladna" },
       { id: "documents", label: "Doklady" },
+      { id: "companies", label: "Firmy" },
     ] },
     { label: "Provoz", icon: "🧹", items: [
       { id: "roomstatus", label: "Přehled pokojů" },
@@ -198,6 +200,7 @@ export function App() {
         {prop && tab === "payments" && <PaymentsView selId={selId} />}
         {prop && tab === "cashregister" && <CashRegisterView selId={selId} />}
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
+        {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
         {isSuper && tab === "users" && <UsersView currentUserId={session.user.id} />}
@@ -1956,6 +1959,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [guestQr, setGuestQr] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [pickGuest, setPickGuest] = useState(false);
+  const [pickCompany, setPickCompany] = useState(false);
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
@@ -2027,6 +2031,14 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       <div className="panel"><h3>Poznámka <span className="muted" style={{ fontSize: 14 }}>přání a požadavky hosta</span></h3>
         <textarea style={{ width: "100%", minHeight: 80, resize: "vertical" }} value={noteText} onChange={(e) => { setNoteText(e.target.value); setNoteDirty(true); }} placeholder="Např.: pozdní check-in po 22:00, alergie na ořechy, manželská postel místo dvou, dětská postýlka, parkování pro 2 auta, výhled do dvora…" />
         {noteDirty && <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={saveNote}>Uložit poznámku</button> <button className="btn ghost" onClick={() => { setNoteText(data.note ?? ""); setNoteDirty(false); }}>Zrušit</button></div>}
+      </div>
+
+      <div className="panel"><h3>Firma (odběratel) <span className="muted" style={{ fontSize: 14 }}>doklad se vystaví firmě místo hosta</span></h3>
+        <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+          {data.company ? <span>🏢 <b>{data.company.name}</b></span> : <span className="muted">Nepřiřazena — fakturuje se hostovi.</span>}
+          <button className="btn sm" disabled={busy} onClick={() => setPickCompany(true)} style={{ marginLeft: "auto" }}>{data.company ? "Změnit firmu" : "Přiřadit firmu"}</button>
+          {data.company && <button className="btn sm ghost" disabled={busy} onClick={() => run(async () => { await api.setReservationCompany(id, null); })}>Odebrat</button>}
+        </div>
       </div>
 
       <div className="panel"><h3>Hosté na pokoji</h3>
@@ -2115,6 +2127,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
       {emailsOpen && <EmailsOverlay id={id} guestEmail={r.primaryGuest?.email ?? null} onClose={() => setEmailsOpen(false)} />}
       {pickGuest && <GuestPickerOverlay prefill={r.primaryGuest?.email || r.primaryGuest?.lastName || ""} onClose={() => setPickGuest(false)} onPick={(gid) => run(async () => { await api.setReservationPrimaryGuest(id, gid); setPickGuest(false); })} />}
+      {pickCompany && <CompanyPickerOverlay onClose={() => setPickCompany(false)} onPick={(cid) => run(async () => { await api.setReservationCompany(id, cid); setPickCompany(false); })} />}
     </>
   );
 }
@@ -2160,6 +2173,46 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
             {list.data && rows.length === 0 && <tr><td colSpan={4} className="muted">Nikdo nenalezen.</td></tr>}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// Výběr firmy (odběratele) z centrálního adresáře — z detailu rezervace.
+function CompanyPickerOverlay({ onPick, onClose }: { onPick: (companyId: string) => void; onClose: () => void }) {
+  const { data } = useAsync<Company[]>(() => api.companies(), []);
+  const [q, setQ] = useState("");
+  const [nw, setNw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const list = (data ?? []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || (c.ico ?? "").includes(q));
+  const createPick = async () => { if (!nw.trim()) return; setBusy(true); try { const c = await api.createCompany({ name: nw.trim() }); onPick(c.id); } finally { setBusy(false); } };
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div><h2 style={{ margin: 0 }}>Vybrat firmu</h2><div className="muted" style={{ marginTop: 4 }}>Odběratel na dokladech této rezervace.</div></div>
+          <button className="linkx" onClick={onClose}>zavřít</button>
+        </div>
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <input autoFocus placeholder="Hledat (název / IČO)…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 240 }} />
+        </div>
+        <table style={{ marginTop: 8 }}>
+          <thead><tr><th>Firma</th><th>IČO</th><th className="right"></th></tr></thead>
+          <tbody>
+            {list.map((c) => (
+              <tr key={c.id}>
+                <td>{c.name}{!c.active ? <span className="muted"> · neaktivní</span> : ""}</td>
+                <td className="muted">{c.ico ?? "—"}</td>
+                <td className="right"><button className="btn sm" onClick={() => onPick(c.id)}>Vybrat</button></td>
+              </tr>
+            ))}
+            {data && list.length === 0 && <tr><td colSpan={3} className="muted">Žádná firma nenalezena.</td></tr>}
+          </tbody>
+        </table>
+        <div className="toolbar" style={{ marginTop: 12 }}>
+          <input placeholder="Nová firma — název" value={nw} onChange={(e) => setNw(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+          <button className="btn" disabled={busy || !nw.trim()} onClick={createPick}>Založit a přiřadit</button>
+        </div>
       </div>
     </div>
   );
@@ -2344,6 +2397,125 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 }
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
+// ── Firmy (centrální adresář odběratelů) ─────────────────────
+function CompaniesView({ selId }: { selId: string }) {
+  const { data, error, reload } = useAsync<Company[]>(() => api.companies(), [selId]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [nw, setNw] = useState({ name: "", ico: "", dic: "", email: "", phone: "" });
+
+  const add = async () => { if (!nw.name.trim()) return; const c = await api.createCompany(nw); setNw({ name: "", ico: "", dic: "", email: "", phone: "" }); setAdding(false); reload(); setOpenId(c.id); };
+  if (openId) return <CompanyDetailView id={openId} selId={selId} onBack={() => { setOpenId(null); reload(); }} />;
+  const list = (data ?? []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || (c.ico ?? "").includes(q));
+  return (
+    <>
+      <div className="h1"><span>Firmy</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· centrální adresář odběratelů</span></div>
+      {error && <div className="error">{error}</div>}
+      <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+        <input placeholder="Hledat (název / IČO)" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
+        <button className="btn" onClick={() => setAdding((a) => !a)}>+ Nová firma</button>
+      </div>
+      {adding && (
+        <div className="panel"><h3>Nová firma</h3><div className="toolbar" style={{ padding: 16, flexWrap: "wrap" }}>
+          <input placeholder="Název *" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
+          <input placeholder="IČO" value={nw.ico} onChange={(e) => setNw({ ...nw, ico: e.target.value })} />
+          <input placeholder="DIČ" value={nw.dic} onChange={(e) => setNw({ ...nw, dic: e.target.value })} />
+          <input placeholder="E-mail" value={nw.email} onChange={(e) => setNw({ ...nw, email: e.target.value })} />
+          <input placeholder="Telefon" value={nw.phone} onChange={(e) => setNw({ ...nw, phone: e.target.value })} />
+          <button className="btn" onClick={add}>Založit</button>
+        </div></div>
+      )}
+      <div className="panel">
+        <Table cols={["Firma", "IČO", "Kontakt", ""]} rows={list} empty="Žádné firmy" render={(c: Company) => (
+          <tr key={c.id} className="row-click" onClick={() => setOpenId(c.id)}>
+            <td><b>{c.name}</b>{!c.active && <span className="muted"> · neaktivní</span>}</td>
+            <td className="muted">{c.ico ?? "—"}</td>
+            <td className="muted">{[c.email, c.phone].filter(Boolean).join(" · ") || "—"}</td>
+            <td className="right"><button className="btn sm ghost">Detail</button></td>
+          </tr>
+        )} />
+      </div>
+    </>
+  );
+}
+
+function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; onBack: () => void }) {
+  const confirm = useConfirm();
+  const { data, error, reload } = useAsync<CompanyDetail>(() => api.company(id), [id]);
+  type CEf = { name: string; ico: string; dic: string; account: string; street: string; city: string; zip: string; country: string; email: string; phone: string; note: string; active: boolean };
+  const [ef, setEf] = useState<CEf | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [doc, setDoc] = useState<Doc | null>(null);
+  useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", active: data.active }); }, [data?.id]); // eslint-disable-line
+
+  const save = async () => { if (!ef) return; setBusy(true); setMsg(""); try { await api.updateCompany(id, ef); setMsg("Uloženo."); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const del = async () => { if (await confirm({ title: "Smazat firmu", message: <>Smazat firmu <b>{data?.name}</b>? Rezervace zůstanou, jen se od firmy odpojí.</>, danger: true, confirmLabel: "Smazat" })) { await api.deleteCompany(id); onBack(); } };
+  const billable = (data?.reservations ?? []).filter((r) => r.propertyId === selId);
+  const selectedIds = billable.filter((r) => sel[r.id]).map((r) => r.id);
+  const invoice = async () => {
+    if (!selectedIds.length) return;
+    if (await confirm({ title: "Souhrnná faktura", message: <>Vystavit jednu fakturu za <b>{selectedIds.length}</b> rezervací firmě <b>{data?.name}</b>?</>, confirmLabel: "Vystavit" })) {
+      setBusy(true); try { const dc = await api.companyInvoice(id, selectedIds); setDoc(dc); setSel({}); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }
+  };
+
+  if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
+  if (!data || !ef) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
+  return (
+    <>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{data.name}</span></div>
+      {msg && <div className="error" style={/uložen|vystaven/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
+
+      <div className="panel" style={{ padding: 18 }}>
+        <FormSection title="Údaje firmy">
+          <FormGrid min={200}>
+            <FieldCol label="Název" span={2}><input style={fullInput} value={ef.name} onChange={(e) => setEf({ ...ef, name: e.target.value })} /></FieldCol>
+            <FieldCol label="IČO"><input style={fullInput} value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} /></FieldCol>
+            <FieldCol label="DIČ"><input style={fullInput} value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} /></FieldCol>
+            <FieldCol label="Číslo účtu"><input style={fullInput} value={ef.account} onChange={(e) => setEf({ ...ef, account: e.target.value })} /></FieldCol>
+            <FieldCol label="Ulice" span={2}><input style={fullInput} value={ef.street} onChange={(e) => setEf({ ...ef, street: e.target.value })} /></FieldCol>
+            <FieldCol label="Město"><input style={fullInput} value={ef.city} onChange={(e) => setEf({ ...ef, city: e.target.value })} /></FieldCol>
+            <FieldCol label="PSČ"><input style={fullInput} value={ef.zip} onChange={(e) => setEf({ ...ef, zip: e.target.value })} /></FieldCol>
+            <FieldCol label="Země"><input style={fullInput} value={ef.country} onChange={(e) => setEf({ ...ef, country: e.target.value })} /></FieldCol>
+            <FieldCol label="E-mail"><input style={fullInput} value={ef.email} onChange={(e) => setEf({ ...ef, email: e.target.value })} /></FieldCol>
+            <FieldCol label="Telefon"><input style={fullInput} value={ef.phone} onChange={(e) => setEf({ ...ef, phone: e.target.value })} /></FieldCol>
+          </FormGrid>
+          <div style={{ marginTop: 12 }}><FieldCol label="Poznámka"><textarea style={{ ...fullInput, minHeight: 60, resize: "vertical" }} value={ef.note} onChange={(e) => setEf({ ...ef, note: e.target.value })} /></FieldCol></div>
+          <div style={{ marginTop: 12 }}><Chk label="Aktivní" checked={ef.active} onChange={(v) => setEf({ ...ef, active: v })} /></div>
+        </FormSection>
+        <div className="toolbar" style={{ marginTop: 14 }}>
+          <button className="btn" disabled={busy} onClick={save}>Uložit</button>
+          <button className="btn ghost" disabled={busy} onClick={del} style={{ marginLeft: "auto", color: "var(--danger)" }}>Smazat firmu</button>
+        </div>
+      </div>
+
+      <div className="panel"><h3>Pobyty firmy <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· zůstatek celkem {money(data.totalBalance)}</span></h3>
+        {data.reservations.length === 0 ? <div className="muted" style={{ padding: 16 }}>Žádné pobyty.</div> :
+          <Table cols={["", "Kód", "Provozovna", "Host", "Termín", "Stav", "Zůstatek"]} rows={data.reservations} empty="—" render={(r: CompanyResItem) => {
+            const here = r.propertyId === selId;
+            return (
+              <tr key={r.id}>
+                <td>{here ? <input type="checkbox" checked={!!sel[r.id]} onChange={(e) => setSel({ ...sel, [r.id]: e.target.checked })} /> : <span className="muted" title="jiná provozovna">·</span>}</td>
+                <td className="muted">{r.code}</td><td className="muted">{r.propertyName}</td><td>{r.guestName}</td>
+                <td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td><td><Badge s={r.status} /></td>
+                <td>{Number(r.balance) > 0 ? <b style={{ color: "var(--warn)" }}>{money(r.balance)}</b> : <span className="muted">{money(r.balance)}</span>}</td>
+              </tr>
+            );
+          }} />}
+        <div className="toolbar" style={{ padding: 16 }}>
+          <span className="muted">Zaškrtni pobyty této provozovny a vystav jednu společnou fakturu.</span>
+          <button className="btn" disabled={busy || !selectedIds.length} onClick={invoice} style={{ marginLeft: "auto" }}>Vystavit souhrnnou fakturu ({selectedIds.length})</button>
+        </div>
+      </div>
+
+      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
+    </>
+  );
+}
+
 function DocumentsView({ selId }: { selId: string }) {
   const confirm = useConfirm();
   const [type, setType] = useState("");
