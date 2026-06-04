@@ -31,6 +31,7 @@ tr.row-central { background: #f6f9ff; box-shadow: inset 3px 0 0 var(--accent); }
 .chip-daily { background: #efeaff; color: #7c5cff; }
 .chip-dnd { background: #ffe3e3; color: #c0392b; }
 .req-card.dnd { border-left-color: #c0392b; background: #fff6f6; opacity: 0.85; }
+.rd-req { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fafbfd; }
 .chip-central { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: #e0e7ff; color: var(--accent); font-size: 11px; font-weight: 700; vertical-align: middle; }
 .prop-switch { width: 100%; margin: 0 0 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: #f3f6ff; color: var(--text); font-weight: 600; }
 

@@ -267,7 +267,19 @@ export async function roomDetail(propertyId: string, roomId: string) {
     include: { primaryGuest: { select: { firstName: true, lastName: true } } },
     orderBy: { checkInDate: "asc" }, take: 50,
   });
-  const requests = await prisma.serviceRequest.findMany({ where: { propertyId, roomId, status: { in: ["open", "in_progress"] } }, orderBy: { createdAt: "desc" } });
+  // Otevřené požadavky + nedávno dokončené (3 dny) s poznámkou/fotkou — ať recepce vidí, co úklid/údržba našli (a může naúčtovat).
+  const since3 = addDays(today, -3);
+  const requests = await prisma.serviceRequest.findMany({
+    where: {
+      propertyId, roomId,
+      OR: [
+        { status: { in: ["open", "in_progress"] } },
+        { status: "done", resolvedAt: { gte: since3 }, OR: [{ note: { not: null } }, { imageUrls: { isEmpty: false } }] },
+      ],
+    },
+    include: { resolvedBy: { select: { name: true } } },
+    orderBy: { createdAt: "desc" }, take: 30,
+  });
   // Aktuální host = ubytovaný, který už přijel; při více se vezme nejpozdější příjezd.
   const occ = reservations.filter((r) => r.status === ReservationStatus.checked_in && r.checkInDate < tomorrow).sort((a, b) => (a.checkInDate < b.checkInDate ? 1 : -1))[0] ?? null;
   const balances = new Map<string, string>();
@@ -276,7 +288,7 @@ export async function roomDetail(propertyId: string, roomId: string) {
     room: { id: room.id, number: room.number, floor: room.floor, status: room.status, lockType: room.lockType, notes: room.notes ?? "", roomType: { id: room.roomType.id, name: room.roomType.name } },
     occupantId: occ?.id ?? null, occupantBalance: occ ? (balances.get(occ.id) ?? null) : null, occupantDnd: occ?.doNotDisturb ?? false,
     reservations: reservations.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, status: r.status, checkInDate: r.checkInDate, checkOutDate: r.checkOutDate, balance: balances.get(r.id) ?? "0" })),
-    requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, createdAt: q.createdAt })),
+    requests: requests.map((q) => ({ id: q.id, type: q.type, domain: q.domain, status: q.status, description: q.description, note: q.note, imageUrls: q.imageUrls, resolvedAt: q.resolvedAt, resolvedByName: q.resolvedBy?.name ?? null, createdAt: q.createdAt })),
   };
 }
 

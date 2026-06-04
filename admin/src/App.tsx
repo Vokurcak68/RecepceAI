@@ -949,6 +949,8 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const [rf, setRf] = useState({ type: "cleaning", description: "" });
   const [payAmt, setPayAmt] = useState("");
   const [payFor, setPayFor] = useState<string | null>(null);
+  const [chargeReq, setChargeReq] = useState<RoomReqItem | null>(null);
+  const [chargeForm, setChargeForm] = useState({ amount: "", category: "service", description: "" });
   const [ef, setEf] = useState<{ number: string; floor: string; lockType: string; notes: string } | null>(null);
   useEffect(() => { if (data) setEf({ number: data.room.number, floor: String(data.room.floor), lockType: data.room.lockType, notes: data.room.notes }); }, [data?.room.id]); // eslint-disable-line
 
@@ -964,6 +966,13 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
   const pay = async (rid: string, method: string, amount: number) => { if (!Number.isFinite(amount) || amount <= 0) { setMsg("Zadej platnou částku."); return; } if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) { run(() => api.addPayment(rid, { type: "balance", amount, method }), "Úhrada zaúčtována."); setPayAmt(""); setPayFor(null); } };
   const toggleDnd = (rid: string, on: boolean) => run(() => api.setDnd(rid, on), on ? "Nastaveno Nerušit." : "Nerušit zrušeno.");
+  const openCharge = (q: RoomReqItem) => { setChargeReq(q); setChargeForm({ amount: "", category: q.domain === "maintenance" ? "other" : "service", description: q.note || q.description || SERVICE_LABEL[q.type] }); };
+  const submitCharge = () => {
+    const occId = data?.occupantId; if (!occId || !chargeReq) return;
+    const amt = Number(chargeForm.amount.replace(",", "."));
+    if (!Number.isFinite(amt) || amt <= 0) { setMsg("Zadej platnou částku."); return; }
+    run(async () => { await api.addCharge(occId, { category: chargeForm.category, description: chargeForm.description || undefined, unitPrice: amt, quantity: 1 }); setChargeReq(null); }, "Naúčtováno hostovi.");
+  };
 
   if (resId) return <ReservationDetailView id={resId} prop={prop} onBack={() => { setResId(null); reload(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
@@ -1060,11 +1069,41 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
           <input placeholder="Popis (nepovinné)" style={{ flex: 1, minWidth: 160 }} value={rf.description} onChange={(e) => setRf({ ...rf, description: e.target.value })} />
           <button className="btn" disabled={busy} onClick={addReq}>+ Vytvořit</button>
         </div>
-        {data.requests.length === 0 ? <div className="muted" style={{ marginTop: 8 }}>Žádné otevřené požadavky.</div> :
-          <Table cols={["Typ", "Fronta", "Popis", "Stav"]} rows={data.requests} empty="—" render={(q: RoomReqItem) => (
-            <tr key={q.id}><td>{SERVICE_ICON[q.type]} {SERVICE_LABEL[q.type]}</td><td className="muted">{q.domain === "maintenance" ? "údržba" : "úklid"}</td><td className="muted">{q.description ?? "—"}</td><td><Badge s={q.status} /></td></tr>
-          )} />}
+        {data.requests.length === 0 ? <div className="muted" style={{ marginTop: 8 }}>Žádné požadavky.</div> :
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+            {data.requests.map((q) => (
+              <div key={q.id} className="rd-req">
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span>{SERVICE_ICON[q.type]} <b>{SERVICE_LABEL[q.type]}</b></span>
+                  <span className="muted">· {q.domain === "maintenance" ? "údržba" : "úklid"}</span>
+                  <Badge s={q.status} />
+                  <span className="muted" style={{ fontSize: 12 }}>{d(q.createdAt)}</span>
+                </div>
+                {q.description && <div className="muted" style={{ marginTop: 4 }}>{q.description}</div>}
+                {q.note && <div style={{ marginTop: 4 }}>📝 {q.note}{q.resolvedByName ? <span className="muted"> · {q.resolvedByName}</span> : ""}</div>}
+                {q.imageUrls && q.imageUrls.length > 0 && <div className="req-photos" style={{ marginTop: 6 }}>{q.imageUrls.map((u) => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="foto" /></a>)}</div>}
+                {data.occupantId && <div style={{ marginTop: 8 }}><button className="btn sm" disabled={busy} onClick={() => openCharge(q)}>💵 Naúčtovat hostovi</button></div>}
+              </div>
+            ))}
+          </div>}
       </div></div>
+
+      {chargeReq && (
+        <div className="panel"><h3>Naúčtovat hostovi <button className="linkx" style={{ float: "right" }} onClick={() => setChargeReq(null)}>zavřít</button></h3>
+          <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={chargeForm.category} onChange={(e) => setChargeForm({ ...chargeForm, category: e.target.value })}>
+              <option value="service">Služba (úklid navíc)</option>
+              <option value="other">Škoda / jiné</option>
+              <option value="laundry">Praní</option>
+              <option value="minibar">Minibar</option>
+            </select>
+            <input placeholder="Popis" style={{ flex: 1, minWidth: 200 }} value={chargeForm.description} onChange={(e) => setChargeForm({ ...chargeForm, description: e.target.value })} />
+            <input type="number" min={0} style={{ width: 110 }} placeholder="Kč" value={chargeForm.amount} onChange={(e) => setChargeForm({ ...chargeForm, amount: e.target.value })} />
+            <span className="muted">Kč</span>
+            <button className="btn sm" disabled={busy} onClick={submitCharge}>Naúčtovat</button>
+          </div>
+        </div>
+      )}
 
       <div className="panel"><h3>Vlastnosti pokoje</h3><div style={{ padding: 16 }}>
         <div className="toolbar" style={{ flexWrap: "wrap" }}>
