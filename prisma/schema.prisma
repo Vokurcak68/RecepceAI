@@ -397,6 +397,38 @@ enum OccupancyStatus {
   ended  // ukončeno (pracovník odešel / vystřídán)
 }
 
+enum DepositStatus {
+  held      // kauce přijata a držena
+  returned  // vrácena hostovi (celá nebo částečně)
+  forfeited // zadržena (propadla — škoda apod.)
+}
+
+// Vratná kauce (jistota). Drží se a později vrací / zadrží. Odděleně od plateb a účtu.
+model Deposit {
+  id         String @id @default(uuid())
+  propertyId String
+
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  reservationId String?
+  company       Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId     String?
+
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod @default(cash)
+  status         DepositStatus @default(held)
+  takenAt        DateTime      @default(now())
+  returnedAt     DateTime?
+  returnedAmount Decimal?      @db.Decimal(10, 2) // kolik reálně vráceno (při částečném zadržení < amount)
+  note           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, status])
+  @@index([reservationId])
+  @@index([companyId])
+}
+
 // Obsazení lůžka konkrétní osobou v daném období (firemní ubytovny). Osoby se na lůžku střídají
 // nezávisle na rezervaci — tohle je „kdo reálně spí v lůžku od–do".
 model BedOccupancy {
@@ -448,6 +480,7 @@ model Company {
 
   reservations Reservation[]
   occupancies  BedOccupancy[]
+  deposits     Deposit[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -518,6 +551,7 @@ model Reservation {
   emailLogs           EmailLog[]
   review              GuestReview?
   bedOccupancies      BedOccupancy[]
+  deposits            Deposit[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

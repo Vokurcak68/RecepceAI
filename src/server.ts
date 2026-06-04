@@ -16,6 +16,7 @@ import { serialize } from "./serialize";
 import * as admin from "./admin";
 import * as companies from "./companies";
 import * as occupancy from "./occupancy";
+import * as deposits from "./deposits";
 import * as central from "./central";
 import * as equip from "./equipment";
 import * as service from "./service";
@@ -388,6 +389,14 @@ adminRouter.post("/occupancies", h((req, res) => occupancy.createOccupancy(pid(r
 adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional() }).parse(req.body))));
 adminRouter.post("/occupancies/:id/end", h((req, res) => occupancy.endOccupancy(pid(res), req.params.id, z.object({ toDate: dateStr.optional() }).parse(req.body ?? {}).toDate)));
 adminRouter.delete("/occupancies/:id", h((req, res) => occupancy.deleteOccupancy(pid(res), req.params.id)));
+
+// ── Vratné kauce ──
+adminRouter.post("/deposits", h((req, res) => deposits.createDeposit(pid(res), z.object({ reservationId: z.string().uuid().nullable().optional(), companyId: z.string().uuid().nullable().optional(), amount: z.number().positive(), method: z.nativeEnum(PaymentMethod).optional(), note: z.string().nullable().optional() }).parse(req.body))));
+adminRouter.post("/deposits/:id/return", h((req, res) => deposits.returnDeposit(pid(res), req.params.id, z.object({ returnedAmount: z.number().nonnegative().optional(), note: z.string().optional() }).parse(req.body ?? {}).returnedAmount, z.object({ note: z.string().optional() }).parse(req.body ?? {}).note)));
+adminRouter.post("/deposits/:id/forfeit", h((req, res) => deposits.forfeitDeposit(pid(res), req.params.id, z.object({ note: z.string().optional() }).parse(req.body ?? {}).note)));
+adminRouter.delete("/deposits/:id", h((req, res) => deposits.deleteDeposit(pid(res), req.params.id)));
+adminRouter.get("/reservations/:id/deposits", h((req, res) => deposits.listForReservation(pid(res), req.params.id)));
+adminRouter.get("/companies/:id/deposits", h((req, res) => deposits.listForCompany(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/registration", h((req, res) => {
   const b = z.object({ primary: z.boolean().optional(), fullName: z.string().min(2), dateOfBirth: dateStr, nationality: z.string().min(2), documentType: z.nativeEnum(DocumentType).optional(), documentNumber: z.string().optional(), homeAddress: z.string().optional() }).parse(req.body);
   return admin.addRegistration(pid(res), req.params.id, { ...b, dateOfBirth: new Date(b.dateOfBirth) });

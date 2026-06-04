@@ -289,6 +289,14 @@ export const api = {
   companyOccupancies: (id: string) => req<BedOccupancyItem[]>(`/admin/companies/${id}/occupancies?_=${Date.now()}`),
   companyOccupancyInvoice: (id: string, occupancyIds: string[]) => req<Doc>(`/admin/companies/${id}/occupancy-invoice`, { method: "POST", body: JSON.stringify({ occupancyIds }) }),
 
+  // vratné kauce
+  reservationDeposits: (id: string) => req<Deposit[]>(`/admin/reservations/${id}/deposits?_=${Date.now()}`),
+  companyDeposits: (id: string) => req<Deposit[]>(`/admin/companies/${id}/deposits?_=${Date.now()}`),
+  createDeposit: (b: unknown) => req<Deposit>(`/admin/deposits`, { method: "POST", body: JSON.stringify(b) }),
+  returnDeposit: (id: string, b: { returnedAmount?: number; note?: string }) => req<Deposit>(`/admin/deposits/${id}/return`, { method: "POST", body: JSON.stringify(b) }),
+  forfeitDeposit: (id: string, note?: string) => req<Deposit>(`/admin/deposits/${id}/forfeit`, { method: "POST", body: JSON.stringify(note ? { note } : {}) }),
+  deleteDeposit: (id: string) => req(`/admin/deposits/${id}`, { method: "DELETE" }),
+
   // servisní požadavky
   adminRequests: (q = "") => req<ServiceRequest[]>(`/admin/requests${q}`),
   staffRequests: (status = "") => req<ServiceRequest[]>(`/staff/requests?${status ? `status=${status}&` : ""}_=${Date.now()}`),
@@ -380,6 +388,8 @@ export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBal
 export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string };
 export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
 export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
+export type Deposit = { id: string; amount: Money; method: string; status: "held" | "returned" | "forfeited"; takenAt: string; returnedAt: string | null; returnedAmount: Money | null; note: string | null; reservationId: string | null; companyId: string | null };
+export const DEPOSIT_STATUS_LABEL: Record<string, string> = { held: "držena", returned: "vrácena", forfeited: "zadržena" };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };
 export const ROOM_STATUS_LABEL: Record<string, string> = { clean: "Uklizeno", dirty: "K úklidu", to_inspect: "Zkontrolovat", inspected: "Zkontrolováno", out_of_service: "Mimo provoz" };
 export const SERVICE_LABEL: Record<string, string> = { cleaning: "Úklid", maintenance: "Údržba", laundry: "Praní", ironing: "Žehlení", minibar: "Minibar", other: "Jiné" };

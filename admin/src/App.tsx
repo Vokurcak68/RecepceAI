@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, type ReactNode, type CSSProperties, type C
 import QRCode from "qrcode";
 import { useConfirm } from "./confirm";
 import {
-  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL, ROOM_STATUS_LABEL,
+  api, money, d, setToken, setProperty, getProperty, TYPE_LABEL, CONDITION_LABEL, SERVICE_LABEL, SERVICE_ICON, PRIORITY_LABEL, SEVERITY_LABEL, CHECK_CAT_LABEL, PAY_TYPE_LABEL, PAY_METHOD_LABEL, DOC_TYPE_LABEL, DOC_STATUS_LABEL, CHARGE_LABEL, DOCTYPE_LABEL, STATUS_LABEL, statusLabel, EMAIL_TYPE_LABEL, ROOM_STATUS_LABEL, DEPOSIT_STATUS_LABEL,
   type EmailLog,
   type Reservation, type Room, type Bed, type RoomType, type Dashboard, type RegistrationEntry, type Property, type User, type LoginResult,
   type ReservationDetail, type Folio, type Invoice, type Payment, type Equipment, type EquipMove, type EquipCategory, type ServiceRequest,
@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -2043,6 +2043,8 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
         </div>
       </div>
 
+      <DepositsPanel reservationId={id} suggested={data.property?.depositPct ? Math.round(Number(data.totalAmount) * data.property.depositPct / 100) : undefined} />
+
       <div className="panel"><h3>Hosté na pokoji</h3>
         <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap" }}>
           <input placeholder="Jméno" value={gf.firstName} onChange={(e) => setGf({ ...gf, firstName: e.target.value })} />
@@ -2399,6 +2401,47 @@ function ReceiptOverlay({ rec, onClose }: { rec: Receipt; onClose: () => void })
 }
 
 // ── Doklady: seznam + tisknutelný doklad ─────────────────────
+// ── Vratná kauce (jistota) — sdílený panel pro rezervaci i firmu ──
+function DepositsPanel({ reservationId, companyId, suggested }: { reservationId?: string; companyId?: string; suggested?: number }) {
+  const confirm = useConfirm();
+  const { data, reload } = useAsync<Deposit[]>(() => reservationId ? api.reservationDeposits(reservationId) : api.companyDeposits(companyId!), [reservationId, companyId]);
+  const [amt, setAmt] = useState(suggested && suggested > 0 ? String(suggested) : "");
+  const [method, setMethod] = useState("cash");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const take = async () => { const a = Number(amt.replace(",", ".")); if (!(a > 0)) { setMsg("Zadej částku."); return; } setBusy(true); setMsg(""); try { await api.createDeposit({ reservationId, companyId, amount: a, method }); setAmt(""); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const ret = async (dp: Deposit) => { const v = prompt("Vrácená částka (prázdné = celá kauce):", dp.amount); if (v === null) return; const ra = v.trim() === "" ? undefined : Number(v.replace(",", ".")); setBusy(true); try { await api.returnDeposit(dp.id, ra != null ? { returnedAmount: ra } : {}); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const forf = async (dp: Deposit) => { if (await confirm({ title: "Zadržet kauci", message: <>Zadržet celou kauci <b>{money(dp.amount)}</b> (propadne — např. škoda)?</>, danger: true, confirmLabel: "Zadržet" })) { setBusy(true); try { await api.forfeitDeposit(dp.id); reload(); } finally { setBusy(false); } } };
+  const del = async (dp: Deposit) => { if (await confirm({ title: "Smazat kauci", message: <>Smazat záznam kauce {money(dp.amount)}? (jen oprava chyby)</>, danger: true, confirmLabel: "Smazat" })) { setBusy(true); try { await api.deleteDeposit(dp.id); reload(); } finally { setBusy(false); } } };
+  const held = (data ?? []).filter((dp) => dp.status === "held").reduce((s, dp) => s + Number(dp.amount), 0);
+  return (
+    <div className="panel"><h3>Kauce (jistota) {held > 0 && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· drženo {money(held)}</span>}</h3>
+      <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="muted">Přijmout kauci:</span>
+        <input type="number" min={0} placeholder="Kč" value={amt} onChange={(e) => setAmt(e.target.value)} style={{ width: 110 }} />
+        <select value={method} onChange={(e) => setMethod(e.target.value)}><option value="cash">hotově</option><option value="card_terminal">kartou</option><option value="invoice">převodem/fakturou</option></select>
+        <button className="btn sm" disabled={busy} onClick={take}>Přijmout</button>
+        {msg && <span className="error" style={{ padding: "2px 8px" }}>{msg}</span>}
+      </div>
+      {(data ?? []).length > 0 && (
+        <Table cols={["Přijato", "Částka", "Způsob", "Stav", "Vráceno", ""]} rows={data ?? []} empty="—" render={(dp: Deposit) => (
+          <tr key={dp.id}>
+            <td className="muted">{d(dp.takenAt)}</td>
+            <td><b>{money(dp.amount)}</b></td>
+            <td className="muted">{PAY_METHOD_LABEL[dp.method] ?? dp.method}</td>
+            <td>{dp.status === "held" ? <b style={{ color: "var(--warn)" }}>držena</b> : <span className="muted">{DEPOSIT_STATUS_LABEL[dp.status]}</span>}</td>
+            <td className="muted">{dp.returnedAt ? `${dp.returnedAmount != null ? money(dp.returnedAmount) : "—"} · ${d(dp.returnedAt)}` : "—"}</td>
+            <td className="right" style={{ whiteSpace: "nowrap" }}>
+              {dp.status === "held" && <><button className="btn sm" disabled={busy} onClick={() => ret(dp)}>Vrátit</button>{" "}<button className="btn sm ghost" disabled={busy} onClick={() => forf(dp)} style={{ color: "var(--danger)" }}>Zadržet</button>{" "}</>}
+              <button className="btn sm ghost" disabled={busy} onClick={() => del(dp)}>✕</button>
+            </td>
+          </tr>
+        )} />
+      )}
+    </div>
+  );
+}
+
 // ── Obsazení lůžek (firemní ubytovny) ────────────────────────
 function BedBoardView({ selId }: { selId: string }) {
   const { data, error, reload } = useAsync<BedBoardItem[]>(() => api.bedBoard(), [selId]);
@@ -2641,6 +2684,8 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
           </div>
         </div>
       )}
+
+      <DepositsPanel companyId={id} />
 
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
