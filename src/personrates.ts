@@ -32,10 +32,14 @@ export function ageFromDob(dob: Date): number {
   return Math.max(0, age);
 }
 
-/** Najde nejvhodnější (nejužší) aktivní kategorii pro daný věk. */
-export async function rateForAge(propertyId: string, age: number) {
+/** Najde nejvhodnější (nejužší) aktivní kategorii pro daný věk.
+ *  boundedOnly = jen kategorie s nějakou věkovou hranicí (pro kiosek — kategorie bez věku,
+ *  např. „uprchlík", vyžadují doložení a přiřazuje je recepce, ne kiosek). */
+export async function rateForAge(propertyId: string, age: number, boundedOnly = false) {
   const rates = await listPersonRates(propertyId);
-  const matching = rates.filter((r) => (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo));
+  const matching = rates.filter((r) =>
+    (!boundedOnly || r.ageFrom != null || r.ageTo != null) &&
+    (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo));
   if (!matching.length) return null;
   // preferuj nejužší věkové rozpětí, pak sortOrder
   matching.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0)) || a.sortOrder - b.sortOrder);

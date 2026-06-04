@@ -120,11 +120,18 @@ const walkInBody = z.object({
   roomTypeId: z.string().uuid(), from: dateStr, to: dateStr,
   adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(),
   guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }),
+  dateOfBirth: dateStr.optional(), // pro automatický věkový ceník (kiosek)
 });
 app.post("/reservations/walkin", h(async (req) => {
   const propertyId = await resolvePropertyId(req);
   const b = walkInBody.parse(req.body);
-  return createWalkInHold({ propertyId, roomTypeId: b.roomTypeId, from: new Date(b.from), to: new Date(b.to), adults: b.adults, children: b.children, childAges: b.childAges, guest: b.guest });
+  const r = await createWalkInHold({ propertyId, roomTypeId: b.roomTypeId, from: new Date(b.from), to: new Date(b.to), adults: b.adults, children: b.children, childAges: b.childAges, guest: b.guest });
+  // Automatický věkový ceník: jen věkově omezená kategorie (uprchlík apod. bez věku řeší recepce papírově).
+  if (b.dateOfBirth) {
+    const rate = await personrates.rateForAge(propertyId, personrates.ageFromDob(new Date(b.dateOfBirth)), true);
+    if (rate) await admin.setReservationPersonRate(propertyId, r.id, rate.id, true);
+  }
+  return r;
 }));
 
 // ── Veřejné (kiosek): operace nad rezervací (id-based) ───────

@@ -50,7 +50,7 @@ export function App() {
 
   // forms
   const [lookup, setLookup] = useState("");
-  const [g, setG] = useState({ firstName: "", lastName: "", email: "", phone: "" });
+  const [g, setG] = useState({ firstName: "", lastName: "", email: "", phone: "", dob: "" });
   const [reg, setReg] = useState({
     fullName: "", dob: "", nationality: "CZ",
     documentType: "id_card", documentNumber: "", homeAddress: "", gdpr: false,
@@ -141,7 +141,7 @@ export function App() {
   function resetAll() {
     setResults([]); setRes(null); setFolio(null); setOffers([]); setPicked(null);
     setLookup(""); setError("");
-    setG({ firstName: "", lastName: "", email: "", phone: "" });
+    setG({ firstName: "", lastName: "", email: "", phone: "", dob: "" });
     setReg({ fullName: "", dob: "", nationality: "CZ", documentType: "id_card", documentNumber: "", homeAddress: "", gdpr: false });
   }
 
@@ -282,6 +282,7 @@ export function App() {
       api.walkin({
         roomTypeId: picked.roomTypeId, from, to, adults: guests, childAges,
         guest: { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: lang },
+        dateOfBirth: g.dob || undefined,
       }),
     );
     if (!r) return;
@@ -538,6 +539,9 @@ export function App() {
                   <label>{t("phone")}</label>
                   <input className="input" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} />
                   <div className="muted" style={{ marginTop: 6 }}>{t("contactHint")}</div>
+                  <label style={{ marginTop: 10 }}>{t("dobOptional")}</label>
+                  <input className="input" type="date" value={g.dob} onChange={(e) => setG({ ...g, dob: e.target.value })} />
+                  <div className="muted" style={{ marginTop: 4 }}>{t("dobHint")}</div>
                 </div>
                 <button className="btn" disabled={busy} onClick={createWalkIn}>{t("continue")}</button>
               </>
