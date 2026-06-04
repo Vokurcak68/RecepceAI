@@ -88,6 +88,7 @@ app.get("/properties/:identifier", h(async (req) => {
     id: p.id, identifier: p.identifier, name: p.name, type: p.type,
     inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, selfCheckin: p.selfCheckin,
     breakfastIncluded: p.breakfastIncluded, allowLongTerm: p.allowLongTerm,
+    kioskKeyInfo: p.kioskKeyInfo, kioskWifi: p.kioskWifi,
   };
 }));
 
@@ -238,6 +239,7 @@ centralRouter.patch("/properties/:id", h((req) => {
   const b = z.object({
     name: z.string().optional(), identifier: z.string().optional(), type: z.nativeEnum(PropertyType).optional(), street: z.string().optional(), city: z.string().optional(), country: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), ico: z.string().optional(), dic: z.string().optional(), iban: z.string().optional(), vatPayer: z.boolean().optional(), active: z.boolean().optional(), infoText: z.string().optional(),
     operatorName: z.string().optional(), operatorAddress: z.string().optional(), operatorRegistration: z.string().optional(), operatorAccount: z.string().optional(), operatorIco: z.string().optional(), operatorDic: z.string().optional(),
+    kioskKeyInfo: z.string().optional(), kioskWifi: z.string().optional(),
     inventoryUnit: z.nativeEnum(InventoryUnit).optional(), cityTaxEnabled: z.boolean().optional(), cityTaxPerPersonNight: z.number().optional(), cityTaxFreeAge: z.number().int().min(0).max(26).optional(),
     allowLongTerm: z.boolean().optional(), selfCheckin: z.boolean().optional(), breakfastIncluded: z.boolean().optional(), dailyCleaning: z.boolean().optional(), offeredServices: z.array(z.nativeEnum(ServiceType)).optional(),
     onlineCheckinHours: z.number().int().min(0).optional(),

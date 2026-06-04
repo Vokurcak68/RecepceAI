@@ -63,6 +63,7 @@ export type Folio = { charges: Money; paid: Money; balance: Money };
 export type PropertyInfo = {
   id: string; identifier: string; name: string; type: "hotel" | "penzion" | "ubytovna";
   inventoryUnit: "room" | "bed"; cityTaxEnabled: boolean; selfCheckin: boolean; breakfastIncluded: boolean; allowLongTerm: boolean;
+  kioskKeyInfo?: string | null; kioskWifi?: string | null;
 };
 
 // Provozovna, pod kterou kiosek běží (nastaví se po loadProperty).

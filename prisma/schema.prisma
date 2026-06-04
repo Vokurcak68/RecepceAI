@@ -204,6 +204,10 @@ model Property {
   breakfastIncluded     Boolean       @default(false)
   dailyCleaning         Boolean       @default(false) // hotel: denní úklid → obsazené pokoje bez odjezdu se ráno označí „Zkontrolovat"
   offeredServices       String[]      @default(["cleaning", "laundry", "ironing", "minibar"]) // služby nabízené hostům v portálu (ServiceType)
+
+  // Texty zobrazené na kiosku po ubytování (výsledková obrazovka). Volné, per provozovna.
+  kioskKeyInfo String? // instrukce k vyzvednutí klíče (např. „Klíč je pod monitorem")
+  kioskWifi    String? // Wi-Fi údaj (např. „PenzionWifi / vitejte")
   onlineCheckinHours    Int           @default(48) // okno online check-inu v portálu hosta (h před příjezdem); jen když selfCheckin
 
   // Storno / zálohové politiky + automatika (0 = vypnuto).

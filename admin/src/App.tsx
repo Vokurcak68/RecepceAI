@@ -1644,6 +1644,7 @@ type PropEdit = {
   name: string; identifier: string; type: string; street: string; city: string; country: string; phone: string; email: string;
   ico: string; dic: string; iban: string; vatPayer: boolean;
   operatorName: string; operatorAddress: string; operatorRegistration: string; operatorAccount: string; operatorIco: string; operatorDic: string;
+  kioskKeyInfo: string; kioskWifi: string;
   inventoryUnit: string; cityTaxEnabled: boolean; cityTaxPerPersonNight: string; cityTaxFreeAge: string;
   allowLongTerm: boolean; selfCheckin: boolean; breakfastIncluded: boolean; dailyCleaning: boolean; active: boolean; infoText: string;
   offeredServices: string[];
@@ -1667,6 +1668,7 @@ function PropertiesView() {
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
       operatorName: p.operatorName ?? "", operatorAddress: p.operatorAddress ?? [p.street, p.city].filter(Boolean).join(", "), operatorRegistration: p.operatorRegistration ?? "",
       operatorAccount: p.operatorAccount ?? (p.iban ?? ""), operatorIco: p.operatorIco ?? (p.ico ?? ""), operatorDic: p.operatorDic ?? (p.dic ?? ""),
+      kioskKeyInfo: p.kioskKeyInfo ?? "", kioskWifi: p.kioskWifi ?? "",
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
       offeredServices: p.offeredServices ?? ["cleaning", "laundry", "ironing", "minibar"],
@@ -1735,6 +1737,14 @@ function PropertiesView() {
 
           <FormSection title="Informace pro AI asistenta (FAQ)">
             <textarea style={{ ...fullInput, minHeight: 100, resize: "vertical" }} value={ef.infoText} onChange={(e) => setEf({ ...ef, infoText: e.target.value })} placeholder="Např.: Wi-Fi heslo je 'vitejte'. Snídaně 7–10 v přízemí. Parkování zdarma na dvoře. Check-in od 14:00, check-out do 10:00. Domácí mazlíčci povoleni." />
+          </FormSection>
+
+          <FormSection title="Kiosek — pokyny po ubytování">
+            <div className="muted" style={{ marginBottom: 10 }}>Zobrazí se hostovi na kiosku po self check-inu / ubytování (výsledková obrazovka). Když necháte prázdné, použije se výchozí text.</div>
+            <FormGrid min={220}>
+              <FieldCol label="Vyzvednutí klíče" span={2}><input style={fullInput} value={ef.kioskKeyInfo} onChange={(e) => setEf({ ...ef, kioskKeyInfo: e.target.value })} placeholder="Klíč je pod monitorem" /></FieldCol>
+              <FieldCol label="Wi-Fi (síť / heslo)" span={2}><input style={fullInput} value={ef.kioskWifi} onChange={(e) => setEf({ ...ef, kioskWifi: e.target.value })} placeholder="PenzionWifi / vitejte" /></FieldCol>
+            </FormGrid>
           </FormSection>
 
           <FormSection title="Ubytování a provoz">

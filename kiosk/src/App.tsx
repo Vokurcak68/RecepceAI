@@ -277,7 +277,7 @@ export function App() {
   }
 
   async function createWalkIn() {
-    if (!picked || !g.firstName || !g.lastName) { setError("Vyplňte jméno a příjmení."); return; }
+    if (!picked || !g.firstName || !g.lastName || (!g.email.trim() && !g.phone.trim())) { setError(t("fillContact")); return; }
     const r = await run(() =>
       api.walkin({
         roomTypeId: picked.roomTypeId, from, to, adults: guests, childAges,
@@ -462,9 +462,9 @@ export function App() {
                 {res.room?.lockType === "smart_code" ? (
                   <div className="kv"><span>{t("doorCode")}</span><span className="v">4 7 2 9</span></div>
                 ) : (
-                  <div className="kv"><span>🔑</span><span className="v">{t("takeKey")}</span></div>
+                  <div className="kv"><span>🔑</span><span className="v">{property.kioskKeyInfo || t("takeKey")}</span></div>
                 )}
-                <div className="kv"><span>{t("wifi")}</span><span className="v">PenzionWifi / vitejte</span></div>
+                <div className="kv"><span>{t("wifi")}</span><span className="v">{property.kioskWifi || "PenzionWifi / vitejte"}</span></div>
                 <button className="btn big" style={{ marginTop: 20 }} onClick={idle}>{t("enjoy")}</button>
               </div>
             )}
@@ -537,6 +537,7 @@ export function App() {
                   <input className="input" value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} />
                   <label>{t("phone")}</label>
                   <input className="input" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} />
+                  <div className="muted" style={{ marginTop: 6 }}>{t("contactHint")}</div>
                 </div>
                 <button className="btn" disabled={busy} onClick={createWalkIn}>{t("continue")}</button>
               </>
