@@ -1662,7 +1662,8 @@ function PropertiesView() {
     setEf({
       name: p.name, identifier: p.identifier, type: p.type, street: p.street ?? "", city: p.city ?? "", country: p.country ?? "CZ",
       phone: p.phone ?? "", email: p.email ?? "", ico: p.ico ?? "", dic: p.dic ?? "", iban: p.iban ?? "", vatPayer: p.vatPayer,
-      operatorName: p.operatorName ?? "", operatorAddress: p.operatorAddress ?? "", operatorRegistration: p.operatorRegistration ?? "", operatorAccount: p.operatorAccount ?? "", operatorIco: p.operatorIco ?? "", operatorDic: p.operatorDic ?? "",
+      operatorName: p.operatorName ?? "", operatorAddress: p.operatorAddress ?? [p.street, p.city].filter(Boolean).join(", "), operatorRegistration: p.operatorRegistration ?? "",
+      operatorAccount: p.operatorAccount ?? (p.iban ?? ""), operatorIco: p.operatorIco ?? (p.ico ?? ""), operatorDic: p.operatorDic ?? (p.dic ?? ""),
       inventoryUnit: p.inventoryUnit, cityTaxEnabled: p.cityTaxEnabled, cityTaxPerPersonNight: parseFloat(p.cityTaxPerPersonNight).toString(), cityTaxFreeAge: String(p.cityTaxFreeAge ?? 18),
       allowLongTerm: p.allowLongTerm, selfCheckin: p.selfCheckin, breakfastIncluded: p.breakfastIncluded, dailyCleaning: p.dailyCleaning, active: p.active, infoText: p.infoText ?? "",
       offeredServices: p.offeredServices ?? ["cleaning", "laundry", "ironing", "minibar"],
@@ -1716,25 +1717,17 @@ function PropertiesView() {
             </FormGrid>
           </FormSection>
 
-          <FormSection title="Fakturace">
+          <FormSection title="Provozovatel a fakturace">
+            <div className="muted" style={{ marginBottom: 10 }}>Firma, která fakturuje — dodavatel uvedený na dokladech. Z čísla účtu se generuje i QR platba na proformě (IBAN nebo český formát 123456789/0800). Když necháte název prázdný, použije se název provozovny.</div>
             <FormGrid min={180}>
-              <FieldCol label="IČO (na dokladech)"><input style={fullInput} value={ef.ico} onChange={(e) => setEf({ ...ef, ico: e.target.value })} /></FieldCol>
-              <FieldCol label="DIČ"><input style={fullInput} value={ef.dic} onChange={(e) => setEf({ ...ef, dic: e.target.value })} /></FieldCol>
-              <FieldCol label="IBAN (QR platba)" span={2}><input style={fullInput} value={ef.iban} onChange={(e) => setEf({ ...ef, iban: e.target.value })} /></FieldCol>
-            </FormGrid>
-            <div style={{ marginTop: 12 }}><Chk label="Plátce DPH" checked={ef.vatPayer} onChange={(v) => setEf({ ...ef, vatPayer: v })} /></div>
-          </FormSection>
-
-          <FormSection title="Provozovatel (firma, která fakturuje)">
-            <div className="muted" style={{ marginBottom: 10 }}>Dodavatel uvedený na dokladech. Když zůstane prázdné, použijí se údaje provozovny výše. Z čísla účtu se generuje i QR platba na proformě (IBAN nebo český formát 123456789/0800).</div>
-            <FormGrid min={180}>
-              <FieldCol label="Název firmy" span={2}><input style={fullInput} value={ef.operatorName} onChange={(e) => setEf({ ...ef, operatorName: e.target.value })} /></FieldCol>
+              <FieldCol label="Název firmy" span={2}><input style={fullInput} value={ef.operatorName} onChange={(e) => setEf({ ...ef, operatorName: e.target.value })} placeholder={ef.name} /></FieldCol>
               <FieldCol label="Sídlo (ulice, město, PSČ)" span={2}><input style={fullInput} value={ef.operatorAddress} onChange={(e) => setEf({ ...ef, operatorAddress: e.target.value })} /></FieldCol>
               <FieldCol label="IČO"><input style={fullInput} value={ef.operatorIco} onChange={(e) => setEf({ ...ef, operatorIco: e.target.value })} /></FieldCol>
               <FieldCol label="DIČ"><input style={fullInput} value={ef.operatorDic} onChange={(e) => setEf({ ...ef, operatorDic: e.target.value })} /></FieldCol>
               <FieldCol label="Číslo účtu (na dokladech)"><input style={fullInput} value={ef.operatorAccount} onChange={(e) => setEf({ ...ef, operatorAccount: e.target.value })} /></FieldCol>
               <FieldCol label="Dodatek — zápis v rejstříku" span={2}><input style={fullInput} value={ef.operatorRegistration} onChange={(e) => setEf({ ...ef, operatorRegistration: e.target.value })} placeholder="Zapsána u Městského soudu v Praze, oddíl C, vložka 12345" /></FieldCol>
             </FormGrid>
+            <div style={{ marginTop: 12 }}><Chk label="Plátce DPH" checked={ef.vatPayer} onChange={(v) => setEf({ ...ef, vatPayer: v })} /></div>
           </FormSection>
 
           <FormSection title="Informace pro AI asistenta (FAQ)">
