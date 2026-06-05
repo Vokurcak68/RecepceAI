@@ -46,15 +46,17 @@ export function previousStaysCount(propertyId: string, primaryGuestId: string, e
 export async function searchGuests(propertyIds: string[], q: string) {
   if (!propertyIds.length) return [];
   const term = q.trim();
+  // Tokenové hledání: každé slovo dotazu musí sednout do některého pole — funguje i celé jméno „Tomáš Vokurka".
+  const tokens = term.split(/\s+/).filter(Boolean);
   const where: Prisma.ReservationWhereInput = {
     propertyId: { in: propertyIds },
-    ...(term
-      ? { primaryGuest: { OR: [
-          { firstName: { contains: term, mode: "insensitive" } },
-          { lastName: { contains: term, mode: "insensitive" } },
-          { email: { contains: term, mode: "insensitive" } },
-          { phone: { contains: term } },
-        ] } }
+    ...(tokens.length
+      ? { primaryGuest: { AND: tokens.map((tok) => ({ OR: [
+          { firstName: { contains: tok, mode: "insensitive" as const } },
+          { lastName: { contains: tok, mode: "insensitive" as const } },
+          { email: { contains: tok, mode: "insensitive" as const } },
+          { phone: { contains: tok } },
+        ] })) } }
       : {}),
   };
   const groups = await prisma.reservation.groupBy({
