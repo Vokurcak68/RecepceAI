@@ -301,6 +301,9 @@ export const api = {
   // report příchodů/odchodů
   movements: (from: string, to: string) => req<MovementsReport>(`/admin/reports/movements?from=${from}&to=${to}&_=${Date.now()}`),
 
+  // domovská Recepce (dnešek)
+  reception: () => req<ReceptionToday>(`/admin/reception?_=${Date.now()}`),
+
   // průvodce novou rezervací
   availabilityFor: (from: string, to: string, guests = 1) => req<AvailUnit[]>(`/admin/availability?from=${from}&to=${to}&guests=${guests}&_=${Date.now()}`),
   freeBedsPerRoom: (from: string, to: string) => req<FreeBedsRoom[]>(`/admin/beds/free-per-room?from=${from}&to=${to}&_=${Date.now()}`),
@@ -410,6 +413,9 @@ export type Deposit = { id: string; amount: Money; method: string; status: "held
 export const DEPOSIT_STATUS_LABEL: Record<string, string> = { held: "držena", returned: "vrácena", forfeited: "zadržena" };
 export type MoveItem = { date: string; kind: "reservation" | "occupancy"; name: string; where: string; code: string | null; companyName: string | null };
 export type MovementsReport = { from: string; to: string; arrivals: MoveItem[]; departures: MoveItem[] };
+export type RecArrival = { id: string; code: string; guestName: string; where: string; assigned: boolean };
+export type RecRow = { id: string; code: string; guestName: string; where: string; balance: Money };
+export type ReceptionToday = { date: string; freeUnits: number; unitLabel: string; dirtyRooms: number; inHouseCount: number; arrivals: RecArrival[]; departures: RecRow[]; unpaid: RecRow[] };
 export type AvailUnit = { roomTypeId: string; name: string; description: string | null; amenities: string[]; unit: "room" | "bed"; freeUnits: number; capacityAdults: number; capacityChildren: number; maxExtraBeds: number; roomTotal: Money; cityTax: Money; total: Money };
 export type FreeBedsRoom = { roomId: string; roomNumber: string; floor: number; totalBeds: number; freeBeds: number };
 export type UnassignedRes = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string };

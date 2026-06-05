@@ -307,6 +307,49 @@ export async function setReservationPersonRate(propertyId: string, id: string, p
   return prisma.reservation.update({ where: { id }, data: { personRateId, ...(totalAmount !== undefined ? { totalAmount } : {}) }, select: { id: true, personRateId: true, totalAmount: true } });
 }
 
+/** Domovská obrazovka recepce: dnešní příjezdy/odjezdy (se zůstatkem), ubytovaní, volno, nezaplacené, k úklidu. */
+export async function receptionToday(propertyId: string) {
+  const day = toDateOnly(new Date());
+  const prop = await prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { inventoryUnit: true } });
+  const gName = (r: { primaryGuest: { firstName: string; lastName: string } }) => `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`;
+  const whereOf = (r: { room: { number: string } | null; bed: { label: string } | null; roomType?: { name: string } | null }) =>
+    r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : `${r.roomType?.name ?? "—"} (nepřiřazeno)`;
+
+  const [arr, inHouse, dep, dirtyRooms] = await Promise.all([
+    prisma.reservation.findMany({ where: { propertyId, checkInDate: day, status: { in: [ReservationStatus.confirmed, ReservationStatus.pending] } }, include: { primaryGuest: { select: { firstName: true, lastName: true } }, roomType: { select: { name: true } }, room: { select: { number: true } }, bed: { select: { label: true } } }, orderBy: { code: "asc" } }),
+    prisma.reservation.findMany({ where: { propertyId, status: ReservationStatus.checked_in }, include: { primaryGuest: { select: { firstName: true, lastName: true } }, room: { select: { number: true } }, bed: { select: { label: true } } }, orderBy: { checkOutDate: "asc" } }),
+    prisma.reservation.findMany({ where: { propertyId, checkOutDate: day, status: ReservationStatus.checked_in }, include: { primaryGuest: { select: { firstName: true, lastName: true } }, room: { select: { number: true } }, bed: { select: { label: true } } }, orderBy: { code: "asc" } }),
+    prisma.room.count({ where: { propertyId, status: RoomStatus.dirty } }),
+  ]);
+
+  // zůstatky ubytovaných (pro odjezdy i nezaplacené)
+  const bal = new Map<string, string>();
+  await Promise.all(inHouse.map(async (r) => bal.set(r.id, (await computeFolio(r.id)).balance.toFixed(2))));
+  const depIds = new Set(dep.map((d) => d.id));
+  for (const d of dep) if (!bal.has(d.id)) bal.set(d.id, (await computeFolio(d.id)).balance.toFixed(2));
+
+  // volné jednotky
+  let freeUnits: number; let unitLabel: string;
+  if (prop.inventoryUnit === InventoryUnit.bed) {
+    const [beds, occRes, occBed] = await Promise.all([
+      prisma.bed.count({ where: { propertyId, status: { not: RoomStatus.out_of_service } } }),
+      prisma.reservation.count({ where: { propertyId, bedId: { not: null }, status: ReservationStatus.checked_in } }),
+      prisma.bedOccupancy.count({ where: { propertyId, status: "active", fromDate: { lte: day }, toDate: { gt: day } } }),
+    ]);
+    freeUnits = Math.max(0, beds - occRes - occBed); unitLabel = "lůžek";
+  } else {
+    const rooms = await prisma.room.count({ where: { propertyId, status: { not: RoomStatus.out_of_service } } });
+    freeUnits = Math.max(0, rooms - new Set(inHouse.map((r) => r.roomId).filter(Boolean)).size); unitLabel = "pokojů";
+  }
+
+  return {
+    date: day, freeUnits, unitLabel, dirtyRooms, inHouseCount: inHouse.length,
+    arrivals: arr.map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), assigned: !!(r.roomId || r.bedId) })),
+    departures: dep.map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), balance: bal.get(r.id) ?? "0" })),
+    unpaid: inHouse.filter((r) => Number(bal.get(r.id) ?? "0") > 0 && !depIds.has(r.id)).map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), balance: bal.get(r.id)! })),
+  };
+}
+
 /** Report příchodů/odchodů za období — rezervace (hotel) i lůžková obsazenost (ubytovna). */
 export async function movementsReport(propertyId: string, from: Date, to: Date) {
   const between = { gte: from, lte: to };

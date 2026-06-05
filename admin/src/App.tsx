@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom, type ReceptionToday, type RecArrival, type RecRow,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -49,7 +49,7 @@ export function App() {
   const [session, setSession] = useState<LoginResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [selId, setSelId] = useState(getProperty());
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("reception");
   const [openGroup, setOpenGroup] = useState(() => localStorage.getItem("navGroup") ?? "Hosté");
   useEffect(() => { localStorage.setItem("navGroup", openGroup); }, [openGroup]);
 
@@ -84,6 +84,7 @@ export function App() {
 
   // Samostatné položky (bez skupiny) + rozbalovací skupiny (varianta A)
   const navItems: { id: string; label: string; icon: string }[] = [
+    { id: "reception", label: "Recepce", icon: "🛎️" },
     { id: "dashboard", label: "Přehled", icon: "📊" },
   ];
   const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
@@ -203,6 +204,7 @@ export function App() {
         {prop && tab === "payments" && <PaymentsView selId={selId} />}
         {prop && tab === "cashregister" && <CashRegisterView selId={selId} />}
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
+        {prop && tab === "reception" && <ReceptionView selId={selId} prop={prop} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "bedboard" && <BedBoardView selId={selId} />}
         {prop && tab === "personrates" && <PersonRatesView selId={selId} />}
@@ -792,6 +794,89 @@ function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
             </tr>
           )} />
       </div>
+    </>
+  );
+}
+
+// ── Domovská obrazovka recepce „Recepce (dnešek)" ────────────
+function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
+  const { data, error, reload } = useAsync<ReceptionToday>(() => api.reception(), [selId]);
+  const confirm = useConfirm();
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [wizard, setWizard] = useState(false);
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const checkin = async (r: RecArrival) => {
+    if (!r.assigned) { setDetailId(r.id); return; } // nepřiřazený → detail (přiřaď pokoj a odbav)
+    if (await confirm({ title: "Check-in", message: <>Ubytovat <b>{r.guestName}</b> ({r.code})?</>, confirmLabel: "Check-in" })) {
+      setBusy(true); setMsg(""); try { await api.checkin(r.id); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }
+  };
+  const checkout = async (r: RecRow) => {
+    if (await confirm({ title: "Check-out", message: <>Odhlásit <b>{r.guestName}</b> ({r.code})?{Number(r.balance) > 0 ? ` Zůstatek ${money(r.balance)} musí být vyrovnán.` : ""}</>, confirmLabel: "Check-out" })) {
+      setBusy(true); setMsg(""); try { const x = await api.checkout(r.id); if (x.document) setDoc(x.document); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }
+  };
+
+  if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
+
+  const card = (title: string, count: number, body: ReactNode) => (
+    <div className="panel"><h3>{title} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {count}</span></h3><div style={{ padding: 12 }}>{body}</div></div>
+  );
+  const empty = <div className="muted">—</div>;
+
+  return (
+    <>
+      <div className="h1"><span>Recepce</span> {data && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {d(data.date)}</span>}
+        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost sm" onClick={reload}>↻</button></div>
+      {error && <div className="error">{error}</div>}
+      {msg && <div className="error">{msg}</div>}
+      {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reload(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
+
+      {data && (
+        <div className="toolbar" style={{ gap: 18, flexWrap: "wrap" }}>
+          <span>Volno: <b>{data.freeUnits}</b> {data.unitLabel}</span>
+          <span className="muted">Ubytováno: {data.inHouseCount}</span>
+          <span className="muted">K úklidu: {data.dirtyRooms}</span>
+          {data.unpaid.length > 0 && <span style={{ color: "var(--warn)" }}>⚠ {data.unpaid.length} nezaplacených</span>}
+        </div>
+      )}
+
+      <div className="grid2">
+        {card("Příjezdy dnes", data?.arrivals.length ?? 0, (data?.arrivals.length ?? 0) === 0 ? empty :
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.arrivals.map((r) => (
+            <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where} · {r.code}</span></span>
+              <span className="req-actions">
+                <button className="btn sm ghost" onClick={() => setDetailId(r.id)}>Detail</button>
+                <button className="btn sm ok" disabled={busy} onClick={() => checkin(r)}>{r.assigned ? "Check-in" : "Přiřadit"}</button>
+              </span>
+            </div>
+          ))}</div>)}
+
+        {card("Odjezdy dnes", data?.departures.length ?? 0, (data?.departures.length ?? 0) === 0 ? empty :
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.departures.map((r) => (
+            <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where}</span>{Number(r.balance) > 0 ? <b style={{ color: "var(--warn)" }}> · {money(r.balance)}</b> : ""}</span>
+              <span className="req-actions">
+                {Number(r.balance) > 0 && <button className="btn sm" onClick={() => setDetailId(r.id)}>Doplatit</button>}
+                <button className="btn sm ok" disabled={busy} onClick={() => checkout(r)}>Check-out</button>
+              </span>
+            </div>
+          ))}</div>)}
+      </div>
+
+      {(data?.unpaid.length ?? 0) > 0 && card("Nezaplacené (ubytovaní)", data!.unpaid.length,
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.unpaid.map((r) => (
+          <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where} · {r.code}</span> <b style={{ color: "var(--warn)" }}>· {money(r.balance)}</b></span>
+            <button className="btn sm" onClick={() => setDetailId(r.id)}>Doplatit</button>
+          </div>
+        ))}</div>)}
+
+      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
   );
 }
