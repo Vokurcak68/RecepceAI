@@ -294,7 +294,7 @@ tr.row-click:hover td { background: #f3f6ff; }
 .wz-big-input input { font-size: 15px; padding: 10px 13px; }
 
 /* mřížka + karta pokoje */
-.wz-rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.wz-rooms { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .wz-rooms .wz-room { margin-bottom: 0; }
 .wz-filter { width: 100%; margin-bottom: 14px; padding: 10px 14px; }
 .wz-room { display: flex; align-items: center; gap: 18px; padding: 16px 20px; border: 1.5px solid var(--line); border-radius: 13px; margin-bottom: 12px; transition: border-color .15s, box-shadow .15s, background .15s; }
