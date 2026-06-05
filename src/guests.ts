@@ -45,27 +45,17 @@ export function previousStaysCount(propertyId: string, primaryGuestId: string, e
 /** Hledání hostů, kteří mají rezervaci v některé z přístupných provozoven. */
 export async function searchGuests(propertyIds: string[], q: string) {
   if (!propertyIds.length) return [];
-  const term = q.trim();
-  // Tokenové hledání: každé slovo dotazu musí sednout do některého pole — funguje i celé jméno „Tomáš Vokurka".
-  const tokens = term.split(/\s+/).filter(Boolean);
-  const where: Prisma.ReservationWhereInput = {
-    propertyId: { in: propertyIds },
-    ...(tokens.length
-      ? { primaryGuest: { AND: tokens.map((tok) => ({ OR: [
-          { firstName: { contains: tok, mode: "insensitive" as const } },
-          { lastName: { contains: tok, mode: "insensitive" as const } },
-          { email: { contains: tok, mode: "insensitive" as const } },
-          { phone: { contains: tok } },
-        ] })) } }
-      : {}),
-  };
+  // Normalizace bez diakritiky + case (zadám „tomas" → najde „Tomáš"). Tokenové (každé slovo musí sednout).
+  const norm = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const tokens = norm(q.trim()).split(/\s+/).filter(Boolean);
+  // Bez name-filtru v DB (diakritiku Postgres contains neumí) — vezmeme hosty provozovny a filtrujeme v aplikaci.
   const groups = await prisma.reservation.groupBy({
-    by: ["primaryGuestId"], where, _count: { _all: true }, _max: { checkOutDate: true },
-    orderBy: { _max: { checkOutDate: "desc" } }, take: 100,
+    by: ["primaryGuestId"], where: { propertyId: { in: propertyIds } }, _count: { _all: true }, _max: { checkOutDate: true },
+    orderBy: { _max: { checkOutDate: "desc" } }, take: tokens.length ? 3000 : 100,
   });
   const guests = await prisma.guest.findMany({ where: { id: { in: groups.map((g) => g.primaryGuestId) } } });
   const byId = new Map(guests.map((g) => [g.id, g]));
-  return groups
+  const rows = groups
     .map((grp) => {
       const g = byId.get(grp.primaryGuestId);
       if (!g) return null;
@@ -74,7 +64,11 @@ export async function searchGuests(propertyIds: string[], q: string) {
         vip: g.vip, preferences: g.preferences, stays: grp._count._all, lastStay: grp._max.checkOutDate,
       };
     })
-    .filter(Boolean);
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const filtered = tokens.length
+    ? rows.filter((r) => { const hay = norm(`${r.firstName} ${r.lastName} ${r.email ?? ""} ${r.phone ?? ""}`); return tokens.every((t) => hay.includes(t)); })
+    : rows;
+  return filtered.slice(0, 100);
 }
 
 /** Profil hosta + historie pobytů (jen v přístupných provozovnách) + hodnocení. */
