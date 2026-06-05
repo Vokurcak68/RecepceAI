@@ -216,7 +216,7 @@ export const api = {
   documents: (q = "") => req<Doc[]>(`/admin/documents${q}`),
   document: (id: string) => req<Doc>(`/admin/documents/${id}`),
   issueDocument: (resId: string, type: "invoice" | "receipt") => req<Doc>(`/admin/reservations/${resId}/documents`, { method: "POST", body: JSON.stringify({ type }) }),
-  issueProforma: (resId: string, amount: number, dueInDays?: number, email?: boolean) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays, email }) }),
+  issueProforma: (resId: string, amount: number, dueInDays?: number, email?: boolean, withReservation?: boolean) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays, email, withReservation }) }),
   setReservationAccommodation: (id: string, amount: number) => req(`/admin/reservations/${id}/accommodation`, { method: "POST", body: JSON.stringify({ amount }) }),
   cancelDocument: (id: string) => req(`/admin/documents/${id}/cancel`, { method: "POST" }),
   payDocument: (id: string, method: "cash" | "card_terminal") => req<Doc>(`/admin/documents/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),

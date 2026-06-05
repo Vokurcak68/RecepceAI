@@ -951,7 +951,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const ratesEnabled = (rates.data ?? []).length > 0;
   const [pickGuest, setPickGuest] = useState(false);
   const [pickedGuestId, setPickedGuestId] = useState<string | null>(null);
-  const [pay, setPay] = useState<"arrival" | "deposit" | "company">("arrival");
+  const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company">("arrival");
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1014,7 +1014,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
         if (!flat.length) throw new Error("Vyber alespoň jeden pokoj.");
         if (flat.length === 1) {
-          const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults, childAges, guest });
+          const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults, childAges, guest, deferEmail: pay === "deposit" && Number(depositPct) > 0 });
           if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {});
           for (const p of extra) if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {});
           ids = [{ id: r.id, code: r.code }];
@@ -1032,7 +1032,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
         if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
       }
-      if (pay === "deposit" && ids.length === 1) { const det = await api.reservation(ids[0].id); const amt = Math.round(Number(det.totalAmount) * Number(depositPct) / 100); if (amt > 0) await api.issueProforma(ids[0].id, amt, undefined, true); }
+      if (pay === "deposit" && ids.length === 1) { const det = await api.reservation(ids[0].id); const amt = Math.round(Number(det.totalAmount) * Number(depositPct) / 100); if (amt > 0) await api.issueProforma(ids[0].id, amt, undefined, true, true); }
       setDone(ids);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -1171,7 +1171,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
               </div>
               <label className="muted">Platba</label><br />
               <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "arrival"} onChange={() => setPay("arrival")} /> při příjezdu</label>{" "}
-              {!bedMode && totalRooms === 1 && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> zálohou <input type="number" min={0} max={100} style={{ width: 56 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} />% (proforma + e-mail hostovi)</label>}{" "}
+              <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "departure"} onChange={() => setPay("departure")} /> při odjezdu</label>{" "}
+              {!bedMode && totalRooms === 1 && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> zálohou <input type="number" min={0} max={100} style={{ width: 56 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} />%</label>}{" "}
               {customer === "company" && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> na fakturu firmě</label>}
               <div className="toolbar" style={{ marginTop: 18 }}><button className="btn ghost" onClick={() => setStep(3)}>‹ Zpět</button><button className="btn" disabled={busy} onClick={create} style={{ marginLeft: "auto" }}>{busy ? "Vytvářím…" : "Vytvořit rezervaci ✓"}</button></div>
             </div>

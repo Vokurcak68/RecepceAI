@@ -57,7 +57,7 @@ export async function listReservations(propertyId: string, filter: { status?: st
 export async function createReservation(input: {
   propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; childAges?: number[];
   guest: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
-  billingCompany?: string; billingIco?: string; billingDic?: string;
+  billingCompany?: string; billingIco?: string; billingDic?: string; deferEmail?: boolean;
 }) {
   const { propertyId, roomTypeId, from, to, adults, guest } = input;
   const childAges = (input.childAges ?? []).filter((a) => Number.isFinite(a));
@@ -80,7 +80,8 @@ export async function createReservation(input: {
     },
     include: { primaryGuest: true, roomType: true },
   });
-  void mailer.sendReservationCreated(created.id); // potvrzovací e-mail hostovi (best-effort)
+  // U platby zálohou se potvrzení odloží — pošle se jeden e-mail rovnou se zálohovou fakturou (viz proforma endpoint).
+  if (!input.deferEmail) void mailer.sendReservationCreated(created.id); // potvrzovací e-mail hostovi (best-effort)
   return created;
 }
 

@@ -361,7 +361,7 @@ adminRouter.delete("/service-items/:id", h((req, res) => admin.deleteServiceItem
 
 adminRouter.get("/reservations", h((req, res) => admin.listReservations(pid(res), { status: req.query.status as string | undefined, q: req.query.q as string | undefined })));
 adminRouter.post("/reservations", h((req, res) => {
-  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional() }).parse(req.body);
+  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional(), deferEmail: z.boolean().optional() }).parse(req.body);
   return admin.createReservation({ propertyId: pid(res), ...b, from: new Date(b.from), to: new Date(b.to) });
 }));
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));
@@ -576,9 +576,12 @@ adminRouter.post("/reservations/:id/documents", h((req, res) => {
   return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType);
 }));
 adminRouter.post("/reservations/:id/proforma", h(async (req, res) => {
-  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional(), email: z.boolean().optional() }).parse(req.body);
+  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional(), email: z.boolean().optional(), withReservation: z.boolean().optional() }).parse(req.body);
   const doc = await billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
-  if (b.email) mailer.sendProforma(req.params.id, { number: doc.number, total: Number(doc.total), dueDate: doc.dueDate }).catch((e) => console.error("[mail] proforma:", (e as Error).message));
+  const info = { number: doc.number, total: Number(doc.total), dueDate: doc.dueDate };
+  // withReservation: pošle JEDEN potvrzovací e-mail rovnou se zálohou (potvrzení bylo při zakládání odloženo). Jinak samostatný proforma e-mail.
+  if (b.email && b.withReservation) mailer.sendReservationCreated(req.params.id, info).catch((e) => console.error("[mail] created+proforma:", (e as Error).message));
+  else if (b.email) mailer.sendProforma(req.params.id, info).catch((e) => console.error("[mail] proforma:", (e as Error).message));
   return doc;
 }));
 adminRouter.post("/reservations/:id/accommodation", h((req, res) => admin.setReservationAccommodation(pid(res), req.params.id, z.object({ amount: z.number().nonnegative() }).parse(req.body).amount)));

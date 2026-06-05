@@ -143,16 +143,25 @@ const feedbackUrl = (code: string) =>
 
 // ── Jednotlivé e-maily ───────────────────────────────────────
 /** Potvrzení vytvořené rezervace. */
-export async function sendReservationCreated(reservationId: string): Promise<void> {
+export async function sendReservationCreated(reservationId: string, proforma?: { number: string; total: number; dueDate?: Date | string | null }): Promise<void> {
   const r = await load(reservationId);
   if (!r) return;
   const lang = mailLang(r.primaryGuest?.language);
   const vars = { name: esc(r.primaryGuest.firstName), property: esc(r.property.name) };
   const link = guestUrl(r.code);
-  const deposit = r.property.depositPct > 0 ? Math.round(Number(r.totalAmount) * r.property.depositPct / 100) : 0;
-  const depositHtml = deposit > 0 ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "depositNote", { amount: money(deposit), pct: r.property.depositPct })}</p>` : "";
+  // S proformou: do potvrzení rovnou zahrneme zálohovou fakturu (řádky + výzva k úhradě). Bez ní: obecná zmínka o záloze dle provozovny.
+  let depositHtml: string;
+  let rows = stayRows(r, lang);
+  if (proforma) {
+    const due = proforma.dueDate ? fmtDate(proforma.dueDate) : "—";
+    rows += row(mt(lang, "titleProforma"), money(proforma.total)) + row(mt(lang, "rowDue"), due);
+    depositHtml = `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "proformaNote", { amount: money(proforma.total), due })}</p>`;
+  } else {
+    const deposit = r.property.depositPct > 0 ? Math.round(Number(r.totalAmount) * r.property.depositPct / 100) : 0;
+    depositHtml = deposit > 0 ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "depositNote", { amount: money(deposit), pct: r.property.depositPct })}</p>` : "";
+  }
   const extra = depositHtml + (link ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
-  const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), stayRows(r, lang),
+  const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), rows,
     link ? mt(lang, "ctaManage") : undefined, link ?? undefined, extra);
   await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html);
 }
