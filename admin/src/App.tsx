@@ -89,7 +89,6 @@ export function App() {
   ];
   const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
     { label: "Hosté", icon: "🛎️", items: [
-      { id: "calendar", label: "Kalendář obsazení" },
       { id: "plan", label: "Plán" },
       { id: "reservations", label: "Rezervace" },
       { id: "movements", label: "Příjezdy/odjezdy" },
@@ -106,7 +105,6 @@ export function App() {
       { id: "companies", label: "Firmy" },
     ] },
     { label: "Provoz", icon: "🧹", items: [
-      ...(prop?.inventoryUnit === "bed" ? [{ id: "bedboard", label: "Obsazení lůžek" }] : []),
       { id: "roomstatus", label: "Přehled pokojů" },
       { id: "housekeeping", label: "Dispečink úklidu" },
       { id: "maintenance", label: "Dispečink údržby" },
@@ -182,7 +180,6 @@ export function App() {
       <main className="main">
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
-        {prop && tab === "calendar" && <CalendarView selId={selId} />}
         {prop && tab === "plan" && <PlanView selId={selId} prop={prop} />}
         {prop && tab === "ubyport" && <UbyportView selId={selId} />}
         {prop && tab === "ical" && <IcalView selId={selId} />}
@@ -204,7 +201,6 @@ export function App() {
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
         {prop && tab === "reception" && <ReceptionView selId={selId} prop={prop} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
-        {prop && tab === "bedboard" && <BedBoardView selId={selId} />}
         {prop && tab === "personrates" && <PersonRatesView selId={selId} />}
         {prop && tab === "movements" && <MovementsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
@@ -515,7 +511,7 @@ function DashboardView({ selId }: { selId: string }) {
 
 // ── Reservations ─────────────────────────────────────────────
 // ── Obsazení: kdo je v jakém pokoji + zůstatek účtu ──────────
-function CalendarView({ selId }: { selId: string }) {
+function CalendarView({ selId, embedded }: { selId: string; embedded?: boolean }) {
   const [days, setDays] = useState(21);
   const [from, setFrom] = useState(todayIso());
   const { data, error } = useAsync<OccupancyCalendar>(() => api.calendar(from, days), [selId, from, days]);
@@ -528,7 +524,7 @@ function CalendarView({ selId }: { selId: string }) {
 
   return (
     <>
-      <div className="h1">Kalendář obsazení</div>
+      {!embedded && <div className="h1">Kalendář obsazení</div>}
       <div className="toolbar">
         <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="row">Dní <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={14}>14</option><option value={21}>21</option><option value={31}>31</option></select></label>
@@ -805,16 +801,20 @@ function UbyportView({ selId }: { selId: string }) {
 }
 
 function PlanView({ selId, prop }: { selId: string; prop?: Property }) {
-  const [view, setView] = useState<"plan" | "list">("plan");
+  const [view, setView] = useState<"plan" | "list" | "calendar" | "beds">("plan");
+  const bedMode = prop?.inventoryUnit === "bed";
+  const segs: [string, string][] = [["plan", "📅 Timeline"], ["list", "📋 Obsazení"], ["calendar", "📊 Kalendář"], ...(bedMode ? [["beds", "🛏 Lůžka"] as [string, string]] : [])];
   return (
     <>
       <div className="h1"><span>Plán</span>
-        &nbsp;<span className="seg">
-          <button className={`btn sm ${view === "plan" ? "" : "ghost"}`} onClick={() => setView("plan")}>📅 Timeline</button>
-          <button className={`btn sm ${view === "list" ? "" : "ghost"}`} onClick={() => setView("list")}>📋 Obsazení</button>
+        &nbsp;<span className="seg" style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+          {segs.map(([v, l]) => <button key={v} className={`btn sm ${view === v ? "" : "ghost"}`} onClick={() => setView(v as typeof view)}>{l}</button>)}
         </span>
       </div>
-      {view === "plan" ? <TapeChartView selId={selId} prop={prop} embedded /> : <OccupancyView selId={selId} prop={prop} embedded />}
+      {view === "plan" && <TapeChartView selId={selId} prop={prop} embedded />}
+      {view === "list" && <OccupancyView selId={selId} prop={prop} embedded />}
+      {view === "calendar" && <CalendarView selId={selId} embedded />}
+      {view === "beds" && bedMode && <BedBoardView selId={selId} embedded />}
     </>
   );
 }
@@ -2887,14 +2887,14 @@ function DepositsPanel({ reservationId, companyId, suggested }: { reservationId?
 }
 
 // ── Obsazení lůžek (firemní ubytovny) ────────────────────────
-function BedBoardView({ selId }: { selId: string }) {
+function BedBoardView({ selId, embedded }: { selId: string; embedded?: boolean }) {
   const { data, error, reload } = useAsync<BedBoardItem[]>(() => api.bedBoard(), [selId]);
   const [openBed, setOpenBed] = useState<{ id: string; label: string } | null>(null);
   const beds = data ?? [];
   const occupied = beds.filter((b) => b.current).length;
   return (
     <>
-      <div className="h1"><span>Obsazení lůžek</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· kdo na kterém lůžku bydlí (pracovníci se střídají)</span> <button className="btn ghost sm" onClick={reload}>↻</button></div>
+      {!embedded && <div className="h1"><span>Obsazení lůžek</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· kdo na kterém lůžku bydlí (pracovníci se střídají)</span> <button className="btn ghost sm" onClick={reload}>↻</button></div>}
       {error && <div className="error">{error}</div>}
       <div className="toolbar"><span className="muted">Obsazeno {occupied} / {beds.length} lůžek</span></div>
       <div className="panel">
