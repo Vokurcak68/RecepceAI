@@ -1041,142 +1041,185 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
     <span className="row" style={{ gap: 6 }}><button className="btn sm ghost" onClick={() => set(Math.max(min, v - 1))}>−</button><b style={{ minWidth: 22, textAlign: "center" }}>{v}</b><button className="btn sm ghost" onClick={() => set(Math.min(max, v + 1))}>＋</button></span>
   );
 
+  const stepNames = ["Termín", "Ubytování", "Host", "Platba"];
+  const personCols = ratesEnabled ? "26px minmax(0,1fr) 160px minmax(0,1fr) 92px" : "26px minmax(0,1fr) 160px";
+  const rateOptions = (rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>);
   return (
     <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
-        <div className="inv-head">
-          <div><h2 style={{ margin: 0 }}>Nová rezervace</h2>
-            <div className="muted" style={{ marginTop: 4 }}>{["1 · Termín a hosté", "2 · Ubytování", "3 · Host / odběratel", "4 · Platba a potvrzení"][step - 1]}</div></div>
-          <button className="linkx" onClick={onClose}>zavřít</button>
+      <div className="invoice wz" onClick={(e) => e.stopPropagation()}>
+        <div className="wz-head">
+          <div className="wz-titlerow">
+            <h2>Nová rezervace</h2>
+            <button className="linkx" onClick={onClose}>zavřít</button>
+          </div>
+          {!done && (
+            <div className="wz-steps">
+              {stepNames.map((s, i) => (
+                <div key={s} className={`wz-step${step === i + 1 ? " active" : step > i + 1 ? " done" : ""}`}>
+                  <span className="n">{step > i + 1 ? "✓" : i + 1}</span>{s}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {err && <div className="error">{err}</div>}
+        {err && <div className="error" style={{ margin: "16px 32px 0" }}>{err}</div>}
 
-        {done ? (
-          <div style={{ padding: 12 }}>
-            <div className="ok-msg" style={{ background: "#e6f7ee", color: "var(--ok)", padding: 12, borderRadius: 10 }}>✓ Vytvořeno: {done.map((d) => d.code).join(", ")}{pay === "deposit" && done.length === 1 ? " · vystavena proforma" : ""}</div>
-            <div className="toolbar" style={{ marginTop: 14 }}>
-              <button className="btn" onClick={() => onOpenDetail(done[0].id)}>Otevřít detail</button>
-              <button className="btn ghost" onClick={onCreated}>Hotovo</button>
+        {done ? (<>
+          <div className="wz-body">
+            <div className="wz-done">
+              <div className="circle">✓</div>
+              <h2 style={{ margin: "0 0 8px" }}>Rezervace vytvořena</h2>
+              <div className="muted">Kód: <b style={{ color: "var(--text)", fontFamily: "monospace" }}>{done.map((d) => d.code).join(", ")}</b>{pay === "deposit" && done.length === 1 ? " · vystavena zálohová faktura, e-mail odeslán hostovi" : ""}</div>
             </div>
           </div>
-        ) : (<>
-          {step === 1 && (
-            <div style={{ padding: 12 }}>
-              <div className="toolbar" style={{ flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                <label className="row">Příjezd <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-                <label className="row">Odjezd <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-                <span className="muted">{nights} {nights === 1 ? "noc" : "nocí"}</span>
-              </div>
-              {!bedMode && (
-                <div className="toolbar" style={{ flexWrap: "wrap", gap: 16, marginTop: 10, alignItems: "center" }}>
-                  <span className="row">Počet osob <Stepper v={guests} set={setGuests} min={1} /></span>
-                  <span className="muted">typy osob (dítě/senior…) a jejich cenu zadáš v kroku 3</span>
+          <div className="wz-foot">
+            <span />
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn ghost" onClick={onCreated}>Hotovo</button>
+              <button className="btn" onClick={() => onOpenDetail(done[0].id)}>Otevřít detail ▸</button>
+            </div>
+          </div>
+        </>) : (<>
+          <div className="wz-body">
+            {step === 1 && (
+              <div>
+                <div className="wz-sec">Termín pobytu</div>
+                <div className="wz-row1">
+                  <div className="wz-field wz-big-input" style={{ width: 190 }}><label>Příjezd</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+                  <div className="wz-field wz-big-input" style={{ width: 190 }}><label>Odjezd</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+                  <span className="wz-tag" style={{ marginBottom: 6 }}>{nights} {nights === 1 ? "noc" : "nocí"}</span>
                 </div>
-              )}
-              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn" disabled={busy} onClick={loadAvail} style={{ marginLeft: "auto" }}>Zobrazit volno ▸</button></div>
-            </div>
-          )}
-
-          {step === 2 && !bedMode && (
-            <div style={{ padding: 12 }}>
-              {roomUnits.length === 0 ? <div className="muted">V tomto termínu není volný žádný pokoj.</div> : (
-                <table><thead><tr><th>Typ</th><th>Volných</th><th>Kapacita</th><th>Cena</th><th>Počet</th></tr></thead><tbody>
-                  {roomUnits.map((a) => (
-                    <tr key={a.roomTypeId}>
-                      <td><b>{a.name}</b></td>
-                      <td className="muted">{a.freeUnits}</td>
-                      <td className="muted">{a.capacityAdults} lůžek{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
-                      <td>{a.extraBedsNeeded > 0 ? "od " : ""}{money(Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + ${a.extraBedsNeeded}× přist. ${money(Number(a.extraBedPrice))} — dle typu osoby může klesnout` : ""})</span></td>
-                      <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
-                    </tr>
-                  ))}
-                </tbody></table>
-              )}
-              {totalRooms > 0 && selCapacity < guests && <div className="error" style={{ marginTop: 10 }}>⚠ Kapacita vybraných pokojů ({selCapacity}) nestačí pro {guests} osob — přidej pokoj nebo využij přistýlku.</div>}
-              {totalRooms > 1 && <div className="muted" style={{ marginTop: 8 }}>Více pokojů → vznikne skupina pod jedním kontaktem.</div>}
-              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(1)}>‹ Zpět</button><button className="btn" disabled={!step2Ok} onClick={gotoGuests} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
-            </div>
-          )}
-
-          {step === 2 && bedMode && (
-            <div style={{ padding: 12 }}>
-              <div className="toolbar" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <span className="row">Počet lůžek <Stepper v={bedsWanted} set={setBedsWanted} min={1} /></span>
-                <label className="row"><input type="checkbox" checked={together} onChange={(e) => setTogether(e.target.checked)} /> společně v jednom pokoji</label>
-                <span className="muted">volná lůžka celkem: {totalFreeBeds}</span>
+                {!bedMode && (<>
+                  <div className="wz-sec">Počet osob</div>
+                  <div className="row" style={{ gap: 16 }}><Stepper v={guests} set={setGuests} min={1} /><span className="muted">Typy osob (dítě/senior) a jejich cenu zadáš v kroku 3.</span></div>
+                </>)}
               </div>
-              {together && roomsWithEnough.length > 0 && <div className="muted" style={{ marginTop: 10 }}>Pohromadě možné v: {roomsWithEnough.map((r) => `pok. ${r.roomNumber} (${r.freeBeds})`).join(", ")}.</div>}
-              {together && roomsWithEnough.length === 0 && (
-                <div className="error" style={{ marginTop: 10 }}>
-                  ⚠ Žádný pokoj nemá v tomto termínu volných {bedsWanted} lůžek pohromadě. Volných je celkem {totalFreeBeds}, ale rozptýlených po pokojích.
-                  <div className="toolbar" style={{ marginTop: 8 }}>
-                    <button className="btn sm" onClick={() => setTogether(false)}>Rozdělit do více pokojů</button>
-                    <button className="btn sm ghost" onClick={() => setStep(1)}>Změnit termín</button>
+            )}
+
+            {step === 2 && !bedMode && (
+              <div>
+                <div className="wz-sec">Volné pokoje · {from} – {to} · {guests} {guests === 1 ? "osoba" : "osob"}</div>
+                {roomUnits.length === 0 ? <div className="muted">V tomto termínu není volný žádný pokoj.</div> : roomUnits.map((a) => {
+                  const sel = (counts[a.roomTypeId] ?? 0) > 0;
+                  const price = Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights;
+                  return (
+                    <div key={a.roomTypeId} className={`wz-room${sel ? " sel" : ""}`}>
+                      <div className="rinfo">
+                        <div className="rname">{a.name}</div>
+                        <div className="rmeta">
+                          <span className="wz-tag">{a.capacityAdults} lůžek</span>
+                          {a.maxExtraBeds > 0 && <span className="wz-tag">až {a.maxExtraBeds} přist.</span>}
+                          {a.extraBedsNeeded > 0 && <span className="wz-tag warn">vyžaduje {a.extraBedsNeeded}× přistýlku</span>}
+                          <span className="muted" style={{ fontSize: 13 }}>volné: {a.freeUnits}</span>
+                        </div>
+                      </div>
+                      <div className="rprice">
+                        <div className="big">{a.extraBedsNeeded > 0 ? "od " : ""}{money(price)}</div>
+                        <div className="sub">{money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + přistýlka` : ""}</div>
+                      </div>
+                      <Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} />
+                    </div>
+                  );
+                })}
+                {totalRooms > 0 && selCapacity < guests && <div className="error" style={{ marginTop: 12 }}>⚠ Kapacita vybraných pokojů ({selCapacity}) nestačí pro {guests} osob — přidej pokoj nebo využij přistýlku.</div>}
+                {totalRooms > 1 && <div className="muted" style={{ marginTop: 10 }}>Více pokojů → vznikne skupina pod jedním kontaktem.</div>}
+                {roomUnits.some((a) => a.extraBedsNeeded > 0) && <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>Cena „od" počítá přistýlku v plné sazbě; po zadání typů osob (senior/dítě) v dalším kroku se může snížit.</div>}
+              </div>
+            )}
+
+            {step === 2 && bedMode && (
+              <div>
+                <div className="wz-sec">Lůžka</div>
+                <div className="wz-row1" style={{ alignItems: "center" }}>
+                  <span className="row" style={{ gap: 12 }}><span className="muted">Počet lůžek</span><Stepper v={bedsWanted} set={setBedsWanted} min={1} /></span>
+                  <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={together} onChange={(e) => setTogether(e.target.checked)} style={{ width: "auto" }} /> společně v jednom pokoji</label>
+                  <span className="wz-tag">volná: {totalFreeBeds}</span>
+                </div>
+                {together && roomsWithEnough.length > 0 && <div className="muted" style={{ marginTop: 14 }}>Pohromadě možné v: {roomsWithEnough.map((r) => `pok. ${r.roomNumber} (${r.freeBeds})`).join(", ")}.</div>}
+                {together && roomsWithEnough.length === 0 && (
+                  <div className="error" style={{ marginTop: 14 }}>
+                    ⚠ Žádný pokoj nemá v tomto termínu volných {bedsWanted} lůžek pohromadě. Volných je celkem {totalFreeBeds}, ale rozptýlených po pokojích.
+                    <div className="toolbar" style={{ marginTop: 10 }}>
+                      <button className="btn sm" onClick={() => setTogether(false)}>Rozdělit do více pokojů</button>
+                      <button className="btn sm ghost" onClick={() => setStep(1)}>Změnit termín</button>
+                    </div>
                   </div>
-                </div>
-              )}
-              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(1)}>‹ Zpět</button><button className="btn" disabled={!step2Ok} onClick={gotoGuests} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
-            </div>
-          )}
+                )}
+              </div>
+            )}
 
-          {step === 3 && (
-            <div style={{ padding: 12 }}>
-              <div className="toolbar" style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <button className="btn sm" onClick={() => setPickGuest(true)}>📇 Vybrat z adresáře</button>
-                {pickedGuestId ? <span className="muted">z adresáře: <b>{g.firstName} {g.lastName}</b> <button className="linkx" onClick={() => { setPickedGuestId(null); setG({ firstName: "", lastName: "", email: "", phone: "", language: "cs", dob: "", rateId: "" }); }}>nový host</button></span> : <span className="muted">nebo vyplň nového hosta níže</span>}
-              </div>
-              <div className="row" style={{ gap: 10 }}>
-                <div style={{ flex: 1 }}><label className="muted">Jméno</label><input style={fullInput} value={g.firstName} onChange={(e) => setG({ ...g, firstName: e.target.value })} /></div>
-                <div style={{ flex: 1 }}><label className="muted">Příjmení</label><input style={fullInput} value={g.lastName} onChange={(e) => setG({ ...g, lastName: e.target.value })} /></div>
-              </div>
-              <div className="row" style={{ gap: 10, marginTop: 8 }}>
-                <div style={{ flex: 1 }}><label className="muted">E-mail</label><input style={fullInput} value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} /></div>
-                <div style={{ flex: 1 }}><label className="muted">Telefon</label><input style={fullInput} value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} /></div>
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <label className="muted">Osoby — jméno a datum narození{ratesEnabled ? " (typ osoby se dle věku vybere sám; uprchlíka ap. ručně) — určuje cenu" : " (věk kvůli pobytovému poplatku)"}</label>
-                <div className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
-                  <span className="muted" style={{ minWidth: 64 }}>1. {g.firstName || "host"}</span>
-                  <label className="row">nar. <input type="date" value={g.dob} onChange={(e) => setPersonDob(0, e.target.value)} /></label>
-                  {ratesEnabled && <><select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select><span className="muted">{g.rateId ? `${money(ratePrice(g.rateId))}/noc` : ""}</span></>}
+            {step === 3 && (
+              <div>
+                <div className="wz-sec" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 0 }}>
+                  <span>Kontakt na hosta</span>
+                  <button className="btn sm" onClick={() => setPickGuest(true)}>📇 Vybrat z adresáře</button>
+                </div>
+                {pickedGuestId && <div className="muted" style={{ marginBottom: 12 }}>Z adresáře: <b style={{ color: "var(--text)" }}>{g.firstName} {g.lastName}</b> · <button className="linkx" onClick={() => { setPickedGuestId(null); setG({ firstName: "", lastName: "", email: "", phone: "", language: "cs", dob: "", rateId: "" }); }}>nový host</button></div>}
+                <div className="wz-grid">
+                  <div className="wz-field"><label>Jméno</label><input value={g.firstName} onChange={(e) => setG({ ...g, firstName: e.target.value })} /></div>
+                  <div className="wz-field"><label>Příjmení</label><input value={g.lastName} onChange={(e) => setG({ ...g, lastName: e.target.value })} /></div>
+                  <div className="wz-field"><label>E-mail</label><input value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} /></div>
+                  <div className="wz-field"><label>Telefon</label><input value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} /></div>
+                </div>
+
+                <div className="wz-sec">Osoby <span style={{ textTransform: "none", fontWeight: 400, color: "var(--muted)", letterSpacing: 0 }}>· {ratesEnabled ? "typ se dle data narození vybere sám (uprchlíka ručně) — určuje cenu" : "datum narození kvůli pobytovému poplatku"}</span></div>
+                <div className="wz-person" style={{ gridTemplateColumns: personCols }}>
+                  <span className="pidx">1</span>
+                  <div style={{ fontWeight: 600 }}>{g.firstName || "Primární host"} {g.lastName}</div>
+                  <input type="date" value={g.dob} onChange={(e) => setPersonDob(0, e.target.value)} />
+                  {ratesEnabled && <select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{rateOptions}</select>}
+                  {ratesEnabled && <span className="pprice">{g.rateId ? `${money(ratePrice(g.rateId))}/noc` : ""}</span>}
                 </div>
                 {extra.map((p, i) => (
-                  <div key={i} className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                    <span className="muted" style={{ minWidth: 64 }}>{i + 2}.</span>
-                    <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} style={{ width: 120 }} />
-                    <label className="row">nar. <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} /></label>
-                    {ratesEnabled && <><select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select><span className="muted">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span></>}
+                  <div key={i} className="wz-person" style={{ gridTemplateColumns: personCols }}>
+                    <span className="pidx">{i + 2}</span>
+                    <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} />
+                    <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} />
+                    {ratesEnabled && <select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{rateOptions}</select>}
+                    {ratesEnabled && <span className="pprice">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span>}
                   </div>
                 ))}
                 {bedMode
-                  ? (ratesEnabled ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>) : null)
+                  ? (ratesEnabled ? (allTyped ? <div style={{ marginTop: 16, fontSize: 15 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 16 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>) : null)
                   : (extraBedSurcharge > 0
-                    ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)} + přistýlky {money(extraBedSurcharge)} dle osob na nich, bez pobyt. poplatku)</span></div>
-                    : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se ocení dle typu osoby na ní (senior/dítě…); bez typu dle ceny přistýlky u pokoje.</div>)}
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <label className="muted">Odběratel</label><br />
-                <label className="row" style={{ gap: 4 }}><input type="radio" checked={customer === "guest"} onChange={() => setCustomer("guest")} /> host</label>{" "}
-                <label className="row" style={{ gap: 4 }}><input type="radio" checked={customer === "company"} onChange={() => setCustomer("company")} /> firma</label>
-                {customer === "company" && <> {company ? <b> {company.name}</b> : <span className="muted"> — nevybrána</span>} <button className="btn sm" onClick={() => setPickCo(true)}>{company ? "Změnit" : "Vybrat firmu"}</button></>}
-              </div>
-              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(2)}>‹ Zpět</button><button className="btn" disabled={!g.firstName.trim() || !g.lastName.trim() || (customer === "company" && !company)} onClick={() => setStep(4)} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
-            </div>
-          )}
+                    ? <div style={{ marginTop: 16, fontSize: 15 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)} + přistýlky {money(extraBedSurcharge)} dle osob na nich, bez pobyt. poplatku)</span></div>
+                    : <div className="muted" style={{ marginTop: 16 }}>Cena = cena pokoje. Přistýlka se ocení dle typu osoby na ní (senior/dítě…); bez typu dle ceny přistýlky u pokoje.</div>)}
 
-          {step === 4 && (
-            <div style={{ padding: 12 }}>
-              <div className="muted" style={{ marginBottom: 10 }}>
-                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {personCount} osob · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{(bedMode ? allTyped : estAccommodation > 0) ? ` · ubytování ≈ ${money(estAccommodation)}` : ""}
+                <div className="wz-sec">Odběratel</div>
+                <div className="wz-pay">
+                  <label className={customer === "guest" ? "sel" : ""}><input type="radio" checked={customer === "guest"} onChange={() => setCustomer("guest")} /> Host</label>
+                  <label className={customer === "company" ? "sel" : ""}><input type="radio" checked={customer === "company"} onChange={() => setCustomer("company")} /> Firma {customer === "company" && (company ? <b style={{ marginLeft: "auto" }}>{company.name}</b> : <span className="muted" style={{ marginLeft: "auto", fontWeight: 400 }}>nevybrána</span>)}{customer === "company" && <button className="btn sm" style={{ marginLeft: company ? 10 : "auto" }} onClick={(e) => { e.preventDefault(); setPickCo(true); }}>{company ? "Změnit" : "Vybrat"}</button>}</label>
+                </div>
               </div>
-              <label className="muted">Platba</label><br />
-              <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "arrival"} onChange={() => setPay("arrival")} /> při příjezdu</label>{" "}
-              <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "departure"} onChange={() => setPay("departure")} /> při odjezdu</label>{" "}
-              {!bedMode && totalRooms === 1 && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> zálohou <input type="number" min={0} max={100} style={{ width: 56 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} />%</label>}{" "}
-              {customer === "company" && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> na fakturu firmě</label>}
-              <div className="toolbar" style={{ marginTop: 18 }}><button className="btn ghost" onClick={() => setStep(3)}>‹ Zpět</button><button className="btn" disabled={busy} onClick={create} style={{ marginLeft: "auto" }}>{busy ? "Vytvářím…" : "Vytvořit rezervaci ✓"}</button></div>
-            </div>
-          )}
+            )}
+
+            {step === 4 && (
+              <div>
+                <div className="wz-summary">
+                  <div className="kv"><span>Pobyt</span><b>{from} – {to} · {nights} {nights === 1 ? "noc" : "nocí"}</b></div>
+                  <div className="kv"><span>{bedMode ? "Lůžka" : "Pokoje"}</span><b>{bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {personCount} {personCount === 1 ? "osoba" : "osob"}</b></div>
+                  <div className="kv"><span>Host</span><b>{g.firstName} {g.lastName}</b></div>
+                  {customer === "company" && company && <div className="kv"><span>Odběratel</span><b>{company.name}</b></div>}
+                  {(bedMode ? allTyped : estAccommodation > 0) && <div className="kv tot"><span>Ubytování <span style={{ fontSize: 12 }}>(bez pobyt. poplatku)</span></span><b>≈ {money(estAccommodation)}</b></div>}
+                </div>
+                <div className="wz-sec" style={{ marginTop: 0 }}>Platba</div>
+                <div className="wz-pay">
+                  <label className={pay === "arrival" ? "sel" : ""}><input type="radio" checked={pay === "arrival"} onChange={() => setPay("arrival")} /> Při příjezdu</label>
+                  <label className={pay === "departure" ? "sel" : ""}><input type="radio" checked={pay === "departure"} onChange={() => setPay("departure")} /> Při odjezdu</label>
+                  {!bedMode && totalRooms === 1 && <label className={pay === "deposit" ? "sel" : ""}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> Zálohou <input type="number" min={0} max={100} style={{ width: 64, marginLeft: 6 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} /> %</label>}
+                  {customer === "company" && <label className={pay === "company" ? "sel" : ""}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> Na fakturu firmě</label>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="wz-foot">
+            <button className="btn ghost" style={{ visibility: step === 1 ? "hidden" : "visible" }} onClick={() => setStep(step - 1)}>‹ Zpět</button>
+            {step === 1 && <button className="btn" disabled={busy} onClick={loadAvail}>Zobrazit dostupnost ▸</button>}
+            {step === 2 && <button className="btn" disabled={!step2Ok} onClick={gotoGuests}>Pokračovat ▸</button>}
+            {step === 3 && <button className="btn" disabled={!g.firstName.trim() || !g.lastName.trim() || (customer === "company" && !company)} onClick={() => setStep(4)}>Pokračovat ▸</button>}
+            {step === 4 && <button className="btn" disabled={busy} onClick={create}>{busy ? "Vytvářím…" : "Vytvořit rezervaci ✓"}</button>}
+          </div>
         </>)}
         {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setCompany({ id: c.id, name: c.name })); setPickCo(false); }} />}
         {pickGuest && <GuestPickerOverlay prefill={g.lastName || g.email || ""} onClose={() => setPickGuest(false)} onPick={(gid) => { api.guestProfile(gid).then((p) => { setG((s) => ({ ...s, firstName: p.guest.firstName, lastName: p.guest.lastName, email: p.guest.email ?? "", phone: p.guest.phone ?? "", language: p.guest.language ?? "cs" })); setPickedGuestId(gid); }); setPickGuest(false); }} />}
