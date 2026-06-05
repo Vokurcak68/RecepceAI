@@ -963,8 +963,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const rateByDob = (dob: string): string => { const age = ageOf(dob); if (age == null) return ""; const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom != null || r.ageTo != null) && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0]?.id ?? ""; };
   const ratePrice = (id: string) => { const r = (rates.data ?? []).find((x) => x.id === id); return r ? Number(r.pricePerNight) : 0; };
   const allPersons = [g, ...extra];
-  // Příplatky za typy osob (přistýlka apod.) — k ceně pokoje navíc. Ubytovna: čistý součet osob.
-  const surchargeTotal = allPersons.filter((p) => p.rateId).reduce((s, p) => s + ratePrice(p.rateId), 0) * nights;
+  // Ceny osob s typem (v pořadí zadání) — použijí se k ocenění přistýlek; ubytovna = čistý součet osob × noci.
+  const typedPersonPrices = allPersons.filter((p) => p.rateId).map((p) => ratePrice(p.rateId));
   const perPersonTotal = allPersons.reduce((s, p) => s + ratePrice(p.rateId), 0) * nights;
   const allTyped = ratesEnabled && allPersons.every((p) => p.rateId);
 
@@ -986,8 +986,11 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.maxExtraBeds), 0);
   const roomBaseTotal = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * Number(a.roomTotal), 0);
   const selUnit = roomUnits.find((a) => (counts[a.roomTypeId] ?? 0) > 0);
-  const extraBedSurcharge = (!bedMode && totalRooms === 1 && selUnit) ? selUnit.extraBedsNeeded * Number(selUnit.extraBedPrice) * nights : 0;
-  const estAccommodation = bedMode ? perPersonTotal : roomBaseTotal + extraBedSurcharge + surchargeTotal;
+  // Přistýlka se ocení dle typu osoby na ní (typované osoby obsadí přistýlky v pořadí zadání), bez typu cena přistýlky z pokoje.
+  const extraBedSurcharge = (!bedMode && totalRooms === 1 && selUnit)
+    ? Array.from({ length: selUnit.extraBedsNeeded }, (_, k) => k < typedPersonPrices.length ? typedPersonPrices[k] : Number(selUnit.extraBedPrice)).reduce((s, p) => s + p, 0) * nights
+    : 0;
+  const estAccommodation = bedMode ? perPersonTotal : roomBaseTotal + extraBedSurcharge;
   const roomsWithEnough = (freeRooms ?? []).filter((r) => r.freeBeds >= bedsWanted);
   const totalFreeBeds = (freeRooms ?? []).reduce((s, r) => s + r.freeBeds, 0);
   const bedsTogetherOk = !together || roomsWithEnough.length > 0;
@@ -1017,13 +1020,13 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           ids = [{ id: r.id, code: r.code }];
         } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
-      // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + příplatky za typy (přistýlka apod.).
+      // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + přistýlky oceněné dle typu osoby na nich.
       if (bedMode) {
         for (let i = 0; i < ids.length; i++) { const p = memberPersons[i]; if (p?.rateId) await api.setReservationAccommodation(ids[i].id, ratePrice(p.rateId) * nights); }
-      } else if (ids.length === 1 && (surchargeTotal > 0 || extraBedSurcharge > 0)) {
+      } else if (ids.length === 1 && extraBedSurcharge > 0) {
         const det = await api.reservation(ids[0].id);
         const base = Number(det.totalAmount) - Number(det.cityTax ?? 0);
-        await api.setReservationAccommodation(ids[0].id, base + extraBedSurcharge + surchargeTotal);
+        await api.setReservationAccommodation(ids[0].id, base + extraBedSurcharge);
       }
       for (const it of ids) {
         if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
@@ -1083,7 +1086,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       <td><b>{a.name}</b></td>
                       <td className="muted">{a.freeUnits}</td>
                       <td className="muted">{a.capacityAdults} lůžek{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
-                      <td>{money(Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + ${a.extraBedsNeeded}× přist. ${money(Number(a.extraBedPrice))}` : ""})</span></td>
+                      <td>{a.extraBedsNeeded > 0 ? "od " : ""}{money(Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + ${a.extraBedsNeeded}× přist. ${money(Number(a.extraBedPrice))} — dle typu osoby může klesnout` : ""})</span></td>
                       <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
                     </tr>
                   ))}
@@ -1147,9 +1150,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                 ))}
                 {bedMode
                   ? (ratesEnabled ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>) : null)
-                  : ((extraBedSurcharge > 0 || surchargeTotal > 0)
-                    ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)}{extraBedSurcharge > 0 ? ` + ${selUnit?.extraBedsNeeded}× přistýlka ${money(Number(selUnit?.extraBedPrice ?? 0))}/noc` : ""}{surchargeTotal > 0 ? ` + typy osob ${money(surchargeTotal)}` : ""}, bez pobyt. poplatku)</span></div>
-                    : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se připočítá automaticky dle pokoje.</div>)}
+                  : (extraBedSurcharge > 0
+                    ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)} + přistýlky {money(extraBedSurcharge)} dle osob na nich, bez pobyt. poplatku)</span></div>
+                    : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se ocení dle typu osoby na ní (senior/dítě…); bez typu dle ceny přistýlky u pokoje.</div>)}
               </div>
               <div style={{ marginTop: 12 }}>
                 <label className="muted">Odběratel</label><br />
@@ -1164,7 +1167,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           {step === 4 && (
             <div style={{ padding: 12 }}>
               <div className="muted" style={{ marginBottom: 10 }}>
-                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {personCount} osob · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{(bedMode ? allTyped : surchargeTotal > 0) ? ` · ubytování ≈ ${money(estAccommodation)}` : ""}
+                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {personCount} osob · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{(bedMode ? allTyped : estAccommodation > 0) ? ` · ubytování ≈ ${money(estAccommodation)}` : ""}
               </div>
               <label className="muted">Platba</label><br />
               <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "arrival"} onChange={() => setPay("arrival")} /> při příjezdu</label>{" "}
