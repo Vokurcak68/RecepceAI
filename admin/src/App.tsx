@@ -114,7 +114,7 @@ export function App() {
     { label: "Nastavení", icon: "🏨", items: [
       roomsTab,
       { id: "types", label: "Typy & ceny" },
-      ...(prop?.inventoryUnit === "bed" ? [{ id: "personrates", label: "Číselník osob" }] : []),
+      { id: "personrates", label: "Číselník osob" },
       { id: "equipment", label: "Vybavení" },
       { id: "ical", label: "iCal synchronizace" },
     ] },
