@@ -1587,6 +1587,19 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
   const saveRate = async () => { if (!rate.roomTypeId || !rate.price) return; await api.setRate({ roomTypeId: rate.roomTypeId, date: rate.date, price: parseFloat(rate.price) }); setMsg(`Cena na ${rate.date} nastavena.`); setRate({ ...rate, price: "" }); };
   const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), maxExtraBeds: Number(nw.maxExtraBeds), extraBedPrice: nw.extraBedPrice ? Number(nw.extraBedPrice) : 0, basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, maxExtraBeds: 0, extraBedPrice: "", basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
 
+  // Buňka „Kapacita" — řádné lůžka + samostatně přistýlky (počet × cena/noc). Pojmenováno slovy, ať se „2+1" neplete s „dvoulůžko + přistýlka".
+  const capCell = (t: RoomType) => (
+    <>
+      <div>{t.capacityAdults} {t.capacityAdults === 1 ? "lůžko" : t.capacityAdults < 5 ? "lůžka" : "lůžek"}{t.capacityChildren > 0 ? ` + ${t.capacityChildren} dět.` : ""}</div>
+      <div className="muted" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+        Přistýlky:
+        <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 60 }} onBlur={(e) => saveExtra(t.id, e.target.value)} />
+        za
+        <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 90 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč/noc
+      </div>
+    </>
+  );
+
   return (
     <>
       <div className="h1">Typy {prop.inventoryUnit === "bed" ? "lůžek" : "pokojů"} & ceny</div>
@@ -1598,7 +1611,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <Table cols={prop.allowLongTerm ? ["Název", "Kapacita", "Cena/noc", "Cena/týden", "Cena/měsíc"] : ["Název", "Kapacita", "Pokojů", "Cena/noc"]} rows={data ?? []} empty="Žádné typy"
           render={(t: RoomType) => prop.allowLongTerm ? (
             <tr key={t.id}>
-              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 44 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /> à <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 64 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč</span></td>
+              <td><b>{t.name}</b></td><td>{capCell(t)}</td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
               <td><PriceCell v={t.weeklyPrice} onSave={(v) => saveLong(t.id, "weeklyPrice", v)} /></td>
               <td><PriceCell v={t.monthlyPrice} onSave={(v) => saveLong(t.id, "monthlyPrice", v)} /></td>
@@ -1606,7 +1619,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
           ) : (
             <tr key={t.id}>
               <td><b>{t.name}</b><div className="muted">{t.amenities.join(", ")}</div></td>
-              <td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 44 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /> à <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 64 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč</span></td><td>{t._count?.rooms ?? "—"}</td>
+              <td>{capCell(t)}</td><td>{t._count?.rooms ?? "—"}</td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
             </tr>
           )} />
@@ -1617,8 +1630,8 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <div className="toolbar" style={{ padding: 16 }}>
           <input placeholder="Název" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
           <label className="row">Kapacita <input type="number" min={1} style={{ width: 70 }} value={nw.capacityAdults} onChange={(e) => setNw({ ...nw, capacityAdults: Number(e.target.value) })} /></label>
-          <label className="row">Přistýlky <input type="number" min={0} style={{ width: 56 }} value={nw.maxExtraBeds} onChange={(e) => setNw({ ...nw, maxExtraBeds: Number(e.target.value) })} /></label>
-          <label className="row">à přist. Kč <input type="number" min={0} style={{ width: 80 }} value={nw.extraBedPrice} onChange={(e) => setNw({ ...nw, extraBedPrice: e.target.value })} /></label>
+          <label className="row">Přistýlky <input type="number" min={0} style={{ width: 64 }} value={nw.maxExtraBeds} onChange={(e) => setNw({ ...nw, maxExtraBeds: Number(e.target.value) })} /></label>
+          <label className="row">Cena přist./noc <input type="number" min={0} style={{ width: 96 }} value={nw.extraBedPrice} onChange={(e) => setNw({ ...nw, extraBedPrice: e.target.value })} /></label>
           <input placeholder="Cena/noc" style={{ width: 110 }} value={nw.basePrice} onChange={(e) => setNw({ ...nw, basePrice: e.target.value })} />
           {prop.allowLongTerm && <input placeholder="Cena/týden" style={{ width: 110 }} value={nw.weeklyPrice} onChange={(e) => setNw({ ...nw, weeklyPrice: e.target.value })} />}
           {prop.allowLongTerm && <input placeholder="Cena/měsíc" style={{ width: 110 }} value={nw.monthlyPrice} onChange={(e) => setNw({ ...nw, monthlyPrice: e.target.value })} />}
