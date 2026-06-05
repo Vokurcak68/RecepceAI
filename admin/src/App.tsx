@@ -963,8 +963,10 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const rateByDob = (dob: string): string => { const age = ageOf(dob); if (age == null) return ""; const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom != null || r.ageTo != null) && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0]?.id ?? ""; };
   const ratePrice = (id: string) => { const r = (rates.data ?? []).find((x) => x.id === id); return r ? Number(r.pricePerNight) : 0; };
   const allPersons = [g, ...extra];
-  const allTyped = ratesEnabled && allPersons.every((p) => p.rateId);
+  // Příplatky za typy osob (přistýlka apod.) — k ceně pokoje navíc. Ubytovna: čistý součet osob.
+  const surchargeTotal = allPersons.filter((p) => p.rateId).reduce((s, p) => s + ratePrice(p.rateId), 0) * nights;
   const perPersonTotal = allPersons.reduce((s, p) => s + ratePrice(p.rateId), 0) * nights;
+  const allTyped = ratesEnabled && allPersons.every((p) => p.rateId);
 
   const loadAvail = async () => {
     setErr(""); setBusy(true);
@@ -982,6 +984,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const bedType = (avail ?? []).find((a) => a.unit === "bed");
   const totalRooms = Object.values(counts).reduce((s, n) => s + n, 0);
   const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.capacityChildren + a.maxExtraBeds), 0);
+  const roomBaseTotal = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * Number(a.roomTotal), 0);
+  const estAccommodation = bedMode ? perPersonTotal : roomBaseTotal + surchargeTotal;
   const roomsWithEnough = (freeRooms ?? []).filter((r) => r.freeBeds >= bedsWanted);
   const totalFreeBeds = (freeRooms ?? []).reduce((s, r) => s + r.freeBeds, 0);
   const bedsTogetherOk = !together || roomsWithEnough.length > 0;
@@ -1011,10 +1015,13 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           ids = [{ id: r.id, code: r.code }];
         } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
-      // Per-person ceník: přepočti cenu ubytování dle součtu sazeb osob (jen když mají všichni typ).
-      if (allTyped) {
-        if (bedMode && ids.length > 1) { for (let i = 0; i < ids.length; i++) { const p = memberPersons[i]; if (p?.rateId) await api.setReservationAccommodation(ids[i].id, ratePrice(p.rateId) * nights); } }
-        else if (ids.length === 1) await api.setReservationAccommodation(ids[0].id, perPersonTotal);
+      // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + příplatky za typy (přistýlka apod.).
+      if (bedMode) {
+        for (let i = 0; i < ids.length; i++) { const p = memberPersons[i]; if (p?.rateId) await api.setReservationAccommodation(ids[i].id, ratePrice(p.rateId) * nights); }
+      } else if (ids.length === 1 && surchargeTotal > 0) {
+        const det = await api.reservation(ids[0].id);
+        const base = Number(det.totalAmount) - Number(det.cityTax ?? 0);
+        await api.setReservationAccommodation(ids[0].id, base + surchargeTotal);
       }
       for (const it of ids) {
         if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
@@ -1139,8 +1146,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       <span className="muted">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span>
                     </div>
                   ))}
-                  {allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování dle ceníku: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div>
-                    : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se cena spočítala dle ceníku (jinak zůstane cena pokoje).</div>}
+                  {bedMode
+                    ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>)
+                    : (surchargeTotal > 0 ? <div style={{ marginTop: 8 }}><b>Příplatky (přistýlka/typy): +{money(surchargeTotal)}</b> <span className="muted">→ ubytování ≈ {money(estAccommodation)} (pokoj {money(roomBaseTotal)} + příplatky, bez pobyt. poplatku)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Typ osoby přiřaď jen nadpočetným (přistýlka) — připočte se k ceně pokoje.</div>)}
                 </div>
               )}
               <div style={{ marginTop: 12 }}>
@@ -1156,7 +1164,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           {step === 4 && (
             <div style={{ padding: 12 }}>
               <div className="muted" style={{ marginBottom: 10 }}>
-                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {personCount} osob · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{allTyped ? ` · ubytování ${money(perPersonTotal)}` : ""}
+                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {personCount} osob · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{(bedMode ? allTyped : surchargeTotal > 0) ? ` · ubytování ≈ ${money(estAccommodation)}` : ""}
               </div>
               <label className="muted">Platba</label><br />
               <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "arrival"} onChange={() => setPay("arrival")} /> při příjezdu</label>{" "}
