@@ -293,7 +293,10 @@ tr.row-click:hover td { background: #f3f6ff; }
 .wz-row1 { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
 .wz-big-input input { font-size: 15px; padding: 10px 13px; }
 
-/* karta pokoje */
+/* mřížka + karta pokoje */
+.wz-rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.wz-rooms .wz-room { margin-bottom: 0; }
+.wz-filter { width: 100%; margin-bottom: 14px; padding: 10px 14px; }
 .wz-room { display: flex; align-items: center; gap: 18px; padding: 16px 20px; border: 1.5px solid var(--line); border-radius: 13px; margin-bottom: 12px; transition: border-color .15s, box-shadow .15s, background .15s; }
 .wz-room.sel { border-color: var(--accent); box-shadow: 0 4px 16px rgba(79,124,255,.13); background: #fafcff; }
 .wz-room .rinfo { flex: 1; min-width: 0; }

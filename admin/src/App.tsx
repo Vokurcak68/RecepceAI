@@ -951,6 +951,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const ratesEnabled = (rates.data ?? []).length > 0;
   const [pickGuest, setPickGuest] = useState(false);
   const [pickedGuestId, setPickedGuestId] = useState<string | null>(null);
+  const [roomQ, setRoomQ] = useState("");
   const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company">("arrival");
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
   const [busy, setBusy] = useState(false);
@@ -981,6 +982,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const setPersonRate = (i: number, rid: string) => { if (i === 0) setG((s) => ({ ...s, rateId: rid })); else setExtra((arr) => arr.map((p, idx) => idx === i - 1 ? { ...p, rateId: rid } : p)); };
 
   const roomUnits = (avail ?? []).filter((a) => a.unit === "room");
+  const normTxt = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const filteredRooms = roomQ.trim() ? roomUnits.filter((a) => normTxt(a.name).includes(normTxt(roomQ))) : roomUnits;
   const bedType = (avail ?? []).find((a) => a.unit === "bed");
   const totalRooms = Object.values(counts).reduce((s, n) => s + n, 0);
   const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.maxExtraBeds), 0);
@@ -1098,31 +1101,36 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
 
             {step === 2 && !bedMode && (
               <div>
-                <div className="wz-sec">Volné pokoje · {from} – {to} · {guests} {guests === 1 ? "osoba" : "osob"}</div>
-                {roomUnits.length === 0 ? <div className="muted">V tomto termínu není volný žádný pokoj.</div> : roomUnits.map((a) => {
-                  const sel = (counts[a.roomTypeId] ?? 0) > 0;
-                  const price = Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights;
-                  return (
-                    <div key={a.roomTypeId} className={`wz-room${sel ? " sel" : ""}`}>
-                      <div className="rinfo">
-                        <div className="rname">{a.name}</div>
-                        <div className="rmeta">
-                          <span className="wz-tag">{a.capacityAdults} lůžek</span>
-                          {a.maxExtraBeds > 0 && <span className="wz-tag">až {a.maxExtraBeds} přist.</span>}
-                          {a.extraBedsNeeded > 0 && <span className="wz-tag warn">vyžaduje {a.extraBedsNeeded}× přistýlku</span>}
-                          <span className="muted" style={{ fontSize: 13 }}>volné: {a.freeUnits}</span>
+                <div className="wz-sec">Volné pokoje · {from} – {to} · {guests} {guests === 1 ? "osoba" : "osob"} <span style={{ textTransform: "none", fontWeight: 400, color: "var(--muted)", letterSpacing: 0 }}>· {roomUnits.length} {roomUnits.length === 1 ? "typ" : roomUnits.length < 5 ? "typy" : "typů"}</span></div>
+                {roomUnits.length > 6 && <input className="wz-filter" placeholder="🔍 Filtrovat pokoje podle názvu…" value={roomQ} onChange={(e) => setRoomQ(e.target.value)} />}
+                {roomUnits.length === 0 ? <div className="muted">V tomto termínu není volný žádný pokoj.</div> : filteredRooms.length === 0 ? <div className="muted">Žádný typ neodpovídá „{roomQ}".</div> : (
+                  <div className="wz-rooms">
+                    {filteredRooms.map((a) => {
+                      const sel = (counts[a.roomTypeId] ?? 0) > 0;
+                      const price = Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights;
+                      return (
+                        <div key={a.roomTypeId} className={`wz-room${sel ? " sel" : ""}`}>
+                          <div className="rinfo">
+                            <div className="rname">{a.name}</div>
+                            <div className="rmeta">
+                              <span className="wz-tag">{a.capacityAdults} lůžek</span>
+                              {a.maxExtraBeds > 0 && <span className="wz-tag">až {a.maxExtraBeds} přist.</span>}
+                              {a.extraBedsNeeded > 0 && <span className="wz-tag warn">+{a.extraBedsNeeded}× přist.</span>}
+                              <span className="muted" style={{ fontSize: 13 }}>volné: {a.freeUnits}</span>
+                            </div>
+                          </div>
+                          <div className="rprice">
+                            <div className="big">{a.extraBedsNeeded > 0 ? "od " : ""}{money(price)}</div>
+                            <div className="sub">{money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + přist.` : ""}</div>
+                          </div>
+                          <Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} />
                         </div>
-                      </div>
-                      <div className="rprice">
-                        <div className="big">{a.extraBedsNeeded > 0 ? "od " : ""}{money(price)}</div>
-                        <div className="sub">{money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + přistýlka` : ""}</div>
-                      </div>
-                      <Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} />
-                    </div>
-                  );
-                })}
-                {totalRooms > 0 && selCapacity < guests && <div className="error" style={{ marginTop: 12 }}>⚠ Kapacita vybraných pokojů ({selCapacity}) nestačí pro {guests} osob — přidej pokoj nebo využij přistýlku.</div>}
-                {totalRooms > 1 && <div className="muted" style={{ marginTop: 10 }}>Více pokojů → vznikne skupina pod jedním kontaktem.</div>}
+                      );
+                    })}
+                  </div>
+                )}
+                {totalRooms > 0 && selCapacity < guests && <div className="error" style={{ marginTop: 14 }}>⚠ Kapacita vybraných pokojů ({selCapacity}) nestačí pro {guests} osob — přidej pokoj nebo využij přistýlku.</div>}
+                {totalRooms > 1 && <div className="muted" style={{ marginTop: 12 }}>Více pokojů → vznikne skupina pod jedním kontaktem.</div>}
                 {roomUnits.some((a) => a.extraBedsNeeded > 0) && <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>Cena „od" počítá přistýlku v plné sazbě; po zadání typů osob (senior/dítě) v dalším kroku se může snížit.</div>}
               </div>
             )}
@@ -1215,6 +1223,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
 
           <div className="wz-foot">
             <button className="btn ghost" style={{ visibility: step === 1 ? "hidden" : "visible" }} onClick={() => setStep(step - 1)}>‹ Zpět</button>
+            {step === 2 && !bedMode && <span className="muted" style={{ fontSize: 13 }}>{totalRooms > 0 ? `Vybráno: ${totalRooms} pokoj(ů) · kapacita ${selCapacity} pro ${guests} ${guests === 1 ? "osobu" : "osob"}` : "Vyber alespoň jeden pokoj"}</span>}
             {step === 1 && <button className="btn" disabled={busy} onClick={loadAvail}>Zobrazit dostupnost ▸</button>}
             {step === 2 && <button className="btn" disabled={!step2Ok} onClick={gotoGuests}>Pokračovat ▸</button>}
             {step === 3 && <button className="btn" disabled={!g.firstName.trim() || !g.lastName.trim() || (customer === "company" && !company)} onClick={() => setStep(4)}>Pokračovat ▸</button>}
