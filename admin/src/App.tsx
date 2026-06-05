@@ -1238,6 +1238,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
             <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
             <label className="row">Jazyk hosta <select value={f.language} onChange={(e) => setF({ ...f, language: e.target.value })}>{GUEST_LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}</select></label>
           </div>
+          {f.roomTypeId && (() => { const t = (types.data ?? []).find((x) => x.id === f.roomTypeId); const n = Math.max(1, Math.round((Date.parse(f.to) - Date.parse(f.from)) / 864e5)); return t ? <div className="muted" style={{ margin: "4px 0 10px" }}>Orientační cena: <b style={{ color: "#243240" }}>{money(Number(t.basePrice) * n)}</b> ({n} {n === 1 ? "noc" : "nocí"} × {money(t.basePrice)}) <span style={{ fontSize: 12 }}>— bez pobyt. poplatku a sezónních cen</span></div> : null; })()}
           {prop.type === "ubytovna" && (
             <div className="toolbar">
               <input placeholder="Fakturovat firmě (název)" value={f.billingCompany} onChange={(e) => setF({ ...f, billingCompany: e.target.value })} />
