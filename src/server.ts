@@ -390,6 +390,7 @@ adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReser
 
 // ── Lůžková obsazenost (firemní ubytovny) ──
 adminRouter.get("/reports/movements", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return admin.movementsReport(pid(res), new Date(q.from), new Date(q.to)); }));
+adminRouter.get("/availability", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr, guests: z.coerce.number().int().positive().default(1) }).parse(req.query); return getAvailability(pid(res), new Date(q.from), new Date(q.to), q.guests); }));
 
 // ── Číselník typů osob (ceny dle věku/kategorie) ──
 const personRateBody = z.object({ name: z.string().min(1), ageFrom: z.number().int().min(0).max(120).nullable().optional(), ageTo: z.number().int().min(0).max(120).nullable().optional(), pricePerNight: z.number().nonnegative(), sortOrder: z.number().int().optional(), active: z.boolean().optional() });
@@ -398,6 +399,7 @@ adminRouter.post("/person-rates", h((req, res) => personrates.createPersonRate(p
 adminRouter.patch("/person-rates/:id", h((req, res) => personrates.updatePersonRate(pid(res), req.params.id, personRateBody.partial().parse(req.body))));
 adminRouter.delete("/person-rates/:id", h((req, res) => personrates.deletePersonRate(pid(res), req.params.id)));
 adminRouter.get("/beds/board", h((_req, res) => occupancy.bedBoard(pid(res))));
+adminRouter.get("/beds/free-per-room", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return occupancy.freeBedsPerRoom(pid(res), q.from, q.to); }));
 adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupancies(pid(res), req.params.id)));
 const occBody = z.object({
   bedId: z.string().uuid(), fromDate: dateStr, toDate: dateStr,

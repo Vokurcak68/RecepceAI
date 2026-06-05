@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -796,6 +796,206 @@ function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
   );
 }
 
+// ── Průvodce „Nová rezervace" (sjednocený tok pro recepci) ───
+function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail }: { prop: Property; onClose: () => void; onCreated: () => void; onOpenDetail: (rid: string) => void }) {
+  const bedMode = prop.inventoryUnit === "bed";
+  const [step, setStep] = useState(1);
+  const [from, setFrom] = useState(todayIso());
+  const [to, setTo] = useState(tomorrowIso());
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+  const [childAges, setChildAges] = useState<number[]>([]);
+  const [avail, setAvail] = useState<AvailUnit[] | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [bedsWanted, setBedsWanted] = useState(2);
+  const [together, setTogether] = useState(true);
+  const [freeRooms, setFreeRooms] = useState<FreeBedsRoom[] | null>(null);
+  const [g, setG] = useState({ firstName: "", lastName: "", email: "", phone: "", language: "cs" });
+  const [customer, setCustomer] = useState<"guest" | "company">("guest");
+  const [company, setCompany] = useState<{ id: string; name: string } | null>(null);
+  const [pickCo, setPickCo] = useState(false);
+  const rates = useAsync<PersonRate[]>(() => api.personRates(), []);
+  const [personRateId, setPersonRateId] = useState("");
+  const [pay, setPay] = useState<"later" | "deposit" | "company">("later");
+  const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState<{ id: string; code: string }[] | null>(null);
+
+  const nights = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 864e5));
+  const totalGuests = adults + children;
+  const setKids = (n: number) => { const c = Math.max(0, Math.min(10, n)); setChildren(c); setChildAges((p) => Array.from({ length: c }, (_, i) => p[i] ?? 8)); };
+
+  const loadAvail = async () => {
+    setErr(""); setBusy(true);
+    try {
+      setAvail(await api.availabilityFor(from, to, bedMode ? 1 : totalGuests));
+      if (bedMode) setFreeRooms(await api.freeBedsPerRoom(from, to));
+      setStep(2);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+
+  const roomUnits = (avail ?? []).filter((a) => a.unit === "room");
+  const bedType = (avail ?? []).find((a) => a.unit === "bed");
+  const totalRooms = Object.values(counts).reduce((s, n) => s + n, 0);
+  const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.capacityChildren + a.maxExtraBeds), 0);
+  const roomsWithEnough = (freeRooms ?? []).filter((r) => r.freeBeds >= bedsWanted);
+  const totalFreeBeds = (freeRooms ?? []).reduce((s, r) => s + r.freeBeds, 0);
+  const bedsTogetherOk = !together || roomsWithEnough.length > 0;
+  const step2Ok = bedMode ? (bedsWanted >= 1 && totalFreeBeds >= bedsWanted && bedsTogetherOk) : totalRooms >= 1;
+
+  const create = async () => {
+    setErr(""); setBusy(true);
+    try {
+      const guest = { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: g.language };
+      let ids: { id: string; code: string }[] = [];
+      if (bedMode) {
+        if (!bedType) throw new Error("Není dostupný typ lůžka.");
+        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest }); ids = [{ id: r.id, code: r.code }]; }
+        else { const rooms = Array.from({ length: bedsWanted }, () => ({ roomTypeId: bedType.roomTypeId, adults: 1, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
+      } else {
+        const flat: string[] = [];
+        for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
+        if (!flat.length) throw new Error("Vyber alespoň jeden pokoj.");
+        if (flat.length === 1) { const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults: Number(adults), childAges, guest }); ids = [{ id: r.id, code: r.code }]; }
+        else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults: Number(adults), childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
+      }
+      for (const it of ids) {
+        if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
+        if (personRateId) await api.setReservationPersonRate(it.id, personRateId);
+      }
+      if (pay === "deposit" && ids.length === 1) { const det = await api.reservation(ids[0].id); const amt = Math.round(Number(det.totalAmount) * Number(depositPct) / 100); if (amt > 0) await api.issueProforma(ids[0].id, amt); }
+      setDone(ids);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+
+  const Stepper = ({ v, set, min = 0, max = 20 }: { v: number; set: (n: number) => void; min?: number; max?: number }) => (
+    <span className="row" style={{ gap: 6 }}><button className="btn sm ghost" onClick={() => set(Math.max(min, v - 1))}>−</button><b style={{ minWidth: 22, textAlign: "center" }}>{v}</b><button className="btn sm ghost" onClick={() => set(Math.min(max, v + 1))}>＋</button></span>
+  );
+
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-head">
+          <div><h2 style={{ margin: 0 }}>Nová rezervace</h2>
+            <div className="muted" style={{ marginTop: 4 }}>{["1 · Termín a hosté", "2 · Ubytování", "3 · Host / odběratel", "4 · Platba a potvrzení"][step - 1]}</div></div>
+          <button className="linkx" onClick={onClose}>zavřít</button>
+        </div>
+        {err && <div className="error">{err}</div>}
+
+        {done ? (
+          <div style={{ padding: 12 }}>
+            <div className="ok-msg" style={{ background: "#e6f7ee", color: "var(--ok)", padding: 12, borderRadius: 10 }}>✓ Vytvořeno: {done.map((d) => d.code).join(", ")}{pay === "deposit" && done.length === 1 ? " · vystavena proforma" : ""}</div>
+            <div className="toolbar" style={{ marginTop: 14 }}>
+              <button className="btn" onClick={() => onOpenDetail(done[0].id)}>Otevřít detail</button>
+              <button className="btn ghost" onClick={onCreated}>Hotovo</button>
+            </div>
+          </div>
+        ) : (<>
+          {step === 1 && (
+            <div style={{ padding: 12 }}>
+              <div className="toolbar" style={{ flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <label className="row">Příjezd <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+                <label className="row">Odjezd <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+                <span className="muted">{nights} {nights === 1 ? "noc" : "nocí"}</span>
+              </div>
+              {!bedMode && (
+                <div className="toolbar" style={{ flexWrap: "wrap", gap: 16, marginTop: 10, alignItems: "center" }}>
+                  <span className="row">Dospělí <Stepper v={adults} set={setAdults} min={1} /></span>
+                  <span className="row">Děti <Stepper v={children} set={setKids} /></span>
+                  {childAges.map((a, i) => <label key={i} className="row">věk {i + 1} <input type="number" min={0} max={25} style={{ width: 56 }} value={a} onChange={(e) => { const x = [...childAges]; x[i] = Math.max(0, Number(e.target.value) || 0); setChildAges(x); }} /></label>)}
+                </div>
+              )}
+              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn" disabled={busy} onClick={loadAvail} style={{ marginLeft: "auto" }}>Zobrazit volno ▸</button></div>
+            </div>
+          )}
+
+          {step === 2 && !bedMode && (
+            <div style={{ padding: 12 }}>
+              {roomUnits.length === 0 ? <div className="muted">V tomto termínu není volný žádný pokoj.</div> : (
+                <table><thead><tr><th>Typ</th><th>Volných</th><th>Kapacita</th><th>Cena</th><th>Počet</th></tr></thead><tbody>
+                  {roomUnits.map((a) => (
+                    <tr key={a.roomTypeId}>
+                      <td><b>{a.name}</b></td>
+                      <td className="muted">{a.freeUnits}</td>
+                      <td className="muted">{a.capacityAdults}+{a.capacityChildren}{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přistýlek` : ""}</td>
+                      <td>{money(a.total)}</td>
+                      <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              )}
+              {totalRooms > 0 && selCapacity < totalGuests && <div className="error" style={{ marginTop: 10 }}>⚠ Kapacita vybraných pokojů ({selCapacity}) nestačí pro {totalGuests} hostů — přidej pokoj nebo využij přistýlku (přes „typ osoby" v dalším kroku).</div>}
+              {totalRooms > 1 && <div className="muted" style={{ marginTop: 8 }}>Více pokojů → vznikne skupina pod jedním kontaktem.</div>}
+              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(1)}>‹ Zpět</button><button className="btn" disabled={!step2Ok} onClick={() => setStep(3)} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
+            </div>
+          )}
+
+          {step === 2 && bedMode && (
+            <div style={{ padding: 12 }}>
+              <div className="toolbar" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                <span className="row">Počet lůžek <Stepper v={bedsWanted} set={setBedsWanted} min={1} /></span>
+                <label className="row"><input type="checkbox" checked={together} onChange={(e) => setTogether(e.target.checked)} /> společně v jednom pokoji</label>
+                <span className="muted">volná lůžka celkem: {totalFreeBeds}</span>
+              </div>
+              {together && roomsWithEnough.length > 0 && <div className="muted" style={{ marginTop: 10 }}>Pohromadě možné v: {roomsWithEnough.map((r) => `pok. ${r.roomNumber} (${r.freeBeds})`).join(", ")}.</div>}
+              {together && roomsWithEnough.length === 0 && (
+                <div className="error" style={{ marginTop: 10 }}>
+                  ⚠ Žádný pokoj nemá v tomto termínu volných {bedsWanted} lůžek pohromadě. Volných je celkem {totalFreeBeds}, ale rozptýlených po pokojích.
+                  <div className="toolbar" style={{ marginTop: 8 }}>
+                    <button className="btn sm" onClick={() => setTogether(false)}>Rozdělit do více pokojů</button>
+                    <button className="btn sm ghost" onClick={() => setStep(1)}>Změnit termín</button>
+                  </div>
+                </div>
+              )}
+              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(1)}>‹ Zpět</button><button className="btn" disabled={!step2Ok} onClick={() => setStep(3)} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div style={{ padding: 12 }}>
+              <div className="row" style={{ gap: 10 }}>
+                <div style={{ flex: 1 }}><label className="muted">Jméno</label><input style={fullInput} value={g.firstName} onChange={(e) => setG({ ...g, firstName: e.target.value })} /></div>
+                <div style={{ flex: 1 }}><label className="muted">Příjmení</label><input style={fullInput} value={g.lastName} onChange={(e) => setG({ ...g, lastName: e.target.value })} /></div>
+              </div>
+              <div className="row" style={{ gap: 10, marginTop: 8 }}>
+                <div style={{ flex: 1 }}><label className="muted">E-mail</label><input style={fullInput} value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} /></div>
+                <div style={{ flex: 1 }}><label className="muted">Telefon</label><input style={fullInput} value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} /></div>
+              </div>
+              {(rates.data ?? []).length > 0 && (
+                <div style={{ marginTop: 10 }}><label className="muted">Typ osoby (ceník) — volitelně</label><br />
+                  <select value={personRateId} onChange={(e) => setPersonRateId(e.target.value)}><option value="">— standardní cena —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select>
+                </div>
+              )}
+              <div style={{ marginTop: 12 }}>
+                <label className="muted">Odběratel</label><br />
+                <label className="row" style={{ gap: 4 }}><input type="radio" checked={customer === "guest"} onChange={() => setCustomer("guest")} /> host</label>{" "}
+                <label className="row" style={{ gap: 4 }}><input type="radio" checked={customer === "company"} onChange={() => setCustomer("company")} /> firma</label>
+                {customer === "company" && <> {company ? <b> {company.name}</b> : <span className="muted"> — nevybrána</span>} <button className="btn sm" onClick={() => setPickCo(true)}>{company ? "Změnit" : "Vybrat firmu"}</button></>}
+              </div>
+              <div className="toolbar" style={{ marginTop: 16 }}><button className="btn ghost" onClick={() => setStep(2)}>‹ Zpět</button><button className="btn" disabled={!g.firstName.trim() || !g.lastName.trim() || (customer === "company" && !company)} onClick={() => setStep(4)} style={{ marginLeft: "auto" }}>Pokračovat ▸</button></div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div style={{ padding: 12 }}>
+              <div className="muted" style={{ marginBottom: 10 }}>
+                {bedMode ? `${bedsWanted} lůžek` : `${totalRooms} pokoj(ů)`} · {from}–{to} ({nights} nocí) · {g.firstName} {g.lastName}{customer === "company" && company ? ` · firma ${company.name}` : ""}{personRateId ? ` · ${(rates.data ?? []).find((r) => r.id === personRateId)?.name}` : ""}
+              </div>
+              <label className="muted">Platba</label><br />
+              <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "later"} onChange={() => setPay("later")} /> při odjezdu</label>{" "}
+              {!bedMode && totalRooms === 1 && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> záloha předem <input type="number" min={0} max={100} style={{ width: 56 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} />%</label>}{" "}
+              {customer === "company" && <label className="row" style={{ gap: 4 }}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> na fakturu firmě</label>}
+              <div className="toolbar" style={{ marginTop: 18 }}><button className="btn ghost" onClick={() => setStep(3)}>‹ Zpět</button><button className="btn" disabled={busy} onClick={create} style={{ marginLeft: "auto" }}>{busy ? "Vytvářím…" : "Vytvořit rezervaci ✓"}</button></div>
+            </div>
+          )}
+        </>)}
+        {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setCompany({ id: c.id, name: c.name })); setPickCo(false); }} />}
+      </div>
+    </div>
+  );
+}
+
 function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const confirm = useConfirm();
   const [q, setQ] = useState("");
@@ -805,6 +1005,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [wizard, setWizard] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [f, setF] = useState({ roomTypeId: "", from: todayIso(), to: tomorrowIso(), adults: 2, children: 0, childAges: [] as number[], firstName: "", lastName: "", email: "", phone: "", language: "cs", billingCompany: "", billingIco: "" });
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -828,8 +1029,9 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 
   return (
     <>
-      <div className="h1">Rezervace <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? "Zavřít" : "+ Nová rezervace"}</button></div>
+      <div className="h1">Rezervace <button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace (průvodce)</button> <button className="btn ghost" onClick={() => setShowForm((s) => !s)}>{showForm ? "Zavřít" : "rychlý formulář"}</button></div>
       {error && <div className="error">{error}</div>}
+      {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reload(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
       {showForm && (
         <div className="panel" style={{ padding: 18 }}>
           <h3 style={{ border: "none", padding: 0, marginBottom: 14 }}>Nová rezervace</h3>

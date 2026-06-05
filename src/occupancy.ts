@@ -144,6 +144,24 @@ export async function updateOccupancy(propertyId: string, id: string, patch: { f
   return fmt(updated, await energyRate(propertyId));
 }
 
+/** Volná lůžka v jednotlivých pokojích za období — pro upozornění „nejsou volná lůžka pohromadě". */
+export async function freeBedsPerRoom(propertyId: string, from: string, to: string) {
+  const f = dateOnly(from), t = dateOnly(to);
+  const rooms = await prisma.room.findMany({
+    where: { propertyId, status: { not: "out_of_service" } },
+    include: { beds: { where: { status: { not: "out_of_service" } }, select: { id: true } } },
+    orderBy: [{ floor: "asc" }, { number: "asc" }],
+  });
+  const [occ, resv] = await Promise.all([
+    prisma.bedOccupancy.findMany({ where: { propertyId, status: OccupancyStatus.active, fromDate: { lt: t }, toDate: { gt: f } }, select: { bedId: true } }),
+    prisma.reservation.findMany({ where: { propertyId, bedId: { not: null }, status: { in: ["pending", "confirmed", "checked_in"] }, checkInDate: { lt: t }, checkOutDate: { gt: f } }, select: { bedId: true } }),
+  ]);
+  const taken = new Set<string>([...occ.map((o) => o.bedId), ...resv.map((r) => r.bedId!)]);
+  return rooms
+    .filter((r) => r.beds.length > 0)
+    .map((r) => ({ roomId: r.id, roomNumber: r.number, floor: r.floor, totalBeds: r.beds.length, freeBeds: r.beds.filter((b) => !taken.has(b.id)).length }));
+}
+
 /** Obsazení dané firmy v provozovně — pro fakturaci (s příznakem, zda už vyfakturováno). */
 export async function companyOccupanciesForProperty(propertyId: string, companyId: string) {
   const items = await prisma.bedOccupancy.findMany({
