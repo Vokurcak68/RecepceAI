@@ -90,8 +90,7 @@ export function App() {
   const navGroups: { label: string; icon: string; items: { id: string; label: string }[] }[] = [
     { label: "Hosté", icon: "🛎️", items: [
       { id: "calendar", label: "Kalendář obsazení" },
-      { id: "tapechart", label: "Plán pokojů" },
-      { id: "occupancy", label: "Obsazení" },
+      { id: "plan", label: "Plán" },
       { id: "reservations", label: "Rezervace" },
       { id: "movements", label: "Příjezdy/odjezdy" },
       { id: "groups", label: "Skupiny" },
@@ -184,10 +183,9 @@ export function App() {
         {prop && tab === "dashboard" && <DashboardView selId={selId} />}
         {prop && tab === "agents" && <AgentsView selId={selId} onOpen={setTab} />}
         {prop && tab === "calendar" && <CalendarView selId={selId} />}
-        {prop && tab === "tapechart" && <TapeChartView selId={selId} prop={prop} />}
+        {prop && tab === "plan" && <PlanView selId={selId} prop={prop} />}
         {prop && tab === "ubyport" && <UbyportView selId={selId} />}
         {prop && tab === "ical" && <IcalView selId={selId} />}
-        {prop && tab === "occupancy" && <OccupancyView selId={selId} prop={prop} />}
         {prop && tab === "reservations" && <ReservationsView selId={selId} prop={prop} />}
         {prop && tab === "groups" && <GroupsView selId={selId} prop={prop} />}
         {prop && tab === "guests" && <GuestsView selId={selId} />}
@@ -564,7 +562,7 @@ function CalendarView({ selId }: { selId: string }) {
   );
 }
 
-function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
+function TapeChartView({ selId, prop, embedded }: { selId: string; prop?: Property; embedded?: boolean }) {
   const confirm = useConfirm();
   const [days, setDays] = useState(14);
   const [from, setFrom] = useState(todayIso());
@@ -611,7 +609,7 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
 
   return (
     <>
-      <div className="h1">Plán pokojů</div>
+      {!embedded && <div className="h1">Plán pokojů</div>}
       <div className="toolbar">
         <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="row">Dní <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7</option><option value={14}>14</option><option value={21}>21</option></select></label>
@@ -806,13 +804,28 @@ function UbyportView({ selId }: { selId: string }) {
   );
 }
 
-function OccupancyView({ selId, prop }: { selId: string; prop?: Property }) {
+function PlanView({ selId, prop }: { selId: string; prop?: Property }) {
+  const [view, setView] = useState<"plan" | "list">("plan");
+  return (
+    <>
+      <div className="h1"><span>Plán</span>
+        &nbsp;<span className="seg">
+          <button className={`btn sm ${view === "plan" ? "" : "ghost"}`} onClick={() => setView("plan")}>📅 Timeline</button>
+          <button className={`btn sm ${view === "list" ? "" : "ghost"}`} onClick={() => setView("list")}>📋 Obsazení</button>
+        </span>
+      </div>
+      {view === "plan" ? <TapeChartView selId={selId} prop={prop} embedded /> : <OccupancyView selId={selId} prop={prop} embedded />}
+    </>
+  );
+}
+
+function OccupancyView({ selId, prop, embedded }: { selId: string; prop?: Property; embedded?: boolean }) {
   const { data, error, reload } = useAsync<OccupancyRow[]>(() => api.occupancy(), [selId]);
   const [detailId, setDetailId] = useState<string | null>(null);
   if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
   return (
     <>
-      <div className="h1">Obsazení <span className="muted" style={{ fontSize: 14 }}>aktuálně ubytovaní hosté</span></div>
+      {!embedded && <div className="h1">Obsazení <span className="muted" style={{ fontSize: 14 }}>aktuálně ubytovaní hosté</span></div>}
       {error && <div className="error">{error}</div>}
       <div className="panel">
         <Table cols={["Jednotka", "Host", "Osob", "Pobyt", "Položky", "Zůstatek účtu", ""]} rows={data ?? []} empty="Nikdo není ubytovaný"
