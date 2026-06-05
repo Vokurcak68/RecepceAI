@@ -565,12 +565,22 @@ function CalendarView({ selId }: { selId: string }) {
 }
 
 function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
+  const confirm = useConfirm();
   const [days, setDays] = useState(14);
   const [from, setFrom] = useState(todayIso());
   const [detailId, setDetailId] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<TapeRes | null>(null);
   const [msg, setMsg] = useState("");
+  const [drag, setDrag] = useState<{ unitId: string; roomTypeId: string; a: number; b: number } | null>(null);
+  const [createPrefill, setCreatePrefill] = useState<{ from: string; to: string; roomTypeId: string; unitId: string } | null>(null);
+  const [barMenu, setBarMenu] = useState<TapeRes | null>(null);
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const [busy, setBusy] = useState(false);
   const { data, error, reload } = useAsync<TapeChart>(() => api.tapechart(from, days), [selId, from, days]);
+  const roomMode = data?.unit === "room";
+
+  const checkinBar = async (r: TapeRes) => { setBusy(true); setMsg(""); try { await api.checkin(r.id); setBarMenu(null); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const checkoutBar = async (r: TapeRes) => { if (await confirm({ title: "Check-out", message: <>Odhlásit <b>{r.guestName}</b> ({r.code})? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) { setBusy(true); setMsg(""); try { const x = await api.checkout(r.id); if (x.document) setDoc(x.document); setBarMenu(null); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } } };
 
   if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
 
@@ -592,7 +602,7 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
     const s = Math.max(0, idx(r.checkInDate)), e = Math.min(days, idx(r.checkOutDate));
     const span = e - s; if (span <= 0) return null;
     return (
-      <div key={r.id} title={`${r.code} · ${r.guestName} · ${statusLabel(r.status)}`} onClick={(ev) => { ev.stopPropagation(); if (lane) setAssigning(r); else setDetailId(r.id); }}
+      <div key={r.id} title={`${r.code} · ${r.guestName} · ${statusLabel(r.status)}`} onPointerDown={(ev) => ev.stopPropagation()} onClick={(ev) => { ev.stopPropagation(); if (lane) setAssigning(r); else setBarMenu(r); }}
         style={{ position: "absolute", left: s * DAYW + 2, width: span * DAYW - 4, top: 3, height: ROWH - 6, background: STCOL[r.status] ?? "#4f7cff", color: "#fff", borderRadius: 6, fontSize: 11, lineHeight: `${ROWH - 6}px`, padding: "0 6px", overflow: "hidden", whiteSpace: "nowrap", cursor: "pointer", boxShadow: lane ? "0 0 0 2px #fff, 0 0 0 3px #e8a33d" : undefined }}>
         {r.guestName}
       </div>
@@ -605,7 +615,7 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
       <div className="toolbar">
         <label className="row">Od <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="row">Dní <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7</option><option value={14}>14</option><option value={21}>21</option></select></label>
-        <span className="muted">klik na pruh = detail · <b style={{ color: "#e8a33d" }}>blokace</b> / <b style={{ color: "#4f7cff" }}>potvrzeno</b> / <b style={{ color: "#1a9e63" }}>ubytován</b></span>
+        <span className="muted">{roomMode ? "tažením po volných dnech = nová rezervace · " : ""}klik na pruh = akce · <b style={{ color: "#e8a33d" }}>blokace</b> / <b style={{ color: "#4f7cff" }}>potvrzeno</b> / <b style={{ color: "#1a9e63" }}>ubytován</b></span>
       </div>
       {(error || msg) && <div className="error">{error || msg}</div>}
       {assigning && <div className="ok-msg" style={{ background: "#fff4e0", color: "#9a6b00" }}>Přiřazuji <b>{assigning.code}</b> ({assigning.guestName}) — klikni na řádek volného pokoje téhož typu. <button className="btn sm ghost" onClick={() => setAssigning(null)}>Zrušit</button></div>}
@@ -626,8 +636,12 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
                   {tUnits.map((u) => (
                     <div key={u.id} onClick={() => { if (canAssignHere) assign(u.id); }} style={{ display: "flex", height: ROWH, borderBottom: "1px solid #f0f3f8", cursor: canAssignHere ? "pointer" : "default", background: canAssignHere ? "#fffaf0" : undefined }}>
                       <div style={{ width: LABELW, flex: "0 0 auto", padding: "0 8px", fontSize: 13, lineHeight: `${ROWH}px`, position: "sticky", left: 0, background: canAssignHere ? "#fffaf0" : "#fff", borderRight: "1px solid #eef1f4" }}>{u.label}</div>
-                      <div style={{ position: "relative", width: days * DAYW, flex: "0 0 auto", ...grid }}>
+                      <div style={{ position: "relative", width: days * DAYW, flex: "0 0 auto", cursor: roomMode && !assigning ? "crosshair" : "default", ...grid }}
+                        onPointerDown={(ev) => { if (!roomMode || assigning) return; const rc = ev.currentTarget.getBoundingClientRect(); const i = Math.max(0, Math.min(days - 1, Math.floor((ev.clientX - rc.left) / DAYW))); (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId); setDrag({ unitId: u.id, roomTypeId: tp.roomTypeId, a: i, b: i }); }}
+                        onPointerMove={(ev) => { if (!drag || drag.unitId !== u.id) return; const rc = ev.currentTarget.getBoundingClientRect(); const i = Math.max(0, Math.min(days - 1, Math.floor((ev.clientX - rc.left) / DAYW))); if (i !== drag.b) setDrag({ ...drag, b: i }); }}
+                        onPointerUp={() => { if (!drag || drag.unitId !== u.id || !data) return; const lo = Math.min(drag.a, drag.b), hi = Math.max(drag.a, drag.b); const f = data.dates[lo]; const t = new Date(Date.parse(data.dates[hi]) + 86400000).toISOString().slice(0, 10); setDrag(null); setCreatePrefill({ from: f, to: t, roomTypeId: tp.roomTypeId, unitId: u.id }); }}>
                         {data.reservations.filter((r) => r.unitId === u.id).map((r) => bar(r))}
+                        {drag && drag.unitId === u.id && (() => { const lo = Math.min(drag.a, drag.b), hi = Math.max(drag.a, drag.b); return <div style={{ position: "absolute", left: lo * DAYW + 1, width: (hi - lo + 1) * DAYW - 2, top: 3, height: ROWH - 6, background: "rgba(79,124,255,.25)", border: "1px dashed #4f7cff", borderRadius: 6, pointerEvents: "none" }} />; })()}
                       </div>
                     </div>
                   ))}
@@ -646,6 +660,26 @@ function TapeChartView({ selId, prop }: { selId: string; prop?: Property }) {
           </div>
         </div>
       )}
+
+      {createPrefill && prop && <NewReservationWizard prop={prop} prefill={createPrefill} onClose={() => setCreatePrefill(null)} onCreated={() => { setCreatePrefill(null); reload(); }} onOpenDetail={(rid) => { setCreatePrefill(null); setDetailId(rid); }} />}
+
+      {barMenu && (
+        <div className="inv-backdrop" onClick={() => setBarMenu(null)}>
+          <div className="invoice" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="inv-head">
+              <div><h2 style={{ margin: 0 }}>{barMenu.guestName}</h2><div className="muted" style={{ marginTop: 4 }}>{barMenu.code} · {statusLabel(barMenu.status)} · {d(barMenu.checkInDate)} → {d(barMenu.checkOutDate)}</div></div>
+              <button className="linkx" onClick={() => setBarMenu(null)}>zavřít</button>
+            </div>
+            <div className="req-actions" style={{ padding: 12, flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => { setDetailId(barMenu.id); setBarMenu(null); }}>Detail</button>
+              {["confirmed", "pending"].includes(barMenu.status) && <button className="btn ok" disabled={busy} onClick={() => checkinBar(barMenu)}>Check-in</button>}
+              {barMenu.status === "checked_in" && <button className="btn ok" disabled={busy} onClick={() => checkoutBar(barMenu)}>Check-out</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
   );
 }
@@ -882,16 +916,16 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
 }
 
 // ── Průvodce „Nová rezervace" (sjednocený tok pro recepci) ───
-function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail }: { prop: Property; onClose: () => void; onCreated: () => void; onOpenDetail: (rid: string) => void }) {
+function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill }: { prop: Property; onClose: () => void; onCreated: () => void; onOpenDetail: (rid: string) => void; prefill?: { from?: string; to?: string; roomTypeId?: string; unitId?: string } }) {
   const bedMode = prop.inventoryUnit === "bed";
   const [step, setStep] = useState(1);
-  const [from, setFrom] = useState(todayIso());
-  const [to, setTo] = useState(tomorrowIso());
+  const [from, setFrom] = useState(prefill?.from ?? todayIso());
+  const [to, setTo] = useState(prefill?.to ?? tomorrowIso());
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [childAges, setChildAges] = useState<number[]>([]);
   const [avail, setAvail] = useState<AvailUnit[] | null>(null);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [counts, setCounts] = useState<Record<string, number>>(prefill?.roomTypeId ? { [prefill.roomTypeId]: 1 } : {});
   const [bedsWanted, setBedsWanted] = useState(2);
   const [together, setTogether] = useState(true);
   const [freeRooms, setFreeRooms] = useState<FreeBedsRoom[] | null>(null);
@@ -942,7 +976,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail }: { prop
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
         if (!flat.length) throw new Error("Vyber alespoň jeden pokoj.");
-        if (flat.length === 1) { const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults: Number(adults), childAges, guest }); ids = [{ id: r.id, code: r.code }]; }
+        if (flat.length === 1) { const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults: Number(adults), childAges, guest }); if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {}); ids = [{ id: r.id, code: r.code }]; }
         else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults: Number(adults), childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
       for (const it of ids) {
