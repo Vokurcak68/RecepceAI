@@ -948,6 +948,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [pickCo, setPickCo] = useState(false);
   const rates = useAsync<PersonRate[]>(() => api.personRates(), []);
   const [personRateId, setPersonRateId] = useState("");
+  const [pickGuest, setPickGuest] = useState(false);
+  const [pickedGuestId, setPickedGuestId] = useState<string | null>(null);
   const [pay, setPay] = useState<"later" | "deposit" | "company">("later");
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
   const [busy, setBusy] = useState(false);
@@ -993,6 +995,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults: Number(adults), childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
       for (const it of ids) {
+        if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
         if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
         if (personRateId) await api.setReservationPersonRate(it.id, personRateId);
       }
@@ -1086,6 +1089,10 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
 
           {step === 3 && (
             <div style={{ padding: 12 }}>
+              <div className="toolbar" style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <button className="btn sm" onClick={() => setPickGuest(true)}>📇 Vybrat z adresáře</button>
+                {pickedGuestId ? <span className="muted">z adresáře: <b>{g.firstName} {g.lastName}</b> <button className="linkx" onClick={() => { setPickedGuestId(null); setG({ firstName: "", lastName: "", email: "", phone: "", language: "cs" }); }}>nový host</button></span> : <span className="muted">nebo vyplň nového hosta níže</span>}
+              </div>
               <div className="row" style={{ gap: 10 }}>
                 <div style={{ flex: 1 }}><label className="muted">Jméno</label><input style={fullInput} value={g.firstName} onChange={(e) => setG({ ...g, firstName: e.target.value })} /></div>
                 <div style={{ flex: 1 }}><label className="muted">Příjmení</label><input style={fullInput} value={g.lastName} onChange={(e) => setG({ ...g, lastName: e.target.value })} /></div>
@@ -1123,6 +1130,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           )}
         </>)}
         {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setCompany({ id: c.id, name: c.name })); setPickCo(false); }} />}
+        {pickGuest && <GuestPickerOverlay prefill={g.lastName || g.email || ""} onClose={() => setPickGuest(false)} onPick={(gid) => { api.guestProfile(gid).then((p) => { setG({ firstName: p.guest.firstName, lastName: p.guest.lastName, email: p.guest.email ?? "", phone: p.guest.phone ?? "", language: p.guest.language ?? "cs" }); setPickedGuestId(gid); }); setPickGuest(false); }} />}
       </div>
     </div>
   );
