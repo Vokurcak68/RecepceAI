@@ -1130,31 +1130,27 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                 <div style={{ flex: 1 }}><label className="muted">E-mail</label><input style={fullInput} value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} /></div>
                 <div style={{ flex: 1 }}><label className="muted">Telefon</label><input style={fullInput} value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} /></div>
               </div>
-              {ratesEnabled && (
-                <div style={{ marginTop: 12 }}>
-                  <label className="muted">Typ osoby (dle data narození se vybere sám; uprchlíka apod. vyber ručně) — určuje cenu</label>
-                  <div className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
-                    <span className="muted" style={{ minWidth: 64 }}>1. {g.firstName || "host"}</span>
-                    <label className="row">nar. <input type="date" value={g.dob} onChange={(e) => setPersonDob(0, e.target.value)} /></label>
-                    <select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select>
-                    <span className="muted">{g.rateId ? `${money(ratePrice(g.rateId))}/noc` : ""}</span>
-                  </div>
-                  {extra.map((p, i) => (
-                    <div key={i} className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                      <span className="muted" style={{ minWidth: 64 }}>{i + 2}.</span>
-                      <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} style={{ width: 120 }} />
-                      <label className="row">nar. <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} /></label>
-                      <select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select>
-                      <span className="muted">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span>
-                    </div>
-                  ))}
-                  {bedMode
-                    ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>)
-                    : ((extraBedSurcharge > 0 || surchargeTotal > 0)
-                      ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)}{extraBedSurcharge > 0 ? ` + ${selUnit?.extraBedsNeeded}× přistýlka ${money(Number(selUnit?.extraBedPrice ?? 0))}/noc` : ""}{surchargeTotal > 0 ? ` + typy osob ${money(surchargeTotal)}` : ""}, bez pobyt. poplatku)</span></div>
-                      : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se připočítá automaticky dle pokoje; typ osoby (dítě/senior) přiřaď jen pro zvláštní sazbu.</div>)}
+              <div style={{ marginTop: 12 }}>
+                <label className="muted">Osoby — jméno a datum narození{ratesEnabled ? " (typ osoby se dle věku vybere sám; uprchlíka ap. ručně) — určuje cenu" : " (věk kvůli pobytovému poplatku)"}</label>
+                <div className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+                  <span className="muted" style={{ minWidth: 64 }}>1. {g.firstName || "host"}</span>
+                  <label className="row">nar. <input type="date" value={g.dob} onChange={(e) => setPersonDob(0, e.target.value)} /></label>
+                  {ratesEnabled && <><select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select><span className="muted">{g.rateId ? `${money(ratePrice(g.rateId))}/noc` : ""}</span></>}
                 </div>
-              )}
+                {extra.map((p, i) => (
+                  <div key={i} className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                    <span className="muted" style={{ minWidth: 64 }}>{i + 2}.</span>
+                    <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} style={{ width: 120 }} />
+                    <label className="row">nar. <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} /></label>
+                    {ratesEnabled && <><select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select><span className="muted">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span></>}
+                  </div>
+                ))}
+                {bedMode
+                  ? (ratesEnabled ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>) : null)
+                  : ((extraBedSurcharge > 0 || surchargeTotal > 0)
+                    ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)}{extraBedSurcharge > 0 ? ` + ${selUnit?.extraBedsNeeded}× přistýlka ${money(Number(selUnit?.extraBedPrice ?? 0))}/noc` : ""}{surchargeTotal > 0 ? ` + typy osob ${money(surchargeTotal)}` : ""}, bez pobyt. poplatku)</span></div>
+                    : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se připočítá automaticky dle pokoje.</div>)}
+              </div>
               <div style={{ marginTop: 12 }}>
                 <label className="muted">Odběratel</label><br />
                 <label className="row" style={{ gap: 4 }}><input type="radio" checked={customer === "guest"} onChange={() => setCustomer("guest")} /> host</label>{" "}
