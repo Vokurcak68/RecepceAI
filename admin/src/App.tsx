@@ -1083,7 +1083,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       <td><b>{a.name}</b></td>
                       <td className="muted">{a.freeUnits}</td>
                       <td className="muted">{a.capacityAdults} lůžek{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
-                      <td>{money(a.total)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc)</span></td>
+                      <td>{money(Number(a.total) + a.extraBedsNeeded * Number(a.extraBedPrice) * nights)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc{a.extraBedsNeeded > 0 ? ` + ${a.extraBedsNeeded}× přist. ${money(Number(a.extraBedPrice))}` : ""})</span></td>
                       <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
                     </tr>
                   ))}
