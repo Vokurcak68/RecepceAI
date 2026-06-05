@@ -48,6 +48,7 @@ export type AvailableUnit = {
   capacityAdults: number;
   capacityChildren: number;
   maxExtraBeds: number;
+  extraBedsNeeded: number;
   roomTotal: Prisma.Decimal;
   cityTax: Prisma.Decimal;
   total: Prisma.Decimal;
@@ -69,13 +70,16 @@ export async function getAvailability(
 
 async function roomAvailability(propertyId: string, from: Date, to: Date, guests: number): Promise<AvailableUnit[]> {
   const booked = await bookedByType(propertyId, from, to);
+  // Bez DB filtru na kapacitu — pokoj se může vejít až s přistýlkami; filtrujeme dle efektivní kapacity (vč. maxExtraBeds).
   const roomTypes = await prisma.roomType.findMany({
-    where: { propertyId, capacityAdults: { gte: guests } },
+    where: { propertyId },
     include: { rooms: { where: { status: { not: "out_of_service" } }, include: { beds: true } } },
   });
 
   const out: AvailableUnit[] = [];
   for (const rt of roomTypes) {
+    const baseCap = rt.capacityAdults + rt.capacityChildren;
+    if (baseCap + rt.maxExtraBeds < guests) continue; // nevejde se ani s přistýlkami
     const free = totalUnits(rt, InventoryUnit.room) - (booked[rt.id] ?? 0);
     if (free <= 0) continue;
     const price = await getStayPrice(rt.id, from, to, guests);
@@ -83,6 +87,7 @@ async function roomAvailability(propertyId: string, from: Date, to: Date, guests
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.room, freeUnits: free,
       capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds,
+      extraBedsNeeded: Math.max(0, guests - baseCap), // kolik přistýlek je pro tento počet osob potřeba
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }
@@ -104,7 +109,7 @@ async function bedAvailability(propertyId: string, from: Date, to: Date): Promis
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.bed, freeUnits: free,
-      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds,
+      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds, extraBedsNeeded: 0,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }
