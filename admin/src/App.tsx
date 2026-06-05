@@ -1590,17 +1590,14 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
   const saveCap = async (id: string, field: "capacityAdults" | "capacityChildren", v: string) => { const n = parseInt(v, 10); if (isNaN(n) || n < 0) return; await api.updateRoomType(id, { [field]: n }); setMsg("Kapacita uložena."); reload(); };
   // Buňka „Kapacita" — řádná lůžka + dětská místa + samostatně přistýlky (počet × cena/noc). Vše editovatelné inline.
   const capCell = (t: RoomType) => (
-    <>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <input type="number" min={1} defaultValue={t.capacityAdults} style={{ width: 56 }} onBlur={(e) => saveCap(t.id, "capacityAdults", e.target.value)} /> lůžek
-      </div>
-      <div className="muted" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-        Přistýlky:
-        <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 60 }} onBlur={(e) => saveExtra(t.id, e.target.value)} />
-        za
-        <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 90 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč/noc
-      </div>
-    </>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+      <input type="number" min={1} defaultValue={t.capacityAdults} style={{ width: 48 }} onBlur={(e) => saveCap(t.id, "capacityAdults", e.target.value)} />
+      <span className="muted">lůžek · přist.</span>
+      <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 48 }} onBlur={(e) => saveExtra(t.id, e.target.value)} />
+      <span className="muted">à</span>
+      <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 72 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} />
+      <span className="muted">Kč/noc</span>
+    </div>
   );
 
   return (
