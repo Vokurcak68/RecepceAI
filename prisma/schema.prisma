@@ -279,6 +279,7 @@ model RoomType {
   capacityAdults   Int
   capacityChildren Int      @default(0)
   maxExtraBeds     Int      @default(0) // kolik přistýlek lze do pokoje přidat (0 = nelze)
+  extraBedPrice    Decimal  @default(0) @db.Decimal(10, 2) // cena za přistýlku a noc
   basePrice        Decimal  @db.Decimal(10, 2) // za jednotku a noc
   weeklyPrice      Decimal? @db.Decimal(10, 2) // dlouhodobé (ubytovna)
   monthlyPrice     Decimal? @db.Decimal(10, 2)

@@ -49,6 +49,7 @@ export type AvailableUnit = {
   capacityChildren: number;
   maxExtraBeds: number;
   extraBedsNeeded: number;
+  extraBedPrice: Prisma.Decimal;
   roomTotal: Prisma.Decimal;
   cityTax: Prisma.Decimal;
   total: Prisma.Decimal;
@@ -86,7 +87,7 @@ async function roomAvailability(propertyId: string, from: Date, to: Date, guests
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.room, freeUnits: free,
-      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds,
+      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds, extraBedPrice: rt.extraBedPrice,
       extraBedsNeeded: Math.max(0, guests - baseCap), // kolik přistýlek je pro tento počet osob potřeba
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
@@ -109,7 +110,7 @@ async function bedAvailability(propertyId: string, from: Date, to: Date): Promis
     out.push({
       roomTypeId: rt.id, name: rt.name, description: rt.description, amenities: rt.amenities, photos: rt.photos,
       unit: InventoryUnit.bed, freeUnits: free,
-      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds, extraBedsNeeded: 0,
+      capacityAdults: rt.capacityAdults, capacityChildren: rt.capacityChildren, maxExtraBeds: rt.maxExtraBeds, extraBedPrice: rt.extraBedPrice, extraBedsNeeded: 0,
       roomTotal: price.roomTotal, cityTax: price.cityTax, total: price.total,
     });
   }

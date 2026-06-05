@@ -985,7 +985,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const totalRooms = Object.values(counts).reduce((s, n) => s + n, 0);
   const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.capacityChildren + a.maxExtraBeds), 0);
   const roomBaseTotal = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * Number(a.roomTotal), 0);
-  const estAccommodation = bedMode ? perPersonTotal : roomBaseTotal + surchargeTotal;
+  const selUnit = roomUnits.find((a) => (counts[a.roomTypeId] ?? 0) > 0);
+  const extraBedSurcharge = (!bedMode && totalRooms === 1 && selUnit) ? selUnit.extraBedsNeeded * Number(selUnit.extraBedPrice) * nights : 0;
+  const estAccommodation = bedMode ? perPersonTotal : roomBaseTotal + extraBedSurcharge + surchargeTotal;
   const roomsWithEnough = (freeRooms ?? []).filter((r) => r.freeBeds >= bedsWanted);
   const totalFreeBeds = (freeRooms ?? []).reduce((s, r) => s + r.freeBeds, 0);
   const bedsTogetherOk = !together || roomsWithEnough.length > 0;
@@ -1018,10 +1020,10 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + příplatky za typy (přistýlka apod.).
       if (bedMode) {
         for (let i = 0; i < ids.length; i++) { const p = memberPersons[i]; if (p?.rateId) await api.setReservationAccommodation(ids[i].id, ratePrice(p.rateId) * nights); }
-      } else if (ids.length === 1 && surchargeTotal > 0) {
+      } else if (ids.length === 1 && (surchargeTotal > 0 || extraBedSurcharge > 0)) {
         const det = await api.reservation(ids[0].id);
         const base = Number(det.totalAmount) - Number(det.cityTax ?? 0);
-        await api.setReservationAccommodation(ids[0].id, base + surchargeTotal);
+        await api.setReservationAccommodation(ids[0].id, base + extraBedSurcharge + surchargeTotal);
       }
       for (const it of ids) {
         if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
@@ -1148,7 +1150,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   ))}
                   {bedMode
                     ? (allTyped ? <div style={{ marginTop: 8 }}><b>Cena ubytování: {money(perPersonTotal)}</b> <span className="muted">({nights} nocí)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Doplň typ u všech osob, aby se spočítala cena dle ceníku.</div>)
-                    : (surchargeTotal > 0 ? <div style={{ marginTop: 8 }}><b>Příplatky (přistýlka/typy): +{money(surchargeTotal)}</b> <span className="muted">→ ubytování ≈ {money(estAccommodation)} (pokoj {money(roomBaseTotal)} + příplatky, bez pobyt. poplatku)</span></div> : <div className="muted" style={{ marginTop: 8 }}>Typ osoby přiřaď jen nadpočetným (přistýlka) — připočte se k ceně pokoje.</div>)}
+                    : ((extraBedSurcharge > 0 || surchargeTotal > 0)
+                      ? <div style={{ marginTop: 8 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)}{extraBedSurcharge > 0 ? ` + ${selUnit?.extraBedsNeeded}× přistýlka ${money(Number(selUnit?.extraBedPrice ?? 0))}/noc` : ""}{surchargeTotal > 0 ? ` + typy osob ${money(surchargeTotal)}` : ""}, bez pobyt. poplatku)</span></div>
+                      : <div className="muted" style={{ marginTop: 8 }}>Cena = cena pokoje. Přistýlka se připočítá automaticky dle pokoje; typ osoby (dítě/senior) přiřaď jen pro zvláštní sazbu.</div>)}
                 </div>
               )}
               <div style={{ marginTop: 12 }}>
@@ -1574,13 +1578,14 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
   const [msg, setMsg] = useState("");
   const [rate, setRate] = useState({ roomTypeId: "", date: todayIso(), price: "" });
-  const [nw, setNw] = useState({ name: "", capacityAdults: 2, maxExtraBeds: 0, basePrice: "", weeklyPrice: "", monthlyPrice: "" });
+  const [nw, setNw] = useState({ name: "", capacityAdults: 2, maxExtraBeds: 0, extraBedPrice: "", basePrice: "", weeklyPrice: "", monthlyPrice: "" });
   const saveExtra = async (id: string, v: string) => { const n = parseInt(v, 10) || 0; await api.updateRoomType(id, { maxExtraBeds: n }); setMsg("Přistýlky uloženy."); reload(); };
+  const saveExtraPrice = async (id: string, v: string) => { const n = parseFloat(v.replace(",", ".")) || 0; await api.updateRoomType(id, { extraBedPrice: n }); setMsg("Cena přistýlky uložena."); reload(); };
 
   const saveBase = async (id: string, v: string) => { const n = parseFloat(v); if (isNaN(n)) return; await api.updateRoomType(id, { basePrice: n }); setMsg("Cena uložena."); reload(); };
   const saveLong = async (id: string, field: "weeklyPrice" | "monthlyPrice", v: string) => { const n = parseFloat(v); await api.updateRoomType(id, { [field]: isNaN(n) ? 0 : n }); setMsg("Dlouhodobá cena uložena."); reload(); };
   const saveRate = async () => { if (!rate.roomTypeId || !rate.price) return; await api.setRate({ roomTypeId: rate.roomTypeId, date: rate.date, price: parseFloat(rate.price) }); setMsg(`Cena na ${rate.date} nastavena.`); setRate({ ...rate, price: "" }); };
-  const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), maxExtraBeds: Number(nw.maxExtraBeds), basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, maxExtraBeds: 0, basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
+  const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), maxExtraBeds: Number(nw.maxExtraBeds), extraBedPrice: nw.extraBedPrice ? Number(nw.extraBedPrice) : 0, basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, maxExtraBeds: 0, extraBedPrice: "", basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
 
   return (
     <>
@@ -1593,7 +1598,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <Table cols={prop.allowLongTerm ? ["Název", "Kapacita", "Cena/noc", "Cena/týden", "Cena/měsíc"] : ["Název", "Kapacita", "Pokojů", "Cena/noc"]} rows={data ?? []} empty="Žádné typy"
           render={(t: RoomType) => prop.allowLongTerm ? (
             <tr key={t.id}>
-              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 48 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /></span></td>
+              <td><b>{t.name}</b></td><td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 44 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /> à <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 64 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč</span></td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
               <td><PriceCell v={t.weeklyPrice} onSave={(v) => saveLong(t.id, "weeklyPrice", v)} /></td>
               <td><PriceCell v={t.monthlyPrice} onSave={(v) => saveLong(t.id, "monthlyPrice", v)} /></td>
@@ -1601,7 +1606,7 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
           ) : (
             <tr key={t.id}>
               <td><b>{t.name}</b><div className="muted">{t.amenities.join(", ")}</div></td>
-              <td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 48 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /></span></td><td>{t._count?.rooms ?? "—"}</td>
+              <td>{t.capacityAdults}+{t.capacityChildren} <span className="muted">· přist. <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 44 }} onBlur={(e) => saveExtra(t.id, e.target.value)} /> à <input type="number" min={0} defaultValue={parseFloat(t.extraBedPrice)} style={{ width: 64 }} onBlur={(e) => saveExtraPrice(t.id, e.target.value)} /> Kč</span></td><td>{t._count?.rooms ?? "—"}</td>
               <td><PriceCell v={t.basePrice} onSave={(v) => saveBase(t.id, v)} /></td>
             </tr>
           )} />
@@ -1612,7 +1617,8 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
         <div className="toolbar" style={{ padding: 16 }}>
           <input placeholder="Název" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
           <label className="row">Kapacita <input type="number" min={1} style={{ width: 70 }} value={nw.capacityAdults} onChange={(e) => setNw({ ...nw, capacityAdults: Number(e.target.value) })} /></label>
-          <label className="row">Přistýlky <input type="number" min={0} style={{ width: 60 }} value={nw.maxExtraBeds} onChange={(e) => setNw({ ...nw, maxExtraBeds: Number(e.target.value) })} /></label>
+          <label className="row">Přistýlky <input type="number" min={0} style={{ width: 56 }} value={nw.maxExtraBeds} onChange={(e) => setNw({ ...nw, maxExtraBeds: Number(e.target.value) })} /></label>
+          <label className="row">à přist. Kč <input type="number" min={0} style={{ width: 80 }} value={nw.extraBedPrice} onChange={(e) => setNw({ ...nw, extraBedPrice: e.target.value })} /></label>
           <input placeholder="Cena/noc" style={{ width: 110 }} value={nw.basePrice} onChange={(e) => setNw({ ...nw, basePrice: e.target.value })} />
           {prop.allowLongTerm && <input placeholder="Cena/týden" style={{ width: 110 }} value={nw.weeklyPrice} onChange={(e) => setNw({ ...nw, weeklyPrice: e.target.value })} />}
           {prop.allowLongTerm && <input placeholder="Cena/měsíc" style={{ width: 110 }} value={nw.monthlyPrice} onChange={(e) => setNw({ ...nw, monthlyPrice: e.target.value })} />}
