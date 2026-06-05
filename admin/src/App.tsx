@@ -1587,10 +1587,15 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
   const saveRate = async () => { if (!rate.roomTypeId || !rate.price) return; await api.setRate({ roomTypeId: rate.roomTypeId, date: rate.date, price: parseFloat(rate.price) }); setMsg(`Cena na ${rate.date} nastavena.`); setRate({ ...rate, price: "" }); };
   const addType = async () => { if (!nw.name || !nw.basePrice) return; await api.createRoomType({ name: nw.name, capacityAdults: Number(nw.capacityAdults), maxExtraBeds: Number(nw.maxExtraBeds), extraBedPrice: nw.extraBedPrice ? Number(nw.extraBedPrice) : 0, basePrice: Number(nw.basePrice), weeklyPrice: nw.weeklyPrice ? Number(nw.weeklyPrice) : undefined, monthlyPrice: nw.monthlyPrice ? Number(nw.monthlyPrice) : undefined }); setNw({ name: "", capacityAdults: 2, maxExtraBeds: 0, extraBedPrice: "", basePrice: "", weeklyPrice: "", monthlyPrice: "" }); reload(); };
 
-  // Buňka „Kapacita" — řádné lůžka + samostatně přistýlky (počet × cena/noc). Pojmenováno slovy, ať se „2+1" neplete s „dvoulůžko + přistýlka".
+  const saveCap = async (id: string, field: "capacityAdults" | "capacityChildren", v: string) => { const n = parseInt(v, 10); if (isNaN(n) || n < 0) return; await api.updateRoomType(id, { [field]: n }); setMsg("Kapacita uložena."); reload(); };
+  // Buňka „Kapacita" — řádná lůžka + dětská místa + samostatně přistýlky (počet × cena/noc). Vše editovatelné inline.
   const capCell = (t: RoomType) => (
     <>
-      <div>{t.capacityAdults} {t.capacityAdults === 1 ? "lůžko" : t.capacityAdults < 5 ? "lůžka" : "lůžek"}{t.capacityChildren > 0 ? ` + ${t.capacityChildren} dět.` : ""}</div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <input type="number" min={1} defaultValue={t.capacityAdults} style={{ width: 56 }} onBlur={(e) => saveCap(t.id, "capacityAdults", e.target.value)} /> lůžek
+        <span className="muted">+</span>
+        <input type="number" min={0} defaultValue={t.capacityChildren} style={{ width: 56 }} onBlur={(e) => saveCap(t.id, "capacityChildren", e.target.value)} /> dět.
+      </div>
       <div className="muted" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
         Přistýlky:
         <input type="number" min={0} defaultValue={t.maxExtraBeds} style={{ width: 60 }} onBlur={(e) => saveExtra(t.id, e.target.value)} />
