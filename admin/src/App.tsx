@@ -983,7 +983,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const roomUnits = (avail ?? []).filter((a) => a.unit === "room");
   const bedType = (avail ?? []).find((a) => a.unit === "bed");
   const totalRooms = Object.values(counts).reduce((s, n) => s + n, 0);
-  const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.capacityChildren + a.maxExtraBeds), 0);
+  const selCapacity = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * (a.capacityAdults + a.maxExtraBeds), 0);
   const roomBaseTotal = roomUnits.reduce((s, a) => s + (counts[a.roomTypeId] ?? 0) * Number(a.roomTotal), 0);
   const selUnit = roomUnits.find((a) => (counts[a.roomTypeId] ?? 0) > 0);
   const extraBedSurcharge = (!bedMode && totalRooms === 1 && selUnit) ? selUnit.extraBedsNeeded * Number(selUnit.extraBedPrice) * nights : 0;
@@ -1082,7 +1082,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                     <tr key={a.roomTypeId}>
                       <td><b>{a.name}</b></td>
                       <td className="muted">{a.freeUnits}</td>
-                      <td className="muted">{a.capacityAdults}+{a.capacityChildren}{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
+                      <td className="muted">{a.capacityAdults} lůžek{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
                       <td>{money(a.total)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc)</span></td>
                       <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
                     </tr>
@@ -1593,8 +1593,6 @@ function TypesView({ selId, prop }: { selId: string; prop: Property }) {
     <>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <input type="number" min={1} defaultValue={t.capacityAdults} style={{ width: 56 }} onBlur={(e) => saveCap(t.id, "capacityAdults", e.target.value)} /> lůžek
-        <span className="muted">+</span>
-        <input type="number" min={0} defaultValue={t.capacityChildren} style={{ width: 56 }} onBlur={(e) => saveCap(t.id, "capacityChildren", e.target.value)} /> dět.
       </div>
       <div className="muted" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
         Přistýlky:
