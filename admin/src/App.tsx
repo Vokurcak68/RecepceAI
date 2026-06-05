@@ -2632,33 +2632,32 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
   const rows = (list.data ?? []).filter((g) => g.id !== excludeId);
   return (
     <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
-        <div className="inv-head">
-          <div>
-            <h2 style={{ margin: 0 }}>{title}</h2>
-            <div className="muted" style={{ marginTop: 4 }}>{subtitle}</div>
+      <div className="invoice wz" style={{ width: 700 }} onClick={(e) => e.stopPropagation()}>
+        <div className="wz-head">
+          <div className="wz-titlerow">
+            <div><h2>{title}</h2><div className="muted" style={{ marginTop: 4 }}>{subtitle}</div></div>
+            <button className="linkx" onClick={onClose}>zavřít</button>
           </div>
-          <button className="linkx" onClick={onClose}>zavřít</button>
         </div>
-        <div className="toolbar" style={{ marginTop: 8 }}>
-          <input autoFocus placeholder="Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ flex: 1, minWidth: 240 }} />
-          <button className="btn" onClick={() => list.reload()}>Hledat</button>
-        </div>
-        {list.error && <div className="error">{list.error}</div>}
-        <table style={{ marginTop: 8 }}>
-          <thead><tr><th>Host</th><th>Kontakt</th><th>Pobytů</th><th className="right"></th></tr></thead>
-          <tbody>
+        <div className="wz-body">
+          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+            <input autoFocus placeholder="🔍 Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ flex: 1 }} />
+            <button className="btn" onClick={() => list.reload()}>Hledat</button>
+          </div>
+          {list.error && <div className="error" style={{ marginBottom: 12 }}>{list.error}</div>}
+          <div className="wz-list">
             {rows.map((g) => (
-              <tr key={g.id}>
-                <td>{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</td>
-                <td className="muted">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""}</td>
-                <td>{g.stays}</td>
-                <td className="right"><button className="btn sm" onClick={() => onPick(g.id)}>{actionLabel}</button></td>
-              </tr>
+              <div key={g.id} className="wz-pick" onClick={() => onPick(g.id)}>
+                <div className="pinfo">
+                  <div className="pname">{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</div>
+                  <div className="pmeta">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""} · {g.stays} {g.stays === 1 ? "pobyt" : g.stays < 5 ? "pobyty" : "pobytů"}</div>
+                </div>
+                <span className="parrow">{actionLabel} ›</span>
+              </div>
             ))}
-            {list.data && rows.length === 0 && <tr><td colSpan={4} className="muted">Nikdo nenalezen.</td></tr>}
-          </tbody>
-        </table>
+            {list.data && rows.length === 0 && <div className="muted">Nikdo nenalezen.</div>}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2674,30 +2673,34 @@ function CompanyPickerOverlay({ onPick, onClose }: { onPick: (companyId: string)
   const createPick = async () => { if (!nw.trim()) return; setBusy(true); try { const c = await api.createCompany({ name: nw.trim() }); onPick(c.id); } finally { setBusy(false); } };
   return (
     <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <div className="inv-head">
-          <div><h2 style={{ margin: 0 }}>Vybrat firmu</h2><div className="muted" style={{ marginTop: 4 }}>Odběratel na dokladech této rezervace.</div></div>
-          <button className="linkx" onClick={onClose}>zavřít</button>
+      <div className="invoice wz" style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="wz-head">
+          <div className="wz-titlerow">
+            <div><h2>Vybrat firmu</h2><div className="muted" style={{ marginTop: 4 }}>Odběratel na dokladech této rezervace.</div></div>
+            <button className="linkx" onClick={onClose}>zavřít</button>
+          </div>
         </div>
-        <div className="toolbar" style={{ marginTop: 8 }}>
-          <input autoFocus placeholder="Hledat (název / IČO)…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 240 }} />
-        </div>
-        <table style={{ marginTop: 8 }}>
-          <thead><tr><th>Firma</th><th>IČO</th><th className="right"></th></tr></thead>
-          <tbody>
+        <div className="wz-body">
+          <input className="wz-filter" autoFocus placeholder="🔍 Hledat (název / IČO)…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="wz-list">
             {list.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}{!c.active ? <span className="muted"> · neaktivní</span> : ""}</td>
-                <td className="muted">{c.ico ?? "—"}</td>
-                <td className="right"><button className="btn sm" onClick={() => onPick(c.id)}>Vybrat</button></td>
-              </tr>
+              <div key={c.id} className="wz-pick" onClick={() => onPick(c.id)}>
+                <div className="pinfo">
+                  <div className="pname">{c.name}{!c.active ? <span className="muted" style={{ fontWeight: 400 }}> · neaktivní</span> : ""}</div>
+                  <div className="pmeta">IČO {c.ico ?? "—"}{c.city ? ` · ${c.city}` : ""}</div>
+                </div>
+                <span className="parrow">Vybrat ›</span>
+              </div>
             ))}
-            {data && list.length === 0 && <tr><td colSpan={3} className="muted">Žádná firma nenalezena.</td></tr>}
-          </tbody>
-        </table>
-        <div className="toolbar" style={{ marginTop: 12 }}>
-          <input placeholder="Nová firma — název" value={nw} onChange={(e) => setNw(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-          <button className="btn" disabled={busy || !nw.trim()} onClick={createPick}>Založit a přiřadit</button>
+            {data && list.length === 0 && <div className="muted">Žádná firma nenalezena.</div>}
+          </div>
+        </div>
+        <div className="wz-foot">
+          <span className="muted" style={{ fontSize: 13 }}>Není v seznamu?</span>
+          <div className="row" style={{ gap: 10 }}>
+            <input placeholder="Nová firma — název" value={nw} onChange={(e) => setNw(e.target.value)} style={{ width: 240 }} />
+            <button className="btn" disabled={busy || !nw.trim()} onClick={createPick}>Založit a přiřadit</button>
+          </div>
         </div>
       </div>
     </div>
