@@ -571,6 +571,8 @@ function TapeChartView({ selId, prop, embedded }: { selId: string; prop?: Proper
   const [doc, setDoc] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   const { data, error, reload } = useAsync<TapeChart>(() => api.tapechart(from, days), [selId, from, days]);
+  const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const priceOf = (rtId: string) => { const t = (types.data ?? []).find((x) => x.id === rtId); return t ? money(t.basePrice) : ""; };
   const roomMode = data?.unit === "room";
 
   const checkinBar = async (r: TapeRes) => { setBusy(true); setMsg(""); try { await api.checkin(r.id); setBarMenu(null); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
@@ -626,7 +628,7 @@ function TapeChartView({ selId, prop, embedded }: { selId: string; prop?: Proper
               const canAssignHere = !!assigning && assigning.roomTypeId === tp.roomTypeId;
               return (
                 <div key={tp.roomTypeId}>
-                  <div style={{ padding: "4px 8px", fontWeight: 700, fontSize: 12, background: "#f0f3f8", position: "sticky", left: 0 }}>{tp.name}</div>
+                  <div style={{ padding: "4px 8px", fontWeight: 700, fontSize: 12, background: "#f0f3f8", position: "sticky", left: 0 }}>{tp.name} <span style={{ fontWeight: 400, color: "var(--muted)" }}>· {priceOf(tp.roomTypeId)}/noc</span></div>
                   {tUnits.map((u) => (
                     <div key={u.id} onClick={() => { if (canAssignHere) assign(u.id); }} style={{ display: "flex", height: ROWH, borderBottom: "1px solid #f0f3f8", cursor: canAssignHere ? "pointer" : "default", background: canAssignHere ? "#fffaf0" : undefined }}>
                       <div style={{ width: LABELW, flex: "0 0 auto", padding: "0 8px", fontSize: 13, lineHeight: `${ROWH}px`, position: "sticky", left: 0, background: canAssignHere ? "#fffaf0" : "#fff", borderRight: "1px solid #eef1f4" }}>{u.label}</div>
@@ -1072,7 +1074,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       <td><b>{a.name}</b></td>
                       <td className="muted">{a.freeUnits}</td>
                       <td className="muted">{a.capacityAdults}+{a.capacityChildren}{a.maxExtraBeds > 0 ? ` · až ${a.maxExtraBeds} přist.` : ""}{a.extraBedsNeeded > 0 ? <b style={{ color: "var(--warn)" }}> · vyžaduje {a.extraBedsNeeded}× přistýlku</b> : ""}</td>
-                      <td>{money(a.total)}</td>
+                      <td>{money(a.total)} <span className="muted" style={{ fontSize: 12 }}>({money(Number(a.roomTotal) / nights)}/noc)</span></td>
                       <td><Stepper v={counts[a.roomTypeId] ?? 0} set={(n) => setCounts({ ...counts, [a.roomTypeId]: n })} max={a.freeUnits} /></td>
                     </tr>
                   ))}
@@ -1125,7 +1127,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   <div className="toolbar" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
                     <span className="muted" style={{ minWidth: 64 }}>1. {g.firstName || "host"}</span>
                     <label className="row">nar. <input type="date" value={g.dob} onChange={(e) => setPersonDob(0, e.target.value)} /></label>
-                    <select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+                    <select value={g.rateId} onChange={(e) => setPersonRate(0, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select>
                     <span className="muted">{g.rateId ? `${money(ratePrice(g.rateId))}/noc` : ""}</span>
                   </div>
                   {extra.map((p, i) => (
@@ -1133,7 +1135,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       <span className="muted" style={{ minWidth: 64 }}>{i + 2}.</span>
                       <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} style={{ width: 120 }} />
                       <label className="row">nar. <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} /></label>
-                      <select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+                      <select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}</select>
                       <span className="muted">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span>
                     </div>
                   ))}
@@ -1288,6 +1290,8 @@ const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{
 
 function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<RoomBoardItem[]>(() => api.roomBoard(), [selId]);
+  const typesA = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
+  const priceByName = (n: string | null) => { const t = (typesA.data ?? []).find((x) => x.name === n); return t ? money(t.basePrice) : ""; };
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   if (openId) return <RoomDetailView roomId={openId} prop={prop} onBack={() => { setOpenId(null); reload(); }} />;
@@ -1308,7 +1312,7 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
           render={(r: RoomBoardItem) => (
             <tr key={r.id} className="row-click" onClick={() => setOpenId(r.id)}>
               <td><b>Pokoj {r.number}</b> <span className="muted">· {r.floor}.p</span></td>
-              <td className="muted">{r.roomType ?? "—"}</td>
+              <td className="muted">{r.roomType ?? "—"}{r.roomType ? <span> · {priceByName(r.roomType)}/noc</span> : ""}</td>
               <td><RoomPill s={r.status} /></td>
               <td>{r.occupant ? <>👤 {r.occupant.name} <span className="muted">· do {d(r.occupant.checkOutDate)}</span>{r.occupant.dnd && <span className="chip chip-dnd">🚫 Nerušit</span>}</> : <span className="muted">Volný</span>}</td>
               <td>{r.occupant ? (Number(r.occupant.balance) > 0 ? <b style={{ color: "var(--warn)" }}>{money(r.occupant.balance)}</b> : <span className="muted">{money(r.occupant.balance)}</span>) : <span className="muted">—</span>}</td>
@@ -1325,6 +1329,7 @@ function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
 function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Property; onBack: () => void }) {
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<RoomDetail>(() => api.roomDetail(roomId), [roomId]);
+  const typesA = useAsync<RoomType[]>(() => api.roomTypes(), [roomId]);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [resId, setResId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1367,7 +1372,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const occ = data.occupantId ? data.reservations.find((r) => r.id === data.occupantId) : null;
   return (
     <>
-      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Pokoj {room.number} <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>· {room.roomType.name} · {room.floor}. patro</span></span> <RoomPill s={room.status} /></div>
+      <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;Pokoj {room.number} <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>· {room.roomType.name}{(() => { const t = (typesA.data ?? []).find((x) => x.id === room.roomType.id); return t ? ` · ${money(t.basePrice)}/noc` : ""; })()} · {room.floor}. patro</span></span> <RoomPill s={room.status} /></div>
       {msg && <div className="error" style={/uložen|přemístěn|umístěna|vytvořen|proveden|zaúčtován/i.test(msg) ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
 
       <div className="grid2">
