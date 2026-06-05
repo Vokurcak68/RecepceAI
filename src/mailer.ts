@@ -106,6 +106,7 @@ export const EMAIL_TYPES: Record<string, string> = {
   checkout: "Poděkování (check-out)",
   cancellation: "Zrušení rezervace",
   reminder: "Připomínka před příjezdem",
+  proforma: "Zálohová faktura",
 };
 
 async function logEmail(reservationId: string, type: string, recipient: string, subject: string, status: string, error?: string) {
@@ -154,6 +155,18 @@ export async function sendReservationCreated(reservationId: string): Promise<voi
   const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), stayRows(r, lang),
     link ? mt(lang, "ctaManage") : undefined, link ?? undefined, extra);
   await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html);
+}
+
+/** E-mail se zálohovou fakturou (proforma) — odešle se po jejím vystavení. */
+export async function sendProforma(reservationId: string, doc: { number: string; total: number; dueDate?: Date | string | null }): Promise<void> {
+  const r = await load(reservationId);
+  if (!r) return;
+  const lang = mailLang(r.primaryGuest?.language);
+  const due = doc.dueDate ? fmtDate(doc.dueDate) : "—";
+  const rows = [row(mt(lang, "rowCode"), esc(r.code)), row(mt(lang, "rowUnit"), esc(unitLabel(r, lang))), row(mt(lang, "titleProforma"), money(doc.total)), row(mt(lang, "rowDue"), due)].join("");
+  const note = `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "proformaNote", { amount: money(doc.total), due })}</p>`;
+  const html = layout(lang, r.property, mt(lang, "titleProforma"), mt(lang, "introProforma", { name: esc(r.primaryGuest.firstName) }), rows, undefined, undefined, note);
+  await deliver(r, "proforma", mt(lang, "subjProforma", { number: doc.number, property: r.property.name }), html);
 }
 
 /** Uvítací e-mail po check-inu. */

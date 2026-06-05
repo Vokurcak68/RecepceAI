@@ -294,6 +294,13 @@ export async function roomDetail(propertyId: string, roomId: string) {
   };
 }
 
+/** Nastaví cenu ubytování rezervace (totalAmount = ubytování + pobyt. poplatek) — pro per-person ceník (součet sazeb osob). */
+export async function setReservationAccommodation(propertyId: string, id: string, accommodation: number) {
+  const r = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, cityTax: true } });
+  if (!r) throw NOT_FOUND();
+  return prisma.reservation.update({ where: { id }, data: { totalAmount: new Prisma.Decimal(accommodation).add(r.cityTax) }, select: { id: true, totalAmount: true } });
+}
+
 /** Přiřadí typ osoby (číselník) k rezervaci; volitelně přepočítá cenu ubytování = sazba × nocí (+ pobyt. poplatek). */
 export async function setReservationPersonRate(propertyId: string, id: string, personRateId: string | null, applyPrice = true) {
   const r = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, nights: true, cityTax: true } });

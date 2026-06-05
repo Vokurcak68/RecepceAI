@@ -8,6 +8,7 @@ type Dict = Record<string, string>;
 const cs: Dict = {
   subjCreated: "Potvrzení rezervace {code} — {property}", subjCheckin: "Vítejte v {property}", subjCheckout: "Děkujeme za návštěvu — {property}", subjCancel: "Zrušení rezervace {code} — {property}",
   titleCreated: "Potvrzení rezervace", titleCheckin: "Vítejte!", titleCheckout: "Děkujeme za návštěvu", titleCancel: "Zrušení rezervace",
+  subjProforma: "Zálohová faktura {number} — {property}", titleProforma: "Zálohová faktura", introProforma: "Dobrý den {name}, k vaší rezervaci jsme vystavili zálohovou fakturu. Prosíme o její úhradu.", rowDue: "Splatnost", proformaNote: "Uhraďte prosím zálohu {amount} do {due}. Po připsání platby vám rezervaci potvrdíme.",
   introCreated: "Dobrý den, {name},<br>děkujeme za vaši rezervaci v <b>{property}</b>. Níže najdete její shrnutí. Těšíme se na vaši návštěvu!",
   introCheckin: "Dobrý den, {name},<br>vítáme vás v <b>{property}</b>! Váš pobyt byl zahájen, přejeme příjemné ubytování.",
   introCheckout: "Dobrý den, {name},<br>děkujeme, že jste si vybrali <b>{property}</b>. Doufáme, že jste byli spokojeni, a budeme se těšit na vaši příští návštěvu.",
@@ -26,6 +27,7 @@ const cs: Dict = {
 const en: Dict = {
   subjCreated: "Reservation confirmation {code} — {property}", subjCheckin: "Welcome to {property}", subjCheckout: "Thank you for your visit — {property}", subjCancel: "Reservation {code} cancelled — {property}",
   titleCreated: "Reservation confirmation", titleCheckin: "Welcome!", titleCheckout: "Thank you for your visit", titleCancel: "Reservation cancelled",
+  subjProforma: "Proforma invoice {number} — {property}", titleProforma: "Proforma invoice", introProforma: "Hello {name}, we have issued a proforma (deposit) invoice for your reservation. Please pay it.", rowDue: "Due date", proformaNote: "Please pay the deposit {amount} by {due}. Once received, we will confirm your reservation.",
   introCreated: "Hello {name},<br>thank you for your reservation at <b>{property}</b>. A summary is below. We look forward to your visit!",
   introCheckin: "Hello {name},<br>welcome to <b>{property}</b>! Your stay has started — we wish you a pleasant time.",
   introCheckout: "Hello {name},<br>thank you for choosing <b>{property}</b>. We hope you enjoyed your stay and look forward to welcoming you again.",

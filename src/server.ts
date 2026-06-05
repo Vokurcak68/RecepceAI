@@ -575,10 +575,13 @@ adminRouter.post("/reservations/:id/documents", h((req, res) => {
   const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});
   return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType);
 }));
-adminRouter.post("/reservations/:id/proforma", h((req, res) => {
-  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional() }).parse(req.body);
-  return billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
+adminRouter.post("/reservations/:id/proforma", h(async (req, res) => {
+  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional(), email: z.boolean().optional() }).parse(req.body);
+  const doc = await billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
+  if (b.email) mailer.sendProforma(req.params.id, { number: doc.number, total: Number(doc.total), dueDate: doc.dueDate }).catch((e) => console.error("[mail] proforma:", (e as Error).message));
+  return doc;
 }));
+adminRouter.post("/reservations/:id/accommodation", h((req, res) => admin.setReservationAccommodation(pid(res), req.params.id, z.object({ amount: z.number().nonnegative() }).parse(req.body).amount)));
 
 // Pokladna — stav, otevření směny, příjem/výdej, uzávěrka, historie.
 adminRouter.get("/cashregister", h((_req, res) => cash.getState(pid(res))));
