@@ -1833,7 +1833,7 @@ function BookView({ selId }: { selId: string }) {
 
 // ── Skupinové / vícepokojové rezervace ───────────────────────
 const blankGroupRoom = (): GroupRoomInput => ({ roomTypeId: "", adults: 2, children: 0, childAges: [], firstName: "", lastName: "" });
-const blankGroupForm = () => ({ name: "", note: "", from: todayIso(), to: tomorrowIso(), firstName: "", lastName: "", email: "", phone: "", language: "cs", rooms: [blankGroupRoom()] });
+const blankGroupForm = () => ({ name: "", note: "", from: todayIso(), to: tomorrowIso(), billing: "" as "" | "collective" | "individual", firstName: "", lastName: "", email: "", phone: "", language: "cs", rooms: [blankGroupRoom()] });
 
 function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<GroupListItem[]>(() => api.groups(), [selId]);
@@ -1847,10 +1847,11 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
   const create = async () => {
     setErr("");
     if (!g.name.trim() || !g.firstName || !g.lastName) { setErr("Vyplň název skupiny a kontakt (jméno, příjmení)."); return; }
+    if (!g.billing) { setErr("Vyber, jak se skupina platí (kolektivně / individuálně)."); return; }
     if (g.rooms.some((r) => !r.roomTypeId)) { setErr("U každého pokoje vyber typ."); return; }
     setBusy(true);
     try {
-      await api.createGroup({ name: g.name, note: g.note || undefined, from: g.from, to: g.to,
+      await api.createGroup({ name: g.name, note: g.note || undefined, from: g.from, to: g.to, billing: g.billing,
         organizer: { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: g.language },
         rooms: g.rooms.map((r) => ({ roomTypeId: r.roomTypeId, adults: Number(r.adults), children: Number(r.children) || 0, childAges: r.childAges, firstName: r.firstName || undefined, lastName: r.lastName || undefined })) });
       setShowForm(false); setG(blankGroupForm()); reload();
@@ -1877,8 +1878,13 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
             <input placeholder="Telefon" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} />
             <label className="row">Jazyk <select value={g.language} onChange={(e) => setG({ ...g, language: e.target.value })}>{GUEST_LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}</select></label>
           </div>
+          <div className="toolbar" style={{ alignItems: "center" }}>
+            <span className="muted">Platba:</span>
+            <label className={`row ${g.billing === "collective" ? "" : ""}`} style={{ gap: 5, cursor: "pointer" }}><input type="radio" name="grpbill" checked={g.billing === "collective"} onChange={() => setG({ ...g, billing: "collective" })} /> Kolektivně <span className="muted" style={{ fontSize: 12 }}>(jeden plátce, společná faktura)</span></label>
+            <label className="row" style={{ gap: 5, cursor: "pointer" }}><input type="radio" name="grpbill" checked={g.billing === "individual"} onChange={() => setG({ ...g, billing: "individual" })} /> Individuálně <span className="muted" style={{ fontSize: 12 }}>(každý pokoj platí sám)</span></label>
+          </div>
           <div style={{ borderTop: "1px solid #e6eaee", margin: "8px 0", paddingTop: 10 }}>
-            <div className="muted" style={{ marginBottom: 8 }}>Pokoje ve skupině (jméno hosta nepovinné — jinak se použije kontakt):</div>
+            <div className="muted" style={{ marginBottom: 8 }}>{prop.inventoryUnit === "bed" ? "Lůžka ve skupině — u typu zadej počet lůžek; každé lůžko bude samostatná rezervace (jméno nepovinné):" : "Pokoje ve skupině (jméno hosta nepovinné — jinak se použije kontakt):"}</div>
             {g.rooms.map((r, i) => (
               <div key={i} style={{ marginBottom: 8 }}>
                 <div className="toolbar" style={{ marginBottom: (r.children ?? 0) > 0 ? 4 : 0 }}>
@@ -1887,8 +1893,8 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
                     <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
                     {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
                   </select>
-                  <label className="row">Dosp. <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
-                  <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setRoom(i, { children: n, childAges: Array.from({ length: n }, (_, j) => r.childAges?.[j] ?? 8) }); }} /></label>
+                  <label className="row">{prop.inventoryUnit === "bed" ? "Lůžek" : "Dosp."} <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
+                  {prop.inventoryUnit !== "bed" && <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setRoom(i, { children: n, childAges: Array.from({ length: n }, (_, j) => r.childAges?.[j] ?? 8) }); }} /></label>}
                   <input placeholder="Jméno hosta" style={{ width: 110 }} value={r.firstName ?? ""} onChange={(e) => setRoom(i, { firstName: e.target.value })} />
                   <input placeholder="Příjmení" style={{ width: 110 }} value={r.lastName ?? ""} onChange={(e) => setRoom(i, { lastName: e.target.value })} />
                   {g.rooms.length > 1 && <button className="btn sm danger" onClick={() => setG((s) => ({ ...s, rooms: s.rooms.filter((_, idx) => idx !== i) }))}>✕</button>}
@@ -1903,9 +1909,9 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
                 )}
               </div>
             ))}
-            <button className="btn ghost sm" onClick={() => setG((s) => ({ ...s, rooms: [...s.rooms, blankGroupRoom()] }))}>+ Přidat pokoj</button>
+            <button className="btn ghost sm" onClick={() => setG((s) => ({ ...s, rooms: [...s.rooms, blankGroupRoom()] }))}>{prop.inventoryUnit === "bed" ? "+ Přidat typ lůžka" : "+ Přidat pokoj"}</button>
           </div>
-          <button className="btn" disabled={busy} onClick={create}>{busy ? "Vytvářím…" : `Vytvořit skupinu (${g.rooms.length} pok.)`}</button>
+          <button className="btn" disabled={busy} onClick={create}>{busy ? "Vytvářím…" : prop.inventoryUnit === "bed" ? `Vytvořit skupinu (${g.rooms.reduce((s, r) => s + (Number(r.adults) || 0), 0)} lůžek)` : `Vytvořit skupinu (${g.rooms.length} pok.)`}</button>
         </div>
       )}
       <div className="panel">
@@ -1929,6 +1935,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<GroupDetail>(() => api.group(id), [id]);
   const [memberId, setMemberId] = useState<string | null>(null);
+  const [memberPick, setMemberPick] = useState<GroupMember | null>(null); // výběr hlavní osoby člena z adresáře
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [msgErr, setMsgErr] = useState(false);
@@ -1956,8 +1963,15 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <button className="btn ghost" disabled={busy} onClick={() => act(() => api.groupEmail(id), "Souhrn odeslán organizátorovi.")}>✉️ Odeslat souhrn</button>
           <button className="btn danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Zrušit skupinu", message: <>Zrušit všechny pokoje skupiny <b>{data.name}</b>? (Odhlášené zůstanou.)</>, confirmLabel: "Zrušit vše", danger: true })) act(() => api.groupCancel(id), "Skupina zrušena."); }}>Zrušit vše</button>
           <span style={{ flex: 1 }} />
+          <label className="row" style={{ gap: 5 }}><span className="muted">Platba:</span>
+            <select value={data.billing} disabled={busy} onChange={(e) => act(() => api.setGroupBilling(id, e.target.value as "collective" | "individual"), "Platební režim změněn.")}>
+              <option value="collective">Kolektivně (za skupinu)</option>
+              <option value="individual">Individuálně (každý sám)</option>
+            </select>
+          </label>
           <span className="muted">Celkem {money(data.totals.charges)} · zaplaceno {money(data.totals.paid)} · <b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{bal > 0 ? `zbývá ${money(bal)}` : "vyrovnáno"}</b></span>
         </div>
+        {data.billing === "collective" && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>👥 Kolektivní platba — účtuje se za celou skupinu (společná faktura). Jednotlivé pokoje lze odhlásit kdykoli; „Check-out vše" hlídá vyrovnaný účet celé skupiny.</div>}
         {results && (
           <div style={{ marginTop: 10 }}>
             {results.map((r) => <div key={r.code} className="muted" style={{ fontSize: 13 }}>{r.ok ? "✓" : "✗"} {r.code}{r.error ? ` — ${r.error}` : ""}</div>)}
@@ -1969,12 +1983,12 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           render={(m: GroupMember) => (
             <tr key={m.id}>
               <td className="muted">{m.code}</td>
-              <td>{m.guestName}</td>
+              <td>{m.guestName} <button className="btn sm ghost" title="Změnit hlavní osobu z adresáře" style={{ padding: "2px 7px", marginLeft: 4 }} onClick={() => setMemberPick(m)}>📇</button></td>
               <td>{m.unit}</td>
               <td>{d(m.checkInDate)} → {d(m.checkOutDate)}</td>
               <td><Badge s={m.status} /></td>
               <td>{money(m.totalAmount)}</td>
-              <td>{parseFloat(m.balance) > 0 ? <span style={{ color: "var(--warn)" }}>{money(m.balance)}</span> : <span className="muted">0</span>}</td>
+              <td>{data.billing === "collective" ? <span className="muted" title="Hradí se hromadně za skupinu">hromadně</span> : parseFloat(m.balance) > 0 ? <span style={{ color: "var(--warn)" }}>{money(m.balance)}</span> : <span className="muted">0</span>}</td>
               <td className="right"><button className="btn sm ghost" onClick={() => setMemberId(m.id)}>Detail</button></td>
             </tr>
           )} />
@@ -1994,6 +2008,13 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
         )}
       </div></div>
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
+      {memberPick && <GuestPickerOverlay
+        prefill={memberPick.guestEmail || memberPick.guestName || ""}
+        title={`Hlavní osoba pokoje ${memberPick.code}`}
+        subtitle="Vyber konkrétního hosta z adresáře — nahradí jméno skupiny u tohoto pokoje (jeho doklad z knihy se pak předvyplní)."
+        onClose={() => setMemberPick(null)}
+        onPick={(gid) => { const mid = memberPick.id; setMemberPick(null); act(() => api.setReservationPrimaryGuest(mid, gid), "Hlavní osoba pokoje změněna."); }}
+      />}
     </>
   );
 }
@@ -2040,7 +2061,7 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   const fromData = (): GuestForm | null => {
     if (!data) return null;
     const g = data.guest;
-    return { firstName: g.firstName, lastName: g.lastName, email: g.email ?? "", phone: g.phone ?? "", language: g.language ?? "", address: g.address ?? "", documentType: g.documentType ?? "", documentNumber: g.documentNumber ?? "", vip: g.vip, preferences: g.preferences ?? "", marketingConsent: g.marketingConsent };
+    return { firstName: g.firstName, lastName: g.lastName, email: g.email ?? "", phone: g.phone ?? "", language: g.language ?? "", address: g.address ?? "", documentType: g.documentType ?? "", documentNumber: g.documentNumber ?? "", dateOfBirth: g.dateOfBirth ? g.dateOfBirth.slice(0, 10) : "", nationality: g.nationality ?? "", vip: g.vip, preferences: g.preferences ?? "", marketingConsent: g.marketingConsent };
   };
   useEffect(() => { setF(fromData()); setDirty(false); }, [data?.guest.id]); // eslint-disable-line
   const upd = (patch: Partial<GuestForm>) => { setF((s) => (s ? { ...s, ...patch } : s)); setDirty(true); };
@@ -2048,7 +2069,7 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
     if (!f) return;
     if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Jméno a příjmení jsou povinné."); return; }
     setBusy(true); setMsg("");
-    try { await api.updateGuest(id, { firstName: f.firstName.trim(), lastName: f.lastName.trim(), email: f.email, phone: f.phone, language: f.language, address: f.address, documentType: f.documentType, documentNumber: f.documentNumber, vip: f.vip, preferences: f.preferences, marketingConsent: f.marketingConsent }); setMsg("Uloženo."); setDirty(false); reload(); }
+    try { await api.updateGuest(id, { firstName: f.firstName.trim(), lastName: f.lastName.trim(), email: f.email, phone: f.phone, language: f.language, address: f.address, documentType: f.documentType, documentNumber: f.documentNumber, dateOfBirth: f.dateOfBirth, nationality: f.nationality, vip: f.vip, preferences: f.preferences, marketingConsent: f.marketingConsent }); setMsg("Uloženo."); setDirty(false); reload(); }
     catch (e) { setMsg(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -2077,6 +2098,8 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
           <FieldRow label="Telefon"><input style={fieldInp} value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></FieldRow>
           <FieldRow label="Jazyk"><input style={{ width: 90 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></FieldRow>
           <FieldRow label="Adresa"><input style={fieldInp} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></FieldRow>
+          <FieldRow label="Datum narození"><input type="date" value={f.dateOfBirth} onChange={(e) => upd({ dateOfBirth: e.target.value })} /></FieldRow>
+          <FieldRow label="Národnost"><input style={fieldInp} value={f.nationality} onChange={(e) => upd({ nationality: e.target.value })} /></FieldRow>
           <FieldRow label="Doklad"><select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></FieldRow>
           <FieldRow label="Číslo dokladu"><input style={fieldInp} value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></FieldRow>
         </div></div>
@@ -2591,7 +2614,21 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       <div className="panel"><h3>Evidenční kniha <span className="muted" style={{ fontSize: 14 }}>zápis ubytovaných osob</span></h3>
         {offerReg && r.registrationEntries.length === 0 && <div className="error" style={{ background: "#fff4e0", color: "#9a6b00", margin: "0 0 4px" }}>✓ Host odbaven (check-in). Nezapomeňte ho zapsat do evidenční knihy níže.</div>}
         <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={reg.primary} onChange={(e) => setReg({ ...reg, primary: e.target.checked, fullName: e.target.checked ? `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() : "" })} /> hlavní host</label>
+          <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={reg.primary} onChange={(e) => {
+            const on = e.target.checked;
+            if (!on) { setReg({ ...reg, primary: false, fullName: "" }); return; }
+            // Předvyplnění z knihy hostů (poslední zápis) → jinak z profilu hosta (doklad/adresa) → jinak ponech.
+            const lr = r.primaryGuestLastReg, pg = r.primaryGuest;
+            setReg((s) => ({ ...s, primary: true,
+              fullName: lr?.fullName || `${pg?.firstName ?? ""} ${pg?.lastName ?? ""}`.trim(),
+              dateOfBirth: lr?.dateOfBirth ? lr.dateOfBirth.slice(0, 10) : (pg?.dateOfBirth ? pg.dateOfBirth.slice(0, 10) : s.dateOfBirth),
+              nationality: lr?.nationality || pg?.nationality || s.nationality,
+              documentType: lr?.documentType || pg?.documentType || s.documentType,
+              documentNumber: lr?.documentNumber || pg?.documentNumber || s.documentNumber,
+              homeAddress: lr?.homeAddress || pg?.address || s.homeAddress,
+            }));
+          }} /> hlavní host</label>
+          {(r.primaryGuestLastReg || r.primaryGuest?.documentNumber || r.primaryGuest?.dateOfBirth) && <span className="muted" style={{ fontSize: 12 }}>📘 údaje z adresáře/knihy se předvyplní</span>}
           <input placeholder="Jméno a příjmení" style={{ minWidth: 180 }} value={reg.fullName} onChange={(e) => setReg({ ...reg, fullName: e.target.value })} />
           <label className="row">nar. <input type="date" value={reg.dateOfBirth} onChange={(e) => setReg({ ...reg, dateOfBirth: e.target.value })} /></label>
           <input placeholder="Národnost" style={{ width: 150 }} value={reg.nationality} onChange={(e) => setReg({ ...reg, nationality: e.target.value })} />
@@ -2633,6 +2670,17 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
   const [q, setQ] = useState(prefill);
   const list = useAsync<GuestListItem[]>(() => api.searchGuests(q), []);
   const rows = (list.data ?? []).filter((g) => g.id !== excludeId);
+  // Ruční založení nového hosta (když klient ještě není v adresáři).
+  const [nf, setNf] = useState({ firstName: "", lastName: "", email: "", phone: "", dateOfBirth: "", nationality: "", documentType: "", documentNumber: "", address: "" });
+  const [more, setMore] = useState(false); // nepovinné údaje pro evidenci/Ubyport
+  const [busy, setBusy] = useState(false);
+  const [nerr, setNerr] = useState("");
+  const createPick = async () => {
+    if (!nf.firstName.trim() || !nf.lastName.trim()) { setNerr("Vyplň jméno a příjmení."); return; }
+    setBusy(true); setNerr("");
+    try { const g = await api.createGuestRecord({ firstName: nf.firstName.trim(), lastName: nf.lastName.trim(), email: nf.email.trim() || undefined, phone: nf.phone.trim() || undefined, dateOfBirth: nf.dateOfBirth || undefined, nationality: nf.nationality.trim() || undefined, documentType: nf.documentType || undefined, documentNumber: nf.documentNumber.trim() || undefined, address: nf.address.trim() || undefined }); onPick(g.id); }
+    catch (e) { setNerr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
   return (
     <div className="inv-backdrop" onClick={onClose}>
       <div className="invoice wz" style={{ width: 700 }} onClick={(e) => e.stopPropagation()}>
@@ -2652,13 +2700,36 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
             {rows.map((g) => (
               <div key={g.id} className="wz-pick" onClick={() => onPick(g.id)}>
                 <div className="pinfo">
-                  <div className="pname">{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}</div>
-                  <div className="pmeta">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""} · {g.stays} {g.stays === 1 ? "pobyt" : g.stays < 5 ? "pobyty" : "pobytů"}</div>
+                  <div className="pname">{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}{g.hasDocument ? <span title="Doklad je v knize hostů — předvyplní se" style={{ marginLeft: 6 }}>📘</span> : null}</div>
+                  <div className="pmeta">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""} · {g.stays} {g.stays === 1 ? "pobyt" : g.stays < 5 ? "pobyty" : "pobytů"}{g.hasDocument ? " · doklad v knize" : ""}</div>
                 </div>
                 <span className="parrow">{actionLabel} ›</span>
               </div>
             ))}
             {list.data && rows.length === 0 && <div className="muted">Nikdo nenalezen.</div>}
+          </div>
+        </div>
+        <div className="wz-foot" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+          <span className="muted" style={{ fontSize: 13 }}>Klient ještě není v adresáři? Zadej ho ručně:</span>
+          {nerr && <div className="error" style={{ margin: 0 }}>{nerr}</div>}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="Jméno" value={nf.firstName} onChange={(e) => setNf({ ...nf, firstName: e.target.value })} style={{ width: 120 }} />
+            <input placeholder="Příjmení" value={nf.lastName} onChange={(e) => setNf({ ...nf, lastName: e.target.value })} style={{ width: 130 }} />
+            <input placeholder="E-mail (nepov.)" value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })} style={{ width: 160 }} />
+            <input placeholder="Telefon (nepov.)" value={nf.phone} onChange={(e) => setNf({ ...nf, phone: e.target.value })} style={{ width: 140 }} />
+            <button type="button" className="btn ghost sm" onClick={() => setMore((m) => !m)} title="Údaje pro evidenční knihu / UBYPORT — nepovinné">{more ? "− údaje pro evidenci" : "+ údaje pro evidenci"}</button>
+          </div>
+          {more && (
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <label className="row" style={{ gap: 4 }}>nar. <input type="date" value={nf.dateOfBirth} onChange={(e) => setNf({ ...nf, dateOfBirth: e.target.value })} /></label>
+              <input placeholder="Národnost" value={nf.nationality} onChange={(e) => setNf({ ...nf, nationality: e.target.value })} style={{ width: 130 }} />
+              <select value={nf.documentType} onChange={(e) => setNf({ ...nf, documentType: e.target.value })}><option value="">doklad…</option><option value="id_card">OP</option><option value="passport">Pas</option></select>
+              <input placeholder="Číslo dokladu" value={nf.documentNumber} onChange={(e) => setNf({ ...nf, documentNumber: e.target.value })} style={{ width: 130 }} />
+              <input placeholder="Adresa trvalého bydliště" value={nf.address} onChange={(e) => setNf({ ...nf, address: e.target.value })} style={{ width: 220 }} />
+            </div>
+          )}
+          <div className="row"><span className="muted" style={{ fontSize: 12, flex: 1 }}>{more ? "Vyplněné údaje se použijí i pro evidenční knihu / UBYPORT — recepční se k nim nemusí vracet." : ""}</span>
+            <button className="btn" disabled={busy || !nf.firstName.trim() || !nf.lastName.trim()} onClick={createPick}>{busy ? "Zakládám…" : `Založit a ${actionLabel.toLowerCase()}`}</button>
           </div>
         </div>
       </div>

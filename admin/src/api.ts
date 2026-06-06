@@ -34,16 +34,17 @@ export type Property = {
 };
 export type UserRole = "super_admin" | "manager" | "housekeeping" | "maintenance";
 export type User = { id: string; email: string; name: string; role: UserRole; properties?: { property: Property }[] };
-export type Guest = { firstName: string; lastName: string; email: string | null; phone: string | null; vip?: boolean; preferences?: string | null };
+export type Guest = { id?: string; firstName: string; lastName: string; email: string | null; phone: string | null; vip?: boolean; preferences?: string | null; address?: string | null; documentType?: string | null; documentNumber?: string | null; dateOfBirth?: string | null; nationality?: string | null };
 export type GuestReview = { nps: number; comment: string | null; createdAt: string };
-export type GuestListItem = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; vip: boolean; preferences: string | null; stays: number; lastStay: string | null };
+export type GuestListItem = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; vip: boolean; preferences: string | null; stays: number; lastStay: string | null; hasDocument?: boolean; documentType?: string | null };
 export type GuestStay = { id: string; code: string; propertyName: string; roomType: string | null; checkInDate: string; checkOutDate: string; status: string; totalAmount: Money; review: GuestReview | null };
-export type GuestProfile = { guest: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; language: string | null; address: string | null; documentType: string | null; documentNumber: string | null; vip: boolean; preferences: string | null; marketingConsent: boolean; createdAt: string }; stays: GuestStay[] };
-export type GuestPatch = { firstName?: string; lastName?: string; email?: string; phone?: string; language?: string; address?: string; documentType?: string; documentNumber?: string; vip?: boolean; preferences?: string; marketingConsent?: boolean };
+export type GuestProfile = { guest: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; language: string | null; address: string | null; documentType: string | null; documentNumber: string | null; dateOfBirth: string | null; nationality: string | null; vip: boolean; preferences: string | null; marketingConsent: boolean; createdAt: string }; stays: GuestStay[] };
+export type GuestPatch = { firstName?: string; lastName?: string; email?: string; phone?: string; language?: string; address?: string; documentType?: string; documentNumber?: string; dateOfBirth?: string; nationality?: string; vip?: boolean; preferences?: string; marketingConsent?: boolean };
 export type ReviewItem = { id: string; nps: number; comment: string | null; createdAt: string; code: string; checkOutDate: string; guestName: string };
-export type GroupListItem = { id: string; code: string; name: string; note: string | null; createdAt: string; rooms: number; total: number; from: string | null; to: string | null };
-export type GroupMember = { id: string; code: string; status: string; guestName: string; unit: string; roomType: string | null; checkInDate: string; checkOutDate: string; totalAmount: Money; balance: Money };
-export type GroupDetail = { id: string; code: string; name: string; note: string | null; createdAt: string; organizer: { firstName: string; lastName: string; email: string | null } | null; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money }; emails: EmailLog[] };
+export type GroupBilling = "collective" | "individual";
+export type GroupListItem = { id: string; code: string; name: string; note: string | null; billing: GroupBilling; createdAt: string; rooms: number; total: number; from: string | null; to: string | null };
+export type GroupMember = { id: string; code: string; status: string; guestId: string; guestEmail: string | null; guestName: string; unit: string; roomType: string | null; checkInDate: string; checkOutDate: string; totalAmount: Money; balance: Money };
+export type GroupDetail = { id: string; code: string; name: string; note: string | null; billing: GroupBilling; createdAt: string; organizer: { firstName: string; lastName: string; email: string | null } | null; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money }; emails: EmailLog[] };
 export type GroupRoomInput = { roomTypeId: string; adults: number; children?: number; childAges?: number[]; firstName?: string; lastName?: string };
 export type BulkResult = { code: string; ok: boolean; error?: string };
 export type ReviewsData = { summary: { count: number; avg: number | null; nps: number | null; promoters: number; passives: number; detractors: number }; reviews: ReviewItem[] };
@@ -128,6 +129,7 @@ export type ReservationDetail = Reservation & {
   onlineCheckinAt: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
   previousStays?: number; review?: GuestReview | null; group?: { id: string; code: string; name: string } | null;
+  primaryGuestLastReg?: { fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string } | null;
   companyId?: string | null; company?: { id: string; name: string } | null;
   personRateId?: string | null; personRate?: { id: string; name: string; pricePerNight: Money } | null;
 };
@@ -241,6 +243,7 @@ export const api = {
   addRegistration: (id: string, b: { primary?: boolean; fullName: string; dateOfBirth: string; nationality: string; documentType?: string; documentNumber?: string; homeAddress?: string }) => req(`/admin/reservations/${id}/registration`, { method: "POST", body: JSON.stringify(b) }),
   deleteRegistration: (id: string) => req(`/admin/registrations/${id}`, { method: "DELETE" }),
   searchGuests: (q: string) => req<GuestListItem[]>(`/admin/guests?q=${encodeURIComponent(q)}`),
+  createGuestRecord: (b: { firstName: string; lastName: string; email?: string; phone?: string; address?: string; documentType?: string; documentNumber?: string; dateOfBirth?: string; nationality?: string }) => req<{ id: string; firstName: string; lastName: string }>(`/admin/guests`, { method: "POST", body: JSON.stringify(b) }),
   guestProfile: (id: string) => req<GuestProfile>(`/admin/guests/${id}`),
   updateGuest: (id: string, b: GuestPatch) => req(`/admin/guests/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   mergeGuests: (targetId: string, sourceId: string) => req(`/admin/guests/${targetId}/merge`, { method: "POST", body: JSON.stringify({ sourceId }) }),
@@ -248,7 +251,8 @@ export const api = {
   reviews: () => req<ReviewsData>(`/admin/reviews`),
   groups: () => req<GroupListItem[]>(`/admin/groups`),
   group: (id: string) => req<GroupDetail>(`/admin/groups/${id}`),
-  createGroup: (b: { name: string; note?: string; from: string; to: string; organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string }; rooms: GroupRoomInput[] }) => req<GroupDetail>(`/admin/groups`, { method: "POST", body: JSON.stringify(b) }),
+  createGroup: (b: { name: string; note?: string; from: string; to: string; billing?: GroupBilling; organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string }; rooms: GroupRoomInput[] }) => req<GroupDetail>(`/admin/groups`, { method: "POST", body: JSON.stringify(b) }),
+  setGroupBilling: (id: string, billing: GroupBilling) => req<GroupDetail>(`/admin/groups/${id}/billing`, { method: "PATCH", body: JSON.stringify({ billing }) }),
   groupCheckin: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkin`, { method: "POST" }),
   groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
   groupCancel: (id: string) => req<{ ok: boolean; count: number }>(`/admin/groups/${id}/cancel`, { method: "POST" }),

@@ -1,35 +1,34 @@
-// CRM hostů — párování vracejících se hostů (podle e-mailu), profil + historie
-// pobytů, trvalé preference/VIP a hodnocení pobytu (NPS). Host je globální entita
-// (může bydlet ve více provozovnách); přehledy se ale scopují na provozovny,
-// ke kterým má uživatel přístup.
-import { Prisma, ReservationStatus, DocumentType } from "@prisma/client";
+// CRM hostů — profil + historie pobytů, trvalé preference/VIP a hodnocení pobytu
+// (NPS). Host je globální entita (může bydlet ve více provozovnách); přehledy se
+// ale scopují na provozovny, ke kterým má uživatel přístup.
+// POZN.: automatické párování vracejícího se hosta podle e-mailu bylo ZRUŠENO
+// (záměrně — dělalo víc škody než užitku). Napojení na existujícího hosta je teď
+// výhradně manuální přes adresář (📇 → setPrimaryGuest).
+import { ReservationStatus, DocumentType } from "@prisma/client";
 import { prisma } from "./prisma";
 
 export type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
 
-const normalizeEmail = (e?: string | null) => (e || "").trim().toLowerCase() || null;
-
-/** Najde existujícího hosta podle e-mailu, jinak založí nového. Vrací guestId.
- * Při shodě doplní jen chybějící kontakt/jazyk (jméno hosta nikdy nepřepisuje). */
-export async function findOrCreateGuest(g: GuestInput): Promise<string> {
-  const email = normalizeEmail(g.email);
-  if (email) {
-    const ex = await prisma.guest.findFirst({
-      where: { email: { equals: email, mode: "insensitive" } },
-      orderBy: { createdAt: "asc" },
-    });
-    if (ex) {
-      const data: Prisma.GuestUpdateInput = {};
-      if (!ex.phone && g.phone) data.phone = g.phone;
-      if (!ex.language && g.language) data.language = g.language;
-      if (Object.keys(data).length) await prisma.guest.update({ where: { id: ex.id }, data });
-      return ex.id;
-    }
-  }
+/** Založí nového hosta a vrátí jeho id. (Nepáruje podle e-mailu — viz pozn. výše.) */
+export async function createGuest(g: GuestInput): Promise<string> {
   const created = await prisma.guest.create({
     data: { firstName: g.firstName, lastName: g.lastName, email: g.email || null, phone: g.phone || null, language: g.language || null },
   });
   return created.id;
+}
+
+/** Ruční založení hosta do adresáře (z výběru hosta — když klient ještě není v seznamu). Vrací nový záznam.
+ * Údaje pro evidenci/UBYPORT (narození/národnost/doklad/adresa) jsou nepovinné — když je klient dá hned,
+ * předvyplní se z nich evidenční kniha. */
+export async function createGuestProfile(g: GuestInput & { address?: string; documentType?: string; documentNumber?: string; dateOfBirth?: string; nationality?: string }) {
+  if (!g.firstName?.trim() || !g.lastName?.trim()) throw new Error("Vyplň jméno a příjmení.");
+  return prisma.guest.create({
+    data: {
+      firstName: g.firstName.trim(), lastName: g.lastName.trim(), email: g.email?.trim() || null, phone: g.phone?.trim() || null, language: g.language || null,
+      address: g.address?.trim() || null, documentType: g.documentType ? (g.documentType as DocumentType) : null, documentNumber: g.documentNumber?.trim() || null,
+      dateOfBirth: g.dateOfBirth ? new Date(g.dateOfBirth) : null, nationality: g.nationality?.trim() || null,
+    },
+  });
 }
 
 const COUNTED: ReservationStatus[] = [ReservationStatus.checked_in, ReservationStatus.checked_out];
@@ -62,6 +61,8 @@ export async function searchGuests(propertyIds: string[], q: string) {
       return {
         id: g.id, firstName: g.firstName, lastName: g.lastName, email: g.email, phone: g.phone,
         vip: g.vip, preferences: g.preferences, stays: grp._count._all, lastStay: grp._max.checkOutDate,
+        // Propojení s knihou hostů: máme uložený doklad → při výběru z adresáře se předvyplní evidence.
+        hasDocument: !!g.documentNumber, documentType: g.documentType,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -84,6 +85,7 @@ export async function guestProfile(guestId: string, propertyIds: string[]) {
     guest: {
       id: guest.id, firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone,
       language: guest.language, address: guest.address, documentType: guest.documentType, documentNumber: guest.documentNumber,
+      dateOfBirth: guest.dateOfBirth, nationality: guest.nationality,
       vip: guest.vip, preferences: guest.preferences, marketingConsent: guest.marketingConsent, createdAt: guest.createdAt,
     },
     stays: stays.map((s) => ({
@@ -100,6 +102,7 @@ export async function updateGuestCrm(
   data: {
     firstName?: string; lastName?: string; email?: string | null; phone?: string | null;
     language?: string | null; address?: string | null; documentType?: string | null; documentNumber?: string | null;
+    dateOfBirth?: string | null; nationality?: string | null;
     vip?: boolean; preferences?: string | null; marketingConsent?: boolean;
   },
 ) {
@@ -116,6 +119,8 @@ export async function updateGuestCrm(
       ...(data.address !== undefined ? { address: data.address || null } : {}),
       ...(data.documentType !== undefined ? { documentType: data.documentType ? (data.documentType as DocumentType) : null } : {}),
       ...(data.documentNumber !== undefined ? { documentNumber: data.documentNumber || null } : {}),
+      ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null } : {}),
+      ...(data.nationality !== undefined ? { nationality: data.nationality || null } : {}),
       ...(data.vip !== undefined ? { vip: data.vip } : {}),
       ...(data.preferences !== undefined ? { preferences: data.preferences || null } : {}),
       ...(data.marketingConsent !== undefined ? { marketingConsent: data.marketingConsent } : {}),

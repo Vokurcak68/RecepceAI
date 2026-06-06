@@ -1,14 +1,14 @@
 // Hlavní operace rezervačního jádra — scopované na provozovnu, s rozlišením
 // jednotky pokoj/lůžko dle typu provozovny.
 import {
-  Prisma, ReservationStatus, PaymentType, PaymentMethod, PaymentStatus, DocumentType, InventoryUnit, RoomStatus, ChargeCategory,
+  Prisma, ReservationStatus, PaymentType, PaymentMethod, PaymentStatus, DocumentType, InventoryUnit, RoomStatus, ChargeCategory, GroupBilling,
 } from "@prisma/client";
 import { prisma } from "./prisma";
 import { findFreeRoom, findFreeBed, freeUnitsForType } from "./availability";
 import { getStayPrice } from "./pricing";
 import { addDays, nightsBetween, toDateOnly } from "./dates";
 import * as mailer from "./mailer";
-import { findOrCreateGuest } from "./guests";
+import { createGuest } from "./guests";
 
 const HOLD_MINUTES = 15;
 const REGISTRATION_RETENTION_YEARS = 6;
@@ -64,7 +64,7 @@ export async function createWalkInHold(input: WalkInInput) {
   if (useBed ? !bedId : !roomId) throw new Error("Pro zvolený termín už není volná jednotka tohoto typu.");
 
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
-  const guestId = await findOrCreateGuest(guest); // párování vracejícího se hosta dle e-mailu
+  const guestId = await createGuest(guest); // nového hosta nepárujeme dle e-mailu (napojení na stálého klienta je manuální přes adresář)
 
   return prisma.reservation.create({
     data: {
@@ -180,7 +180,7 @@ export type RegistrationInput = {
 };
 
 export async function addRegistrationEntry(input: RegistrationInput) {
-  return prisma.registrationEntry.create({
+  const entry = await prisma.registrationEntry.create({
     data: {
       reservationId: input.reservationId, guestId: input.guestId, fullName: input.fullName,
       dateOfBirth: toDateOnly(input.dateOfBirth), nationality: input.nationality, documentType: input.documentType,
@@ -189,6 +189,13 @@ export async function addRegistrationEntry(input: RegistrationInput) {
       retentionUntil: addDays(input.stayTo, 365 * REGISTRATION_RETENTION_YEARS),
     },
   });
+  // Propojení knihy hostů s adresářem: doklad/adresu z evidenčního zápisu si „zapamatuje" i profil
+  // hosta, aby se při příštím pobytu daly z adresáře předvyplnit (nepřepisujeme prázdnými hodnotami).
+  const patch: { documentType?: DocumentType; documentNumber?: string; address?: string } = {};
+  if (input.documentNumber?.trim()) { patch.documentType = input.documentType; patch.documentNumber = input.documentNumber.trim(); }
+  if (input.homeAddress?.trim()) patch.address = input.homeAddress.trim();
+  if (Object.keys(patch).length) await prisma.guest.update({ where: { id: input.guestId }, data: patch }).catch(() => {});
+  return entry;
 }
 
 // ── Platby a vyúčtování ──────────────────────────────────────
@@ -243,7 +250,11 @@ export const deleteCharge = (id: string) => prisma.charge.delete({ where: { id }
 // ── Check-out ────────────────────────────────────────────────
 export async function checkOut(reservationId: string) {
   const folio = await computeFolio(reservationId);
-  if (!folio.balance.isZero()) throw new Error(`Nelze odhlásit — nevyrovnaný účet: ${folio.balance.toFixed(2)} Kč.`);
+  // Kolektivní skupina se platí hromadně → jednotlivý pokoj jde odhlásit i s nevyrovnaným vlastním
+  // účtem (zůstatek celé skupiny hlídá checkOutGroup). Individuální skupina i sólo rezervace: účet musí sedět.
+  const grp = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { group: { select: { billing: true } } } });
+  const collective = grp?.group?.billing === GroupBilling.collective;
+  if (!collective && !folio.balance.isZero()) throw new Error(`Nelze odhlásit — nevyrovnaný účet: ${folio.balance.toFixed(2)} Kč.`);
 
   const res = await prisma.reservation.update({
     where: { id: reservationId },

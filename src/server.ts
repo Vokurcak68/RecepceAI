@@ -479,9 +479,12 @@ adminRouter.delete("/ical/import-feeds/:id", h((req, res) => deleteIcalFeed(pid(
 adminRouter.post("/ical/sync", h((_req, res) => syncProperty(pid(res))));
 // CRM hostů + hodnocení (scopováno na vybranou provozovnu)
 adminRouter.get("/guests", h((req, res) => guests.searchGuests([pid(res)], String(req.query.q ?? ""))));
+adminRouter.post("/guests", h((req) => guests.createGuestProfile(
+  z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional().or(z.literal("")), phone: z.string().optional(), language: z.string().optional(),
+    address: z.string().optional(), documentType: z.string().optional(), documentNumber: z.string().optional(), dateOfBirth: z.string().optional(), nationality: z.string().optional() }).parse(req.body))));
 adminRouter.get("/guests/:id", h((req, res) => guests.guestProfile(req.params.id, [pid(res)])));
 adminRouter.patch("/guests/:id", h((req, res) => guests.updateGuestCrm(req.params.id, [pid(res)],
-  z.object({ firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), phone: z.string().optional(), language: z.string().optional(), address: z.string().optional(), documentType: z.string().optional(), documentNumber: z.string().optional(), vip: z.boolean().optional(), preferences: z.string().optional(), marketingConsent: z.boolean().optional() }).parse(req.body))));
+  z.object({ firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), phone: z.string().optional(), language: z.string().optional(), address: z.string().optional(), documentType: z.string().optional(), documentNumber: z.string().optional(), dateOfBirth: z.string().optional(), nationality: z.string().optional(), vip: z.boolean().optional(), preferences: z.string().optional(), marketingConsent: z.boolean().optional() }).parse(req.body))));
 adminRouter.post("/guests/:id/merge", h((req, res) => guests.mergeGuests(req.params.id, z.object({ sourceId: z.string().uuid() }).parse(req.body).sourceId, [pid(res)])));
 adminRouter.delete("/guests/:id", h((req, res) => guests.deleteGuest(req.params.id)));
 adminRouter.get("/reviews", h((_req, res) => guests.listReviews(pid(res))));
@@ -492,10 +495,15 @@ adminRouter.get("/groups/:id", h((req, res) => groups.getGroup(pid(res), req.par
 adminRouter.post("/groups", h((req, res) => {
   const b = z.object({
     name: z.string().min(1), note: z.string().optional(), from: dateStr, to: dateStr,
+    billing: z.enum(["collective", "individual"]).optional(),
     organizer: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }),
     rooms: z.array(groupRoom).min(1),
   }).parse(req.body);
   return groups.createGroup(pid(res), { ...b, from: new Date(b.from), to: new Date(b.to) });
+}));
+adminRouter.patch("/groups/:id/billing", h((req, res) => {
+  const b = z.object({ billing: z.enum(["collective", "individual"]) }).parse(req.body);
+  return groups.setGroupBilling(pid(res), req.params.id, b.billing);
 }));
 adminRouter.post("/groups/:id/checkin", h((req, res) => groups.checkInGroup(pid(res), req.params.id)));
 adminRouter.post("/groups/:id/checkout", h((req, res) => groups.checkOutGroup(pid(res), req.params.id)));

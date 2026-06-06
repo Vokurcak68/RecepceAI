@@ -8,7 +8,7 @@ import { InventoryUnit } from "@prisma/client";
 import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge, addRegistrationEntry } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
-import { findOrCreateGuest, previousStaysCount } from "./guests";
+import { createGuest, previousStaysCount } from "./guests";
 import { computeCancellationFee } from "./policies";
 
 // ── Dashboard ────────────────────────────────────────────────
@@ -67,7 +67,7 @@ export async function createReservation(input: {
   if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0)
     throw new Error("Pro zvolený termín už není volná jednotka tohoto typu (předešlo se přebookování).");
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
-  const gId = await findOrCreateGuest(guest); // párování vracejícího se hosta dle e-mailu
+  const gId = await createGuest(guest); // nového hosta nepárujeme dle e-mailu (napojení na stálého klienta je manuální přes adresář)
   const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
@@ -101,7 +101,14 @@ export async function getReservation(propertyId: string, id: string) {
   });
   if (!r) throw NOT_FOUND();
   const previousStays = await previousStaysCount(propertyId, r.primaryGuestId, r.id); // pro odznak „vrací se"
-  return { ...r, previousStays };
+  // Propojení s knihou hostů: poslední evidenční zápis tohoto hosta (z jakéhokoli pobytu) — pro
+  // předvyplnění evidenční knihy (doklad, datum narození, národnost, adresa) u vracejícího se hosta.
+  const lastReg = await prisma.registrationEntry.findFirst({
+    where: { guestId: r.primaryGuestId },
+    orderBy: { createdAt: "desc" },
+    select: { fullName: true, dateOfBirth: true, nationality: true, documentType: true, documentNumber: true, homeAddress: true },
+  });
+  return { ...r, previousStays, primaryGuestLastReg: lastReg };
 }
 
 async function assertInProperty(propertyId: string, id: string) {
@@ -514,8 +521,39 @@ export async function setPrimaryGuest(propertyId: string, id: string, guestId: s
         update: { isPrimary: true },
       });
     });
+    await autoRegisterReturningGuest(id, guestId);
   }
   return getReservation(propertyId, id);
+}
+
+/** Když novou hlavní osobu už známe z dřívějška (má dřívější zápis v evidenční knize),
+ * zkopíruj jeho údaje (doklad, narození, národnost, adresa) rovnou na tuto rezervaci —
+ * ať ubytovaného nezadáváme podruhé. Bez předchozího zápisu (chybí narození/národnost) přeskočí. */
+async function autoRegisterReturningGuest(reservationId: string, guestId: string) {
+  const exists = await prisma.registrationEntry.findFirst({ where: { reservationId, guestId }, select: { id: true } });
+  if (exists) return; // už je v knize na téhle rezervaci
+  const res = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { checkInDate: true, checkOutDate: true } });
+  if (!res) return;
+  // 1) Máme dřívější zápis v knize → zkopíruj ho (nejúplnější zdroj).
+  const prev = await prisma.registrationEntry.findFirst({ where: { guestId, reservationId: { not: reservationId } }, orderBy: { createdAt: "desc" } });
+  if (prev) {
+    await addRegistrationEntry({
+      reservationId, guestId, fullName: prev.fullName, dateOfBirth: prev.dateOfBirth, nationality: prev.nationality,
+      documentType: prev.documentType, documentNumber: prev.documentNumber, homeAddress: prev.homeAddress,
+      visaNumber: prev.visaNumber ?? undefined, purposeOfStay: prev.purposeOfStay ?? undefined,
+      stayFrom: res.checkInDate, stayTo: res.checkOutDate,
+    }).catch(() => {});
+    return;
+  }
+  // 2) Bez dřívějšího zápisu, ale klient vyplnil údaje pro evidenci přímo v adresáři → zapiš z profilu.
+  const g = await prisma.guest.findUnique({ where: { id: guestId } });
+  if (g?.dateOfBirth && g.nationality && g.documentNumber) {
+    await addRegistrationEntry({
+      reservationId, guestId, fullName: `${g.firstName} ${g.lastName}`.trim(), dateOfBirth: g.dateOfBirth, nationality: g.nationality,
+      documentType: g.documentType ?? DocumentType.id_card, documentNumber: g.documentNumber, homeAddress: g.address ?? "",
+      stayFrom: res.checkInDate, stayTo: res.checkOutDate,
+    }).catch(() => {});
+  }
 }
 
 export async function cancelReservation(propertyId: string, id: string) {

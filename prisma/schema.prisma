@@ -98,6 +98,12 @@ enum ReservationSource {
   group
 }
 
+/// Platební režim skupiny: kolektivně (jeden plátce/společná faktura) nebo individuálně (každý pokoj sám).
+enum GroupBilling {
+  collective
+  individual
+}
+
 enum PaymentType {
   deposit
   balance
@@ -356,10 +362,13 @@ model Guest {
   phone     String?
   language  String?
 
-  // Doklad totožnosti a adresa (pro evidenci ubytovaných osob).
+  // Doklad totožnosti a adresa (pro evidenci ubytovaných osob + UBYPORT).
+  // Nepovinné v adresáři; když je klient poskytne, evidenční kniha/UBYPORT se z nich vyplní samy.
   address        String?
   documentType   DocumentType?
   documentNumber String?
+  dateOfBirth    DateTime?     @db.Date
+  nationality    String?
 
   marketingConsent Boolean @default(false)
 
@@ -605,6 +614,9 @@ model ReservationGroup {
   property   Property @relation(fields: [propertyId], references: [id])
   propertyId String
   note       String?
+
+  // Platební režim: kolektivně (jeden plátce / společná faktura) nebo individuálně (každý pokoj má vlastní účet).
+  billing    GroupBilling @default(individual)
 
   // Kontakt skupiny (organizátor) — pro souhrnný e-mail.
   organizer       Guest?  @relation(fields: [organizerGuestId], references: [id])
