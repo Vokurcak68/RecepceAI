@@ -175,8 +175,10 @@ export async function ubyportData(propertyId: string, from: Date, to: Date, all:
   };
 }
 
-// ── Přiřazení pokoje/lůžka rezervaci (tape chart) ────────────
-export async function assignUnit(propertyId: string, id: string, unitId: string) {
+// ── Přiřazení / změna pokoje-lůžka rezervaci (tape chart + detail) ───
+// `reprice` (jen u pokoje s jiným typem): "recompute" = cena dle nového pokoje;
+// "keep" = host platí původní cenu (rozdíl se připíše jako Sleva/Příplatek na účet).
+export async function assignUnit(propertyId: string, id: string, unitId: string, reprice?: "recompute" | "keep") {
   await assertInProperty(propertyId, id);
   const res = await prisma.reservation.findFirst({ where: { id, propertyId }, include: { property: true } });
   if (!res) throw NOT_FOUND();
@@ -188,11 +190,29 @@ export async function assignUnit(propertyId: string, id: string, unitId: string)
     if (clash) throw new Error("Lůžko je v tomto termínu obsazené.");
     return prisma.reservation.update({ where: { id }, data: { bedId: unitId } });
   }
-  const room = await prisma.room.findFirst({ where: { id: unitId, propertyId, roomTypeId: res.roomTypeId }, select: { id: true } });
-  if (!room) throw new Error("Neplatný pokoj pro tento typ.");
+  // Pokoj — povolíme i JINÝ typ, pokud kapacitně stačí počtu osob.
+  const room = await prisma.room.findFirst({ where: { id: unitId, propertyId }, select: { id: true, roomTypeId: true, roomType: { select: { capacityAdults: true, maxExtraBeds: true } } } });
+  if (!room) throw new Error("Neplatný pokoj.");
+  const people = res.adults + (res.children ?? 0);
+  if (room.roomType.capacityAdults + room.roomType.maxExtraBeds < people) throw new Error("Pokoj nemá dostatečnou kapacitu pro počet osob.");
   const clash = await prisma.reservation.findFirst({ where: { id: { not: id }, roomId: unitId, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { id: true } });
   if (clash) throw new Error("Pokoj je v tomto termínu obsazený.");
-  return prisma.reservation.update({ where: { id }, data: { roomId: unitId } });
+  const typeChanged = room.roomTypeId !== res.roomTypeId;
+  const oldNet = Number(res.totalAmount) - Number(res.cityTax); // původní cena ubytování (bez pobyt. poplatku)
+  await prisma.reservation.update({ where: { id }, data: { roomId: unitId, ...(typeChanged ? { roomTypeId: room.roomTypeId } : {}) } });
+  if (typeChanged && reprice) {
+    await recalcRoomAccommodation(id); // cena dle nového pokoje (+ přistýlky)
+    if (reprice === "keep") {
+      const after = await prisma.reservation.findUniqueOrThrow({ where: { id }, select: { totalAmount: true, cityTax: true } });
+      const newNet = Number(after.totalAmount) - Number(after.cityTax);
+      const adj = Math.round((oldNet - newNet) * 100) / 100; // <0 = sleva (dražší pokoj), >0 = příplatek
+      if (Math.abs(adj) >= 0.01) {
+        await addCharge({ reservationId: id, category: ChargeCategory.discount, unitPrice: adj,
+          description: adj < 0 ? "Sleva — přesun do dražšího pokoje (ponechána původní cena)" : "Příplatek — přesun do levnějšího pokoje (ponechána původní cena)" });
+      }
+    }
+  }
+  return prisma.reservation.findUnique({ where: { id } });
 }
 
 // ── E-maily hostovi: přehled + znovuodeslání (scopováno) ─────
@@ -402,6 +422,33 @@ export async function roomMoveCandidates(propertyId: string, reservationId: stri
   const clashes = await prisma.reservation.findMany({ where: { id: { not: reservationId }, roomId: { not: null }, roomTypeId: res.roomTypeId, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { roomId: true } });
   const taken = new Set(clashes.map((c) => c.roomId));
   return rooms.map((r) => ({ id: r.id, number: r.number, floor: r.floor, free: !taken.has(r.id), current: r.id === res.roomId }));
+}
+
+/** Kandidáti pro změnu jednotky rezervace — pokoje (pokojová provozovna) NEBO lůžka (ubytovna),
+ * téhož typu, s příznakem volno/aktuální. Pro tlačítko „Změnit pokoj/lůžko" v detailu rezervace. */
+export async function unitMoveCandidates(propertyId: string, reservationId: string) {
+  const res = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId }, select: { roomTypeId: true, checkInDate: true, checkOutDate: true, roomId: true, bedId: true, adults: true, children: true, property: { select: { inventoryUnit: true } } } });
+  if (!res) throw NOT_FOUND();
+  if (res.property.inventoryUnit === InventoryUnit.bed) {
+    const beds = await prisma.bed.findMany({ where: { room: { propertyId, roomTypeId: res.roomTypeId }, status: { not: RoomStatus.out_of_service } }, orderBy: { label: "asc" }, select: { id: true, label: true, room: { select: { number: true } } } });
+    const clashes = await prisma.reservation.findMany({ where: { id: { not: reservationId }, bedId: { not: null }, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { bedId: true } });
+    const taken = new Set(clashes.map((c) => c.bedId));
+    return { unit: "bed" as const, candidates: beds.map((b) => ({ id: b.id, label: `Lůžko ${b.label} · pok. ${b.room.number}`, free: !taken.has(b.id), current: b.id === res.bedId })) };
+  }
+  // Pokoje VŠECH typů, které kapacitně stačí počtu osob (přesun i do jiného typu, je-li volný).
+  const people = res.adults + (res.children ?? 0);
+  const rooms = await prisma.room.findMany({ where: { propertyId, status: { not: RoomStatus.out_of_service } }, orderBy: [{ floor: "asc" }, { number: "asc" }], select: { id: true, number: true, floor: true, roomTypeId: true, roomType: { select: { name: true, basePrice: true, capacityAdults: true, maxExtraBeds: true } } } });
+  const fitting = rooms.filter((r) => r.roomType.capacityAdults + r.roomType.maxExtraBeds >= people);
+  const clashes = await prisma.reservation.findMany({ where: { id: { not: reservationId }, roomId: { not: null }, ...overlapWhere(res.checkInDate, res.checkOutDate) }, select: { roomId: true } });
+  const taken = new Set(clashes.map((c) => c.roomId));
+  return {
+    unit: "room" as const,
+    candidates: fitting.map((r) => ({
+      id: r.id, typeName: r.roomType.name, pricePerNight: Number(r.roomType.basePrice),
+      label: `Pokoj ${r.number} · ${r.roomType.name} · ${Number(r.roomType.basePrice).toLocaleString("cs-CZ")} Kč/noc · ${r.floor}. p`,
+      free: !taken.has(r.id), current: r.id === res.roomId,
+    })),
+  };
 }
 
 /** Nepřiřazené (confirmed bez pokoje) rezervace téhož typu — k umístění na tento pokoj. */

@@ -166,6 +166,7 @@ enum ChargeCategory {
   service // služby (úklid navíc, pronájem…)
   restaurant // restaurace / bar
   parking
+  discount // sleva (záporná položka — např. dorovnání ceny při přesunu pokoje)
   other
 }
 

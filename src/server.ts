@@ -333,6 +333,7 @@ adminRouter.get("/room-board", h((_req, res) => admin.roomBoard(pid(res))));
 adminRouter.get("/rooms/:id/detail", h((req, res) => admin.roomDetail(pid(res), req.params.id)));
 adminRouter.get("/rooms/:id/unassigned", h((req, res) => admin.unassignedForRoom(pid(res), req.params.id)));
 adminRouter.get("/reservations/:id/room-candidates", h((req, res) => admin.roomMoveCandidates(pid(res), req.params.id)));
+adminRouter.get("/reservations/:id/unit-candidates", h((req, res) => admin.unitMoveCandidates(pid(res), req.params.id)));
 adminRouter.post("/rooms/:id/request", h(async (req, res) => {
   const room = await prisma.room.findFirst({ where: { id: req.params.id, propertyId: pid(res) }, select: { id: true } });
   if (!room) throw Object.assign(new Error("not_found"), { code: "P2025" });
@@ -447,7 +448,7 @@ adminRouter.post("/reservations/:id/payments", h(async (req, res) => {
 // Účet pokoje — připsané položky (minibar, wellness, služby…).
 adminRouter.get("/reservations/:id/charges", h((req, res) => admin.adminListCharges(pid(res), req.params.id)));
 adminRouter.post("/reservations/:id/charges", h((req, res) => {
-  const b = z.object({ category: z.nativeEnum(ChargeCategory), description: z.string().optional(), quantity: z.number().positive().optional(), unitPrice: z.number().nonnegative(), vatRate: z.number().nonnegative().optional() }).parse(req.body);
+  const b = z.object({ category: z.nativeEnum(ChargeCategory), description: z.string().optional(), quantity: z.number().positive().optional(), unitPrice: z.number(), vatRate: z.number().nonnegative().optional() }).parse(req.body);
   return admin.adminAddCharge(pid(res), req.params.id, b);
 }));
 adminRouter.delete("/charges/:id", h((req, res) => admin.adminDeleteCharge(pid(res), req.params.id)));
@@ -462,7 +463,7 @@ adminRouter.get("/tapechart", h((req, res) => {
   const q = z.object({ from: dateStr.optional(), days: z.coerce.number().int().min(1).max(60).optional() }).parse(req.query);
   return tapeChart(pid(res), q.from ? new Date(q.from) : new Date(), q.days ?? 21);
 }));
-adminRouter.post("/reservations/:id/assign", h((req, res) => admin.assignUnit(pid(res), req.params.id, z.object({ unitId: z.string().uuid() }).parse(req.body).unitId)));
+adminRouter.post("/reservations/:id/assign", h((req, res) => { const b = z.object({ unitId: z.string().uuid(), reprice: z.enum(["recompute", "keep"]).optional() }).parse(req.body); return admin.assignUnit(pid(res), req.params.id, b.unitId, b.reprice); }));
 adminRouter.get("/ubyport", h((req, res) => {
   const q = z.object({ from: dateStr, to: dateStr, all: z.coerce.boolean().optional() }).parse(req.query);
   return admin.ubyportData(pid(res), new Date(q.from), new Date(q.to), !!q.all);

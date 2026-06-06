@@ -88,7 +88,7 @@ export const STATUS_LABEL: Record<string, string> = {
   clean: "Uklizeno", dirty: "K úklidu", out_of_service: "Mimo provoz",
 };
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
-export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", laundry: "Praní", ironing: "Žehlení", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", other: "Ostatní" };
+export const CHARGE_LABEL: Record<string, string> = { minibar: "Minibar", laundry: "Praní", ironing: "Žehlení", wellness: "Wellness", service: "Služba", restaurant: "Restaurace", parking: "Parkování", discount: "Sleva", other: "Ostatní" };
 
 export type PaymentRow = Payment & { reservation?: { id: string; code: string; primaryGuest?: { firstName: string; lastName: string } } };
 export type PaymentsList = { payments: PaymentRow[]; totals: { total: Money; count: number; byMethod: Record<string, Money> } };
@@ -184,6 +184,7 @@ export const api = {
   roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail?_=${Date.now()}`),
   setDnd: (reservationId: string, on: boolean) => req(`/admin/reservations/${reservationId}/dnd`, { method: "POST", body: JSON.stringify({ on }) }),
   roomCandidates: (reservationId: string) => req<RoomCandidate[]>(`/admin/reservations/${reservationId}/room-candidates`),
+  unitCandidates: (reservationId: string) => req<{ unit: "room" | "bed"; candidates: UnitCandidate[] }>(`/admin/reservations/${reservationId}/unit-candidates`),
   roomUnassigned: (id: string) => req<UnassignedRes[]>(`/admin/rooms/${id}/unassigned`),
   createRoomRequest: (id: string, b: { type: string; description?: string }) => req(`/admin/rooms/${id}/request`, { method: "POST", body: JSON.stringify(b) }),
   createRoom: (b: unknown) => req<Room>(`/admin/rooms`, { method: "POST", body: JSON.stringify(b) }),
@@ -257,7 +258,7 @@ export const api = {
   groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
   groupCancel: (id: string) => req<{ ok: boolean; count: number }>(`/admin/groups/${id}/cancel`, { method: "POST" }),
   groupEmail: (id: string) => req<{ ok: boolean }>(`/admin/groups/${id}/email`, { method: "POST" }),
-  assignUnit: (id: string, unitId: string) => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId }) }),
+  assignUnit: (id: string, unitId: string, reprice?: "recompute" | "keep") => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId, ...(reprice ? { reprice } : {}) }) }),
   reservationEmails: (id: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails`),
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),
@@ -407,6 +408,7 @@ export type RoomResItem = { id: string; code: string; guestName: string; status:
 export type RoomReqItem = { id: string; type: string; domain: string; status: string; description: string | null; note?: string | null; imageUrls?: string[]; resolvedAt?: string | null; resolvedByName?: string | null; createdAt: string };
 export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; occupantDnd?: boolean; reservations: RoomResItem[]; requests: RoomReqItem[] };
 export type RoomCandidate = { id: string; number: string; floor: number; free: boolean; current: boolean };
+export type UnitCandidate = { id: string; label: string; free: boolean; current: boolean; pricePerNight?: number | null; typeName?: string | null };
 export type Company = { id: string; name: string; ico: string | null; dic: string | null; account: string | null; street: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; note: string | null; vatPayer: boolean; active: boolean };
 export type AresResult = { ico: string; name: string | null; dic: string | null; street: string | null; city: string | null; zip: string | null; country: string; vatPayer: boolean; viesValid: boolean | null; account: string | null; accounts: string[]; found: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
