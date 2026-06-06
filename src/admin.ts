@@ -419,26 +419,80 @@ export async function unassignedForRoom(propertyId: string, roomId: string) {
 // ── Hosté na pokoji (spolubydlící) ───────────────────────────
 export async function listReservationGuests(propertyId: string, id: string) {
   await assertInProperty(propertyId, id);
-  return prisma.reservationGuest.findMany({ where: { reservationId: id }, include: { guest: true }, orderBy: { isPrimary: "desc" } });
+  return prisma.reservationGuest.findMany({ where: { reservationId: id }, include: { guest: true, personRate: { select: { id: true, name: true, pricePerNight: true } } }, orderBy: { isPrimary: "desc" } });
 }
-type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; address?: string; documentType?: DocumentType | null; documentNumber?: string };
+
+/** Přepočítá cenu ubytování pokojové rezervace: základ pokoje + přistýlky oceněné dle typu osoby na nich.
+ * Osoby do `capacityAdults` kryje cena pokoje; přebývající spí na přistýlkách — na přistýlky jdou
+ * NEJLEVNĚJŠÍ sazby (typ osoby `pricePerNight`, bez typu `extraBedPrice`). Lůžkové provozovny přeskočí. */
+async function recalcRoomAccommodation(reservationId: string) {
+  const res = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      roomTypeId: true, checkInDate: true, checkOutDate: true, nights: true, adults: true, childAges: true, cityTax: true,
+      property: { select: { inventoryUnit: true } },
+      roomType: { select: { capacityAdults: true, maxExtraBeds: true, extraBedPrice: true } },
+      reservationGuests: { select: { personRate: { select: { pricePerNight: true } } } },
+    },
+  });
+  if (!res || !res.roomTypeId || !res.roomType || res.property.inventoryUnit === InventoryUnit.bed) return; // jen pokojové
+  const price = await getStayPrice(res.roomTypeId, res.checkInDate, res.checkOutDate, res.adults, res.childAges);
+  const people = res.reservationGuests.length;
+  const extraCount = Math.min(res.roomType.maxExtraBeds, Math.max(0, people - res.roomType.capacityAdults));
+  const extraBed = Number(res.roomType.extraBedPrice);
+  const costs = res.reservationGuests.map((g) => (g.personRate ? Number(g.personRate.pricePerNight) : extraBed)).sort((a, b) => a - b);
+  let perNight = 0;
+  for (let i = 0; i < extraCount; i++) perNight += costs[i] ?? extraBed;
+  const accommodation = Number(price.roomTotal) + perNight * res.nights;
+  await prisma.reservation.update({ where: { id: reservationId }, data: { totalAmount: new Prisma.Decimal(accommodation).add(res.cityTax) } });
+}
+
+/** Nastaví typ osoby (ceník) konkrétnímu ubytovanému na pokoji a přepočítá cenu přistýlek. */
+export async function setReservationGuestRate(propertyId: string, rgId: string, personRateId: string | null) {
+  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { reservationId: true } });
+  if (!rg) throw NOT_FOUND();
+  if (personRateId) { const pr = await prisma.personRate.findFirst({ where: { id: personRateId, propertyId }, select: { id: true } }); if (!pr) throw NOT_FOUND(); }
+  await prisma.reservationGuest.update({ where: { id: rgId }, data: { personRateId } });
+  await recalcRoomAccommodation(rg.reservationId);
+  return prisma.reservationGuest.findFirst({ where: { id: rgId }, include: { guest: true, personRate: { select: { id: true, name: true, pricePerNight: true } } } });
+}
+type GuestInput = { firstName: string; lastName: string; email?: string; phone?: string; address?: string; documentType?: DocumentType | null; documentNumber?: string; dateOfBirth?: string; nationality?: string };
 
 export async function addReservationGuest(propertyId: string, id: string, g: GuestInput) {
   await assertInProperty(propertyId, id);
-  const guest = await prisma.guest.create({ data: { firstName: g.firstName, lastName: g.lastName, email: g.email, phone: g.phone, address: g.address, documentType: g.documentType ?? undefined, documentNumber: g.documentNumber } });
-  return prisma.reservationGuest.create({ data: { reservationId: id, guestId: guest.id, isPrimary: false }, include: { guest: true } });
+  const guest = await prisma.guest.create({ data: { firstName: g.firstName, lastName: g.lastName, email: g.email || null, phone: g.phone || null, address: g.address || null, documentType: g.documentType ?? undefined, documentNumber: g.documentNumber || null, dateOfBirth: g.dateOfBirth ? new Date(g.dateOfBirth) : null, nationality: g.nationality || null } });
+  const rg = await prisma.reservationGuest.create({ data: { reservationId: id, guestId: guest.id, isPrimary: false }, include: { guest: true } });
+  await autoRegisterReturningGuest(id, guest.id); // spolubydlící (dospělý) → rovnou do evidenční knihy
+  await recalcRoomAccommodation(id); // o osobu navíc → případná přistýlka do ceny
+  return rg;
+}
+/** Napojí na pokoj existujícího hosta z adresáře (spolubydlící) — sjednoceno s výběrem hlavní osoby. */
+export async function addExistingReservationGuest(propertyId: string, id: string, guestId: string) {
+  await assertInProperty(propertyId, id);
+  const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { id: true } });
+  if (!guest) throw new Error("Klient nenalezen v adresáři.");
+  const rg = await prisma.reservationGuest.upsert({
+    where: { reservationId_guestId: { reservationId: id, guestId } },
+    create: { reservationId: id, guestId, isPrimary: false }, update: {},
+    include: { guest: true },
+  });
+  await autoRegisterReturningGuest(id, guestId); // spolubydlící (dospělý) → rovnou do evidenční knihy
+  await recalcRoomAccommodation(id);
+  return rg;
 }
 export async function updateReservationGuest(propertyId: string, rgId: string, data: Partial<GuestInput>) {
-  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { guestId: true } });
+  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { guestId: true, reservationId: true } });
   if (!rg) throw NOT_FOUND();
-  await prisma.guest.update({ where: { id: rg.guestId }, data: { firstName: data.firstName, lastName: data.lastName, email: data.email, phone: data.phone, address: data.address, documentType: data.documentType ?? undefined, documentNumber: data.documentNumber } });
+  await prisma.guest.update({ where: { id: rg.guestId }, data: { firstName: data.firstName, lastName: data.lastName, email: data.email, phone: data.phone, address: data.address, documentType: data.documentType ?? undefined, documentNumber: data.documentNumber, ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null } : {}), ...(data.nationality !== undefined ? { nationality: data.nationality || null } : {}) } });
+  await autoRegisterReturningGuest(rg.reservationId, rg.guestId); // doplnil-li se kompletní doklad → rovnou do evidenční knihy (dospělí, ne děti)
   return prisma.reservationGuest.findFirst({ where: { id: rgId }, include: { guest: true } });
 }
 export async function removeReservationGuest(propertyId: string, rgId: string) {
-  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { id: true, isPrimary: true } });
+  const rg = await prisma.reservationGuest.findFirst({ where: { id: rgId, reservation: { propertyId } }, select: { id: true, isPrimary: true, reservationId: true } });
   if (!rg) throw NOT_FOUND();
   if (rg.isPrimary) throw new Error("Hlavního hosta nelze odebrat.");
   await prisma.reservationGuest.delete({ where: { id: rgId } });
+  await recalcRoomAccommodation(rg.reservationId); // o osobu míň → přepočet přistýlek
   return { ok: true };
 }
 
@@ -526,17 +580,27 @@ export async function setPrimaryGuest(propertyId: string, id: string, guestId: s
   return getReservation(propertyId, id);
 }
 
-/** Když novou hlavní osobu už známe z dřívějška (má dřívější zápis v evidenční knize),
- * zkopíruj jeho údaje (doklad, narození, národnost, adresa) rovnou na tuto rezervaci —
- * ať ubytovaného nezadáváme podruhé. Bez předchozího zápisu (chybí narození/národnost) přeskočí. */
+/** Věk k danému datu (z data narození). */
+function ageAtDate(dob: Date, ref: Date): number {
+  let a = ref.getFullYear() - dob.getFullYear();
+  const m = ref.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && ref.getDate() < dob.getDate())) a--;
+  return a;
+}
+
+/** Auto-zápis hosta (hlavního i spolubydlícího) do evidenční knihy, když ho známe z dřívějška
+ * (má dřívější zápis) nebo má vyplněný profil — ať se nezadává podruhé. Děti (do `cityTaxFreeAge`
+ * provozovny) se do knihy nezapisují. Bez data narození/národnosti/dokladu přeskočí. */
 async function autoRegisterReturningGuest(reservationId: string, guestId: string) {
   const exists = await prisma.registrationEntry.findFirst({ where: { reservationId, guestId }, select: { id: true } });
   if (exists) return; // už je v knize na téhle rezervaci
-  const res = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { checkInDate: true, checkOutDate: true } });
+  const res = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { checkInDate: true, checkOutDate: true, property: { select: { cityTaxFreeAge: true } } } });
   if (!res) return;
+  const isChild = (dob: Date) => ageAtDate(dob, res.checkInDate) < res.property.cityTaxFreeAge;
   // 1) Máme dřívější zápis v knize → zkopíruj ho (nejúplnější zdroj).
   const prev = await prisma.registrationEntry.findFirst({ where: { guestId, reservationId: { not: reservationId } }, orderBy: { createdAt: "desc" } });
   if (prev) {
+    if (isChild(prev.dateOfBirth)) return; // dítě se do evidenční knihy nezapisuje
     await addRegistrationEntry({
       reservationId, guestId, fullName: prev.fullName, dateOfBirth: prev.dateOfBirth, nationality: prev.nationality,
       documentType: prev.documentType, documentNumber: prev.documentNumber, homeAddress: prev.homeAddress,
@@ -548,6 +612,7 @@ async function autoRegisterReturningGuest(reservationId: string, guestId: string
   // 2) Bez dřívějšího zápisu, ale klient vyplnil údaje pro evidenci přímo v adresáři → zapiš z profilu.
   const g = await prisma.guest.findUnique({ where: { id: guestId } });
   if (g?.dateOfBirth && g.nationality && g.documentNumber) {
+    if (isChild(g.dateOfBirth)) return; // dítě se do evidenční knihy nezapisuje
     await addRegistrationEntry({
       reservationId, guestId, fullName: `${g.firstName} ${g.lastName}`.trim(), dateOfBirth: g.dateOfBirth, nationality: g.nationality,
       documentType: g.documentType ?? DocumentType.id_card, documentNumber: g.documentNumber, homeAddress: g.address ?? "",

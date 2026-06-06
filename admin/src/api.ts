@@ -60,7 +60,7 @@ export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: str
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };
 export type Charge = { id: string; category: string; description: string | null; quantity: Money; unitPrice: Money; amount: Money; vatRate: Money; createdAt: string };
 export type OccupancyRow = { id: string; code: string; unit: string; roomType: string | null; guestName: string; guests: number; checkInDate: string; checkOutDate: string; charges: number; balance: Money; note: string | null };
-export type ResGuest = { id: string; isPrimary: boolean; guest: { firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null } };
+export type ResGuest = { id: string; isPrimary: boolean; personRateId?: string | null; personRate?: { id: string; name: string; pricePerNight: Money } | null; guest: { id?: string; firstName: string; lastName: string; email: string | null; phone: string | null; address: string | null; documentType: string | null; documentNumber: string | null; dateOfBirth?: string | null; nationality?: string | null } };
 export type ServiceItem = { id: string; name: string; category: string; price: Money; vatRate: Money; active: boolean };
 export const DOCTYPE_LABEL: Record<string, string> = { id_card: "OP", passport: "Pas" };
 export type CalType = { roomTypeId: string; name: string; total: number; cells: { booked: number; free: number }[] };
@@ -262,6 +262,7 @@ export const api = {
   resendEmail: (id: string, type: string) => req<EmailLog[]>(`/admin/reservations/${id}/emails/resend`, { method: "POST", body: JSON.stringify({ type }) }),
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),
   updateResGuest: (rgId: string, b: unknown) => req<ResGuest>(`/admin/reservation-guests/${rgId}`, { method: "PATCH", body: JSON.stringify(b) }),
+  setResGuestRate: (rgId: string, personRateId: string | null) => req<ResGuest>(`/admin/reservation-guests/${rgId}/rate`, { method: "PATCH", body: JSON.stringify({ personRateId }) }),
   removeResGuest: (id: string) => req(`/admin/reservation-guests/${id}`, { method: "DELETE" }),
 
   // ceník služeb (číselník)

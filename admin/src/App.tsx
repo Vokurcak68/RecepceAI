@@ -23,6 +23,26 @@ function FieldCol({ label, children, span }: { label: string; children: ReactNod
 function FieldRow({ label, children }: { label: string; children: ReactNode }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}><span className="muted" style={{ width: 110, textAlign: "right", flexShrink: 0 }}>{label}</span>{children}</div>;
 }
+
+// Jednotná sada polí klienta (adresář / host na pokoji / nový host) — vždy stejný styl přes FieldRow.
+export type GuestFields = { firstName: string; lastName: string; email: string; phone: string; address: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string };
+const blankGuestFields = (): GuestFields => ({ firstName: "", lastName: "", email: "", phone: "", address: "", dateOfBirth: "", nationality: "", documentType: "", documentNumber: "" });
+function GuestFieldsForm({ v, on, contact = true }: { v: GuestFields; on: (patch: Partial<GuestFields>) => void; contact?: boolean }) {
+  const inp: CSSProperties = { flex: 1, minWidth: 0 };
+  return (
+    <>
+      <FieldRow label="Jméno"><input style={inp} value={v.firstName} onChange={(e) => on({ firstName: e.target.value })} /></FieldRow>
+      <FieldRow label="Příjmení"><input style={inp} value={v.lastName} onChange={(e) => on({ lastName: e.target.value })} /></FieldRow>
+      {contact && <FieldRow label="E-mail"><input style={inp} value={v.email} onChange={(e) => on({ email: e.target.value })} /></FieldRow>}
+      {contact && <FieldRow label="Telefon"><input style={inp} value={v.phone} onChange={(e) => on({ phone: e.target.value })} /></FieldRow>}
+      <FieldRow label="Datum narození"><input type="date" style={inp} value={v.dateOfBirth} onChange={(e) => on({ dateOfBirth: e.target.value })} /></FieldRow>
+      <FieldRow label="Národnost"><input style={inp} value={v.nationality} onChange={(e) => on({ nationality: e.target.value })} /></FieldRow>
+      <FieldRow label="Adresa"><input style={inp} value={v.address} onChange={(e) => on({ address: e.target.value })} /></FieldRow>
+      <FieldRow label="Doklad"><select style={inp} value={v.documentType} onChange={(e) => on({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></FieldRow>
+      <FieldRow label="Číslo dokladu"><input style={inp} value={v.documentNumber} onChange={(e) => on({ documentNumber: e.target.value })} /></FieldRow>
+    </>
+  );
+}
 function FormGrid({ children, min = 200 }: { children: ReactNode; min?: number }) {
   return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12, alignItems: "end" }}>{children}</div>;
 }
@@ -2049,7 +2069,7 @@ function GuestsView({ selId }: { selId: string }) {
   );
 }
 
-type GuestForm = { firstName: string; lastName: string; email: string; phone: string; language: string; address: string; documentType: string; documentNumber: string; vip: boolean; preferences: string; marketingConsent: boolean };
+type GuestForm = { firstName: string; lastName: string; email: string; phone: string; language: string; address: string; documentType: string; documentNumber: string; dateOfBirth: string; nationality: string; vip: boolean; preferences: string; marketingConsent: boolean };
 function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<GuestProfile>(() => api.guestProfile(id), [id]);
@@ -2075,7 +2095,6 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
   };
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
   if (!data || !f) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
-  const fieldInp: CSSProperties = { flex: 1, minWidth: 0 };
   return (
     <>
       <div className="h1"><span><button className="btn ghost" onClick={onBack}>← Zpět</button>&nbsp;&nbsp;{f.vip ? "⭐ " : ""}{f.firstName} {f.lastName}</span>
@@ -2092,16 +2111,8 @@ function GuestProfileView({ id, onBack }: { id: string; onBack: () => void }) {
       {msg && <div className="error" style={msg === "Uloženo." || msg === "Sloučeno." ? { background: "#e6f7ee", color: "var(--ok)" } : undefined}>{msg}</div>}
       <div className="grid2">
         <div className="panel"><h3>Údaje hosta</h3><div style={{ padding: 16, maxWidth: 460 }}>
-          <FieldRow label="Jméno"><input style={fieldInp} value={f.firstName} onChange={(e) => upd({ firstName: e.target.value })} /></FieldRow>
-          <FieldRow label="Příjmení"><input style={fieldInp} value={f.lastName} onChange={(e) => upd({ lastName: e.target.value })} /></FieldRow>
-          <FieldRow label="E-mail"><input style={fieldInp} value={f.email} onChange={(e) => upd({ email: e.target.value })} /></FieldRow>
-          <FieldRow label="Telefon"><input style={fieldInp} value={f.phone} onChange={(e) => upd({ phone: e.target.value })} /></FieldRow>
+          <GuestFieldsForm v={f} on={upd} />
           <FieldRow label="Jazyk"><input style={{ width: 90 }} placeholder="cs" value={f.language} onChange={(e) => upd({ language: e.target.value })} /></FieldRow>
-          <FieldRow label="Adresa"><input style={fieldInp} value={f.address} onChange={(e) => upd({ address: e.target.value })} /></FieldRow>
-          <FieldRow label="Datum narození"><input type="date" value={f.dateOfBirth} onChange={(e) => upd({ dateOfBirth: e.target.value })} /></FieldRow>
-          <FieldRow label="Národnost"><input style={fieldInp} value={f.nationality} onChange={(e) => upd({ nationality: e.target.value })} /></FieldRow>
-          <FieldRow label="Doklad"><select value={f.documentType} onChange={(e) => upd({ documentType: e.target.value })}><option value="">—</option><option value="id_card">OP</option><option value="passport">Pas</option></select></FieldRow>
-          <FieldRow label="Číslo dokladu"><input style={fieldInp} value={f.documentNumber} onChange={(e) => upd({ documentNumber: e.target.value })} /></FieldRow>
         </div></div>
         <div className="panel"><h3>CRM</h3><div style={{ padding: 16 }}>
           <label className="row" style={{ marginBottom: 10 }}><input type="checkbox" checked={f.vip} onChange={(e) => upd({ vip: e.target.checked })} />&nbsp; VIP host</label>
@@ -2445,7 +2456,11 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const svc = useAsync<ServiceItem[]>(() => api.serviceItems(), [id]);
   const personRates = useAsync<PersonRate[]>(() => api.personRates(), [id]);
   const [chg, setChg] = useState({ category: "minibar", description: "", quantity: "1", unitPrice: "" });
-  const [gf, setGf] = useState({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" });
+  const [egf, setEgf] = useState<GuestFields>(blankGuestFields); // editace hosta na pokoji (jednotná sada polí)
+  const [editPrimary, setEditPrimary] = useState(false); // editovaný řádek je hlavní host?
+  const [editGuestId, setEditGuestId] = useState<string | undefined>(undefined); // guestId editovaného (kvůli vyloučení z adresáře)
+  const [pickRoomGuest, setPickRoomGuest] = useState(false); // přidání osoby z adresáře
+  const [pickForEdit, setPickForEdit] = useState(false); // výběr z adresáře z editačního okna (nahradí osobu)
   const [reg, setReg] = useState({ primary: true, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
   const [offerReg, setOfferReg] = useState(false);
   const [gEdit, setGEdit] = useState<string | null>(null);
@@ -2464,13 +2479,13 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
 
   const refresh = () => { reload(); folioA.reload(); chargesA.reload(); guestsA.reload(); };
-  const resetGf = () => { setGf({ firstName: "", lastName: "", address: "", documentType: "", documentNumber: "" }); setGEdit(null); };
+  const resetGf = () => { setEgf(blankGuestFields()); setGEdit(null); setEditPrimary(false); setEditGuestId(undefined); setPickForEdit(false); };
   const saveGuest = () => {
-    if (!gf.firstName || !gf.lastName) return;
-    const body = { firstName: gf.firstName, lastName: gf.lastName, address: gf.address || undefined, documentType: gf.documentType || null, documentNumber: gf.documentNumber || undefined };
-    run(async () => { if (gEdit) await api.updateResGuest(gEdit, body); else await api.addResGuest(id, body); resetGf(); });
+    if (!egf.firstName.trim() || !egf.lastName.trim() || !gEdit) return;
+    const body = { firstName: egf.firstName.trim(), lastName: egf.lastName.trim(), email: egf.email || undefined, phone: egf.phone || undefined, address: egf.address || undefined, dateOfBirth: egf.dateOfBirth || undefined, nationality: egf.nationality || undefined, documentType: egf.documentType || null, documentNumber: egf.documentNumber || undefined };
+    run(async () => { await api.updateResGuest(gEdit, body); resetGf(); });
   };
-  const editGuest = (g: ResGuest) => { setGEdit(g.id); setGf({ firstName: g.guest.firstName, lastName: g.guest.lastName, address: g.guest.address ?? "", documentType: g.guest.documentType ?? "", documentNumber: g.guest.documentNumber ?? "" }); };
+  const editGuest = (g: ResGuest) => { setGEdit(g.id); setEditPrimary(g.isPrimary); setEditGuestId(g.guest.id); setEgf({ firstName: g.guest.firstName, lastName: g.guest.lastName, email: g.guest.email ?? "", phone: g.guest.phone ?? "", address: g.guest.address ?? "", dateOfBirth: g.guest.dateOfBirth ? g.guest.dateOfBirth.slice(0, 10) : "", nationality: g.guest.nationality ?? "", documentType: g.guest.documentType ?? "", documentNumber: g.guest.documentNumber ?? "" }); };
   const saveNote = () => run(async () => { await api.saveReservationNote(id, noteText); });
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
@@ -2527,8 +2542,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       </div>
 
       <div className="panel"><h3>Poznámka <span className="muted" style={{ fontSize: 14 }}>přání a požadavky hosta</span></h3>
-        <textarea style={{ width: "100%", minHeight: 80, resize: "vertical" }} value={noteText} onChange={(e) => { setNoteText(e.target.value); setNoteDirty(true); }} placeholder="Např.: pozdní check-in po 22:00, alergie na ořechy, manželská postel místo dvou, dětská postýlka, parkování pro 2 auta, výhled do dvora…" />
-        {noteDirty && <div style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={saveNote}>Uložit poznámku</button> <button className="btn ghost" onClick={() => { setNoteText(data.note ?? ""); setNoteDirty(false); }}>Zrušit</button></div>}
+        <div style={{ padding: 16 }}>
+          <textarea style={{ width: "100%", minHeight: 80, resize: "vertical" }} value={noteText} onChange={(e) => { setNoteText(e.target.value); setNoteDirty(true); }} placeholder="Např.: pozdní check-in po 22:00, alergie na ořechy, manželská postel místo dvou, dětská postýlka, parkování pro 2 auta, výhled do dvora…" />
+          {noteDirty && <div style={{ marginTop: 10 }}><button className="btn sm" disabled={busy} onClick={saveNote}>Uložit poznámku</button> <button className="btn sm ghost" onClick={() => { setNoteText(data.note ?? ""); setNoteDirty(false); }}>Zrušit</button></div>}
+        </div>
       </div>
 
       <div className="panel"><h3>Firma (odběratel) <span className="muted" style={{ fontSize: 14 }}>doklad se vystaví firmě místo hosta</span></h3>
@@ -2539,36 +2556,38 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
         </div>
       </div>
 
-      {(personRates.data ?? []).length > 0 && (
-        <div className="panel"><h3>Typ osoby (ceník) <span className="muted" style={{ fontSize: 14 }}>přepočítá cenu ubytování dle sazby × nocí</span></h3>
-          <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
-            <select value={data.personRateId ?? ""} onChange={(e) => run(async () => { await api.setReservationPersonRate(id, e.target.value || null); })}>
-              <option value="">— bez typu —</option>
-              {(personRates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
-            </select>
-            {data.personRate && <span className="muted">Cena dle „{data.personRate.name}" — {money(data.personRate.pricePerNight)}/noc × {data.nights} nocí</span>}
-          </div>
-        </div>
-      )}
-
       <DepositsPanel reservationId={id} suggested={data.property?.depositPct ? Math.round(Number(data.totalAmount) * data.property.depositPct / 100) : undefined} />
 
-      <div className="panel"><h3>Hosté na pokoji</h3>
-        <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap" }}>
-          <input placeholder="Jméno" value={gf.firstName} onChange={(e) => setGf({ ...gf, firstName: e.target.value })} />
-          <input placeholder="Příjmení" value={gf.lastName} onChange={(e) => setGf({ ...gf, lastName: e.target.value })} />
-          <input placeholder="Adresa" style={{ minWidth: 200 }} value={gf.address} onChange={(e) => setGf({ ...gf, address: e.target.value })} />
-          <select value={gf.documentType} onChange={(e) => setGf({ ...gf, documentType: e.target.value })}><option value="">Doklad…</option><option value="id_card">OP</option><option value="passport">Pas</option></select>
-          <input placeholder="Číslo dokladu" style={{ width: 130 }} value={gf.documentNumber} onChange={(e) => setGf({ ...gf, documentNumber: e.target.value })} />
-          <button className="btn" disabled={busy || !gf.firstName || !gf.lastName} onClick={saveGuest}>{gEdit ? "Uložit" : "+ Přidat osobu"}</button>
-          {gEdit && <button className="btn ghost" onClick={resetGf}>Zrušit</button>}
+      {(() => {
+        const bedMode = data.property?.inventoryUnit === "bed";
+        const rates = personRates.data ?? [];
+        const showType = rates.length > 0; // typ osoby per osobu — u pokoje cena přistýlky, u lůžka cena lůžka
+        const typeLabel = bedMode ? "Typ osoby (cena lůžka)" : "Typ osoby (cena přistýlky)";
+        return (
+      <div className="panel"><h3>Hosté na pokoji <span className="muted" style={{ fontSize: 14 }}>kdo {bedMode ? "na lůžku" : "na pokoji"} bydlí{showType ? (bedMode ? " · typ osoby určuje cenu lůžka" : " · typ osoby určuje cenu přistýlky") : ""}</span></h3>
+        <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+          {bedMode
+            ? <span className="muted">Lůžková rezervace = jedna osoba na lůžku. Typ osoby nastav v řádku níže. Další lidi přidej jako samostatné lůžkové rezervace (skupina).</span>
+            : <><button className="btn sm" onClick={() => setPickRoomGuest(true)}>📇 Přidat osobu z adresáře</button>
+              <span className="muted" style={{ fontSize: 13 }}>Vyber z adresáře nebo rovnou zadej nového — jako u hlavního hosta.</span></>}
         </div>
-        <Table cols={["Jméno", "Role", "Adresa", "Doklad", ""]} rows={guestsA.data ?? []} empty="—"
+        <Table cols={showType ? ["Jméno", "Role", typeLabel, "Narození", "Doklad", ""] : ["Jméno", "Role", "Narození", "Doklad", ""]} rows={guestsA.data ?? []} empty="—"
           render={(g: ResGuest) => (
             <tr key={g.id} className={gEdit === g.id ? "row-urgent" : ""}>
               <td>{g.guest.firstName} {g.guest.lastName}</td>
               <td>{g.isPrimary ? <span className="chip">hlavní host</span> : <span className="muted">spolubydlící</span>}</td>
-              <td className="muted">{g.guest.address ?? "—"}</td>
+              {showType && <td>{bedMode
+                ? (g.isPrimary
+                  ? <select value={data.personRateId ?? ""} onChange={(e) => run(async () => { await api.setReservationPersonRate(id, e.target.value || null); })}>
+                      <option value="">— bez typu —</option>
+                      {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
+                    </select>
+                  : <span className="muted">—</span>)
+                : <select value={g.personRateId ?? ""} onChange={(e) => run(() => api.setResGuestRate(g.id, e.target.value || null))}>
+                    <option value="">— bez typu —</option>
+                    {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
+                  </select>}</td>}
+              <td className="muted">{g.guest.dateOfBirth ? d(g.guest.dateOfBirth) : "—"}</td>
               <td className="muted">{g.guest.documentNumber ? `${DOCTYPE_LABEL[g.guest.documentType ?? ""] ?? ""} ${g.guest.documentNumber}` : "—"}</td>
               <td className="right" style={{ whiteSpace: "nowrap" }}>
                 <button className="btn sm ghost" onClick={() => editGuest(g)}>Upravit</button>{" "}
@@ -2577,9 +2596,11 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
             </tr>
           )} />
       </div>
+        );
+      })()}
 
       <div className="panel"><h3>Účet pokoje — náklady</h3>
-        <div className="toolbar" style={{ marginBottom: 10, flexWrap: "wrap" }}>
+        <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
           <select value="" onChange={(e) => { const s = (svc.data ?? []).find((x) => x.id === e.target.value); if (s) setChg({ category: s.category, description: s.name, quantity: chg.quantity || "1", unitPrice: parseFloat(s.price).toString() }); }}>
             <option value="">— z ceníku —</option>
             {(svc.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} · {money(s.price)}</option>)}
@@ -2590,7 +2611,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <input placeholder="Popis (cola, masáž…)" value={chg.description} onChange={(e) => setChg({ ...chg, description: e.target.value })} />
           <input placeholder="Ks" style={{ width: 60 }} value={chg.quantity} onChange={(e) => setChg({ ...chg, quantity: e.target.value })} />
           <input placeholder="Cena/ks" style={{ width: 100 }} value={chg.unitPrice} onChange={(e) => setChg({ ...chg, unitPrice: e.target.value })} />
-          <button className="btn" disabled={busy || !chg.unitPrice} onClick={addCharge}>+ Připsat na účet</button>
+          <button className="btn sm" disabled={busy || !chg.unitPrice} onClick={addCharge}>+ Připsat na účet</button>
         </div>
         <Table cols={["Datum", "Kategorie", "Popis", "Ks", "Cena", "Celkem", ""]} rows={chargesA.data ?? []} empty="Žádné připsané položky"
           render={(c: Charge) => (
@@ -2612,9 +2633,9 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       </div>
 
       <div className="panel"><h3>Evidenční kniha <span className="muted" style={{ fontSize: 14 }}>zápis ubytovaných osob</span></h3>
-        {offerReg && r.registrationEntries.length === 0 && <div className="error" style={{ background: "#fff4e0", color: "#9a6b00", margin: "0 0 4px" }}>✓ Host odbaven (check-in). Nezapomeňte ho zapsat do evidenční knihy níže.</div>}
-        <div className="toolbar" style={{ marginBottom: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="row" style={{ gap: 5 }}><input type="checkbox" checked={reg.primary} onChange={(e) => {
+        {offerReg && r.registrationEntries.length === 0 && <div className="error" style={{ background: "#fff4e0", color: "#9a6b00", margin: "16px 16px 0" }}>✓ Host odbaven (check-in). Nezapomeňte ho zapsat do evidenční knihy níže.</div>}
+        <div style={{ padding: 16, maxWidth: 520 }}>
+          <label className="row" style={{ gap: 6, marginBottom: 12 }}><input type="checkbox" checked={reg.primary} onChange={(e) => {
             const on = e.target.checked;
             if (!on) { setReg({ ...reg, primary: false, fullName: "" }); return; }
             // Předvyplnění z knihy hostů (poslední zápis) → jinak z profilu hosta (doklad/adresa) → jinak ponech.
@@ -2627,15 +2648,14 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
               documentNumber: lr?.documentNumber || pg?.documentNumber || s.documentNumber,
               homeAddress: lr?.homeAddress || pg?.address || s.homeAddress,
             }));
-          }} /> hlavní host</label>
-          {(r.primaryGuestLastReg || r.primaryGuest?.documentNumber || r.primaryGuest?.dateOfBirth) && <span className="muted" style={{ fontSize: 12 }}>📘 údaje z adresáře/knihy se předvyplní</span>}
-          <input placeholder="Jméno a příjmení" style={{ minWidth: 180 }} value={reg.fullName} onChange={(e) => setReg({ ...reg, fullName: e.target.value })} />
-          <label className="row">nar. <input type="date" value={reg.dateOfBirth} onChange={(e) => setReg({ ...reg, dateOfBirth: e.target.value })} /></label>
-          <input placeholder="Národnost" style={{ width: 150 }} value={reg.nationality} onChange={(e) => setReg({ ...reg, nationality: e.target.value })} />
-          <select value={reg.documentType} onChange={(e) => setReg({ ...reg, documentType: e.target.value })}><option value="id_card">OP</option><option value="passport">Pas</option></select>
-          <input placeholder="Číslo dokladu" style={{ width: 130 }} value={reg.documentNumber} onChange={(e) => setReg({ ...reg, documentNumber: e.target.value })} />
-          <input placeholder="Adresa trvalého bydliště" style={{ minWidth: 200 }} value={reg.homeAddress} onChange={(e) => setReg({ ...reg, homeAddress: e.target.value })} />
-          <button className="btn" disabled={busy || !reg.fullName.trim() || !reg.dateOfBirth || !reg.nationality.trim()} onClick={() => run(async () => { await api.addRegistration(id, { primary: reg.primary, fullName: reg.fullName, dateOfBirth: reg.dateOfBirth, nationality: reg.nationality, documentType: reg.documentType || undefined, documentNumber: reg.documentNumber || undefined, homeAddress: reg.homeAddress || undefined }); setReg({ primary: false, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" }); })}>Zapsat do knihy</button>
+          }} /> zapsat hlavního hosta {(r.primaryGuestLastReg || r.primaryGuest?.documentNumber || r.primaryGuest?.dateOfBirth) && <span className="muted" style={{ fontSize: 12 }}>· 📘 údaje z adresáře/knihy se předvyplní</span>}</label>
+          <FieldRow label="Jméno a příjmení"><input style={{ flex: 1, minWidth: 0 }} value={reg.fullName} onChange={(e) => setReg({ ...reg, fullName: e.target.value })} /></FieldRow>
+          <FieldRow label="Datum narození"><input type="date" style={{ flex: 1, minWidth: 0 }} value={reg.dateOfBirth} onChange={(e) => setReg({ ...reg, dateOfBirth: e.target.value })} /></FieldRow>
+          <FieldRow label="Národnost"><input style={{ flex: 1, minWidth: 0 }} value={reg.nationality} onChange={(e) => setReg({ ...reg, nationality: e.target.value })} /></FieldRow>
+          <FieldRow label="Doklad"><select style={{ flex: 1, minWidth: 0 }} value={reg.documentType} onChange={(e) => setReg({ ...reg, documentType: e.target.value })}><option value="id_card">OP</option><option value="passport">Pas</option></select></FieldRow>
+          <FieldRow label="Číslo dokladu"><input style={{ flex: 1, minWidth: 0 }} value={reg.documentNumber} onChange={(e) => setReg({ ...reg, documentNumber: e.target.value })} /></FieldRow>
+          <FieldRow label="Adresa"><input style={{ flex: 1, minWidth: 0 }} value={reg.homeAddress} onChange={(e) => setReg({ ...reg, homeAddress: e.target.value })} /></FieldRow>
+          <div style={{ textAlign: "right", marginTop: 4 }}><button className="btn sm" disabled={busy || !reg.fullName.trim() || !reg.dateOfBirth || !reg.nationality.trim()} onClick={() => run(async () => { await api.addRegistration(id, { primary: reg.primary, fullName: reg.fullName, dateOfBirth: reg.dateOfBirth, nationality: reg.nationality, documentType: reg.documentType || undefined, documentNumber: reg.documentNumber || undefined, homeAddress: reg.homeAddress || undefined }); setReg({ primary: false, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" }); })}>Zapsat do knihy</button></div>
         </div>
         <Table cols={["Jméno", "Narození", "Národnost", "Doklad", "Adresa", "Pobyt", ""]} rows={r.registrationEntries} empty="Zatím nikdo zapsán"
           render={(e: RegistrationEntry) => (
@@ -2653,6 +2673,43 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
       {emailsOpen && <EmailsOverlay id={id} guestEmail={r.primaryGuest?.email ?? null} onClose={() => setEmailsOpen(false)} />}
       {pickGuest && <GuestPickerOverlay prefill={r.primaryGuest?.email || r.primaryGuest?.lastName || ""} onClose={() => setPickGuest(false)} onPick={(gid) => run(async () => { await api.setReservationPrimaryGuest(id, gid); setPickGuest(false); })} />}
+      {pickRoomGuest && <GuestPickerOverlay
+        prefill=""
+        title="Přidat osobu na pokoj"
+        subtitle="Vyber hosta z adresáře nebo zadej nového — připojí se jako spolubydlící."
+        actionLabel="Přidat"
+        onClose={() => setPickRoomGuest(false)}
+        onPick={(gid) => run(async () => { await api.addResGuest(id, { guestId: gid }); setPickRoomGuest(false); })}
+      />}
+      {gEdit && (
+        <div className="inv-backdrop" onClick={resetGf}>
+          <div className="invoice wz" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className="wz-head"><div className="wz-titlerow"><div><h2>Upravit hosta</h2><div className="muted" style={{ marginTop: 4 }}>Uprav údaje, nebo vyber jinou osobu z adresáře. Údaje slouží i pro evidenční knihu / UBYPORT.</div></div><button className="linkx" onClick={resetGf}>zavřít</button></div></div>
+            <div className="wz-body">
+              <div className="req-actions" style={{ padding: 0, marginBottom: 14, alignItems: "center" }}>
+                <button className="btn sm ghost" onClick={() => setPickForEdit(true)}>📇 Vybrat z adresáře</button>
+                <span className="muted" style={{ fontSize: 12 }}>nahradí tuto osobu existujícím klientem</span>
+              </div>
+              <GuestFieldsForm v={egf} on={(patch) => setEgf((s) => ({ ...s, ...patch }))} />
+            </div>
+            <div className="wz-foot"><button className="btn ghost" onClick={resetGf}>Zrušit</button><button className="btn" disabled={busy || !egf.firstName.trim() || !egf.lastName.trim()} onClick={saveGuest}>Uložit</button></div>
+          </div>
+        </div>
+      )}
+      {pickForEdit && (
+        <GuestPickerOverlay
+          prefill={egf.lastName || ""}
+          excludeId={editGuestId}
+          title="Vybrat osobu z adresáře"
+          subtitle="Nahradí tuto osobu existujícím klientem (nebo zadej nového)."
+          actionLabel="Použít"
+          onClose={() => setPickForEdit(false)}
+          onPick={(gid) => { const rgId = gEdit, prim = editPrimary; setPickForEdit(false); resetGf(); run(async () => {
+            if (prim) { await api.setReservationPrimaryGuest(id, gid); }
+            else { if (rgId) await api.removeResGuest(rgId).catch(() => {}); await api.addResGuest(id, { guestId: gid }); }
+          }); }}
+        />
+      )}
       {pickCompany && <CompanyPickerOverlay onClose={() => setPickCompany(false)} onPick={(cid) => run(async () => { await api.setReservationCompany(id, cid); setPickCompany(false); })} />}
     </>
   );
@@ -2670,9 +2727,9 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
   const [q, setQ] = useState(prefill);
   const list = useAsync<GuestListItem[]>(() => api.searchGuests(q), []);
   const rows = (list.data ?? []).filter((g) => g.id !== excludeId);
-  // Ruční založení nového hosta (když klient ještě není v adresáři).
-  const [nf, setNf] = useState({ firstName: "", lastName: "", email: "", phone: "", dateOfBirth: "", nationality: "", documentType: "", documentNumber: "", address: "" });
-  const [more, setMore] = useState(false); // nepovinné údaje pro evidenci/Ubyport
+  // Ruční založení nového hosta (když klient ještě není v adresáři) — stejná sada polí jako adresář.
+  const [adding, setAdding] = useState(false);
+  const [nf, setNf] = useState<GuestFields>(blankGuestFields);
   const [busy, setBusy] = useState(false);
   const [nerr, setNerr] = useState("");
   const createPick = async () => {
@@ -2691,46 +2748,47 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
           </div>
         </div>
         <div className="wz-body">
-          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
-            <input autoFocus placeholder="🔍 Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ flex: 1 }} />
-            <button className="btn" onClick={() => list.reload()}>Hledat</button>
-          </div>
-          {list.error && <div className="error" style={{ marginBottom: 12 }}>{list.error}</div>}
-          <div className="wz-list">
-            {rows.map((g) => (
-              <div key={g.id} className="wz-pick" onClick={() => onPick(g.id)}>
-                <div className="pinfo">
-                  <div className="pname">{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}{g.hasDocument ? <span title="Doklad je v knize hostů — předvyplní se" style={{ marginLeft: 6 }}>📘</span> : null}</div>
-                  <div className="pmeta">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""} · {g.stays} {g.stays === 1 ? "pobyt" : g.stays < 5 ? "pobyty" : "pobytů"}{g.hasDocument ? " · doklad v knize" : ""}</div>
-                </div>
-                <span className="parrow">{actionLabel} ›</span>
+          {!adding ? (
+            <>
+              <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+                <input autoFocus placeholder="🔍 Hledat jméno / e-mail / telefon…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && list.reload()} style={{ flex: 1 }} />
+                <button className="btn" onClick={() => list.reload()}>Hledat</button>
               </div>
-            ))}
-            {list.data && rows.length === 0 && <div className="muted">Nikdo nenalezen.</div>}
-          </div>
-        </div>
-        <div className="wz-foot" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-          <span className="muted" style={{ fontSize: 13 }}>Klient ještě není v adresáři? Zadej ho ručně:</span>
-          {nerr && <div className="error" style={{ margin: 0 }}>{nerr}</div>}
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input placeholder="Jméno" value={nf.firstName} onChange={(e) => setNf({ ...nf, firstName: e.target.value })} style={{ width: 120 }} />
-            <input placeholder="Příjmení" value={nf.lastName} onChange={(e) => setNf({ ...nf, lastName: e.target.value })} style={{ width: 130 }} />
-            <input placeholder="E-mail (nepov.)" value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })} style={{ width: 160 }} />
-            <input placeholder="Telefon (nepov.)" value={nf.phone} onChange={(e) => setNf({ ...nf, phone: e.target.value })} style={{ width: 140 }} />
-            <button type="button" className="btn ghost sm" onClick={() => setMore((m) => !m)} title="Údaje pro evidenční knihu / UBYPORT — nepovinné">{more ? "− údaje pro evidenci" : "+ údaje pro evidenci"}</button>
-          </div>
-          {more && (
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <label className="row" style={{ gap: 4 }}>nar. <input type="date" value={nf.dateOfBirth} onChange={(e) => setNf({ ...nf, dateOfBirth: e.target.value })} /></label>
-              <input placeholder="Národnost" value={nf.nationality} onChange={(e) => setNf({ ...nf, nationality: e.target.value })} style={{ width: 130 }} />
-              <select value={nf.documentType} onChange={(e) => setNf({ ...nf, documentType: e.target.value })}><option value="">doklad…</option><option value="id_card">OP</option><option value="passport">Pas</option></select>
-              <input placeholder="Číslo dokladu" value={nf.documentNumber} onChange={(e) => setNf({ ...nf, documentNumber: e.target.value })} style={{ width: 130 }} />
-              <input placeholder="Adresa trvalého bydliště" value={nf.address} onChange={(e) => setNf({ ...nf, address: e.target.value })} style={{ width: 220 }} />
-            </div>
+              {list.error && <div className="error" style={{ marginBottom: 12 }}>{list.error}</div>}
+              <div className="wz-list">
+                {rows.map((g) => (
+                  <div key={g.id} className="wz-pick" onClick={() => onPick(g.id)}>
+                    <div className="pinfo">
+                      <div className="pname">{g.vip ? "⭐ " : ""}{g.firstName} {g.lastName}{g.preferences ? <span title={g.preferences} style={{ marginLeft: 6 }}>📝</span> : null}{g.hasDocument ? <span title="Doklad je v knize hostů — předvyplní se" style={{ marginLeft: 6 }}>📘</span> : null}</div>
+                      <div className="pmeta">{g.email ?? "—"}{g.phone ? ` · ${g.phone}` : ""} · {g.stays} {g.stays === 1 ? "pobyt" : g.stays < 5 ? "pobyty" : "pobytů"}{g.hasDocument ? " · doklad v knize" : ""}</div>
+                    </div>
+                    <span className="parrow">{actionLabel} ›</span>
+                  </div>
+                ))}
+                {list.data && rows.length === 0 && <div className="muted">Nikdo nenalezen.</div>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="wz-sec" style={{ marginTop: 0 }}>Nový host do adresáře</div>
+              {nerr && <div className="error" style={{ marginBottom: 12 }}>{nerr}</div>}
+              <GuestFieldsForm v={nf} on={(patch) => setNf((s) => ({ ...s, ...patch }))} />
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Datum narození, národnost a doklad jsou nepovinné — když je vyplníš, použijí se i pro evidenční knihu / UBYPORT (recepční se k nim nemusí vracet).</div>
+            </>
           )}
-          <div className="row"><span className="muted" style={{ fontSize: 12, flex: 1 }}>{more ? "Vyplněné údaje se použijí i pro evidenční knihu / UBYPORT — recepční se k nim nemusí vracet." : ""}</span>
-            <button className="btn" disabled={busy || !nf.firstName.trim() || !nf.lastName.trim()} onClick={createPick}>{busy ? "Zakládám…" : `Založit a ${actionLabel.toLowerCase()}`}</button>
-          </div>
+        </div>
+        <div className="wz-foot">
+          {!adding ? (
+            <>
+              <span className="muted" style={{ fontSize: 13 }}>Klient ještě není v adresáři?</span>
+              <button className="btn ghost" onClick={() => { setNf({ ...blankGuestFields(), lastName: /\s/.test(prefill) || prefill.includes("@") ? "" : prefill }); setNerr(""); setAdding(true); }}>➕ Zadat nového hosta</button>
+            </>
+          ) : (
+            <>
+              <button className="btn ghost" onClick={() => { setAdding(false); setNerr(""); }}>‹ Zpět na hledání</button>
+              <button className="btn" disabled={busy || !nf.firstName.trim() || !nf.lastName.trim()} onClick={createPick}>{busy ? "Zakládám…" : `Založit a ${actionLabel.toLowerCase()}`}</button>
+            </>
+          )}
         </div>
       </div>
     </div>

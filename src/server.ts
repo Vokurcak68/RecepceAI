@@ -341,11 +341,16 @@ adminRouter.post("/rooms/:id/request", h(async (req, res) => {
 }));
 
 // Hosté na pokoji (spolubydlící) — vč. adresy a dokladu, editace
-const guestBody = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), address: z.string().optional(), documentType: z.nativeEnum(DocumentType).nullable().optional(), documentNumber: z.string().optional() });
+const guestBody = z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional().or(z.literal("")), phone: z.string().optional(), address: z.string().optional(), documentType: z.nativeEnum(DocumentType).nullable().optional(), documentNumber: z.string().optional(), dateOfBirth: z.string().optional(), nationality: z.string().optional() });
 adminRouter.get("/reservations/:id/guests", h((req, res) => admin.listReservationGuests(pid(res), req.params.id)));
-adminRouter.post("/reservations/:id/guests", h((req, res) => admin.addReservationGuest(pid(res), req.params.id, guestBody.parse(req.body))));
+adminRouter.post("/reservations/:id/guests", h((req, res) => {
+  const gid = (req.body ?? {}).guestId;
+  if (typeof gid === "string" && gid) return admin.addExistingReservationGuest(pid(res), req.params.id, gid); // napojení existujícího z adresáře
+  return admin.addReservationGuest(pid(res), req.params.id, guestBody.parse(req.body));
+}));
 adminRouter.patch("/reservation-guests/:id", h((req, res) => admin.updateReservationGuest(pid(res), req.params.id, guestBody.partial().parse(req.body))));
 adminRouter.delete("/reservation-guests/:id", h((req, res) => admin.removeReservationGuest(pid(res), req.params.id)));
+adminRouter.patch("/reservation-guests/:id/rate", h((req, res) => admin.setReservationGuestRate(pid(res), req.params.id, z.object({ personRateId: z.string().uuid().nullable() }).parse(req.body).personRateId)));
 
 // Ceník služeb (číselník)
 adminRouter.get("/service-items", h((_req, res) => admin.listServiceItems(pid(res))));

@@ -421,8 +421,9 @@ model PersonRate {
   sortOrder     Int     @default(0)
   active        Boolean @default(true)
 
-  occupancies  BedOccupancy[]
-  reservations Reservation[]
+  occupancies       BedOccupancy[]
+  reservations      Reservation[]
+  reservationGuests ReservationGuest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,6 +675,10 @@ model ReservationGuest {
   guest         Guest       @relation(fields: [guestId], references: [id])
   guestId       String
   isPrimary     Boolean     @default(false)
+
+  // Typ osoby per ubytovaný (dítě/senior…). Určuje cenu přistýlky, na které osoba spí.
+  personRate    PersonRate? @relation(fields: [personRateId], references: [id], onDelete: SetNull)
+  personRateId  String?
 
   @@unique([reservationId, guestId])
 }

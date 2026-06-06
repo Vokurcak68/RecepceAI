@@ -423,3 +423,13 @@ tr.row-click:hover td { background: #f3f6ff; }
   .stats { grid-template-columns: 1fr; }
   .main { padding-left: 12px; padding-right: 12px; }
 }
+
+/* ── Formuláře v detailu rezervace na mobilu: pole pod sebe, ať se nelámou chaoticky ── */
+@media (max-width: 640px) {
+  .req-actions { gap: 8px; }
+  /* přebije inline šířky polí (width:110 apod.) → každé pole na celou šířku řádku */
+  .req-actions > input, .req-actions > select, .req-actions > textarea { flex: 1 1 100%; width: 100% !important; min-width: 0; }
+  .req-actions > label { flex: 1 1 100%; }
+  .req-actions > label > input[type="date"] { flex: 1; width: auto !important; }
+  .req-actions > .btn { flex: 1 1 100%; }      /* tlačítko akce na celou šířku, dobře se trefí */
+}
