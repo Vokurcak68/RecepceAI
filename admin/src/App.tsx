@@ -591,6 +591,7 @@ function TapeChartView({ selId, prop, embedded }: { selId: string; prop?: Proper
   const [drag, setDrag] = useState<{ unitId: string; roomTypeId: string; a: number; b: number } | null>(null);
   const [createPrefill, setCreatePrefill] = useState<{ from: string; to: string; roomTypeId: string; unitId: string } | null>(null);
   const [barMenu, setBarMenu] = useState<TapeRes | null>(null);
+  const [moveBar, setMoveBar] = useState<TapeRes | null>(null); // změna pokoje/lůžka z Plánu
   const [doc, setDoc] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   const { data, error, reload } = useAsync<TapeChart>(() => api.tapechart(from, days), [selId, from, days]);
@@ -693,11 +694,13 @@ function TapeChartView({ selId, prop, embedded }: { selId: string; prop?: Proper
               <button className="btn" onClick={() => { setDetailId(barMenu.id); setBarMenu(null); }}>Detail</button>
               {["confirmed", "pending"].includes(barMenu.status) && <button className="btn ok" disabled={busy} onClick={() => checkinBar(barMenu)}>Check-in</button>}
               {barMenu.status === "checked_in" && <button className="btn ok" disabled={busy} onClick={() => checkoutBar(barMenu)}>Check-out</button>}
+              <button className="btn ghost" onClick={() => { setMoveBar(barMenu); setBarMenu(null); }}>{prop?.inventoryUnit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</button>
             </div>
           </div>
         </div>
       )}
 
+      {moveBar && <UnitMoveOverlay reservationId={moveBar.id} onClose={() => setMoveBar(null)} onDone={reload} />}
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
   );
@@ -2462,9 +2465,6 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [pickRoomGuest, setPickRoomGuest] = useState(false); // přidání osoby z adresáře
   const [pickForEdit, setPickForEdit] = useState(false); // výběr z adresáře z editačního okna (nahradí osobu)
   const [moveUnit, setMoveUnit] = useState(false); // dialog změny pokoje/lůžka
-  const [moveCands, setMoveCands] = useState<{ unit: "room" | "bed"; candidates: UnitCandidate[] } | null>(null);
-  const [priceAsk, setPriceAsk] = useState<UnitCandidate | null>(null); // cílový pokoj s jinou cenou → dotaz přepočítat/ponechat
-  const closeMove = () => { setMoveUnit(false); setPriceAsk(null); };
   const [reg, setReg] = useState({ primary: true, fullName: "", dateOfBirth: "", nationality: "Česká republika", documentType: "id_card", documentNumber: "", homeAddress: "" });
   const [offerReg, setOfferReg] = useState(false);
   const [gEdit, setGEdit] = useState<string | null>(null);
@@ -2515,7 +2515,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {r.review ? <div className="kvline"><span className="muted">Hodnocení pobytu</span><span><b>{r.review.nps}/10</b>{r.review.comment ? ` — „${r.review.comment}"` : ""}</span></div> : null}
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
           <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
-          <div className="kvline"><span className="muted">Jednotka</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}>{r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : <span className="muted">{r.roomType?.name ?? "—"} · nepřiřazeno</span>}<button className="btn sm ghost" disabled={busy} onClick={() => { setMoveUnit(true); setMoveCands(null); api.unitCandidates(id).then(setMoveCands).catch(() => {}); }}>{data.property?.inventoryUnit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</button></span></div>
+          <div className="kvline"><span className="muted">Jednotka</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}>{r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : <span className="muted">{r.roomType?.name ?? "—"} · nepřiřazeno</span>}<button className="btn sm ghost" disabled={busy} onClick={() => setMoveUnit(true)}>{data.property?.inventoryUnit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</button></span></div>
           {r.group ? <div className="kvline"><span className="muted">Skupina</span><span><span className="chip">👥 {r.group.name}</span> <span className="muted">{r.group.code}</span></span></div> : null}
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
@@ -2715,42 +2715,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
         />
       )}
       {pickCompany && <CompanyPickerOverlay onClose={() => setPickCompany(false)} onPick={(cid) => run(async () => { await api.setReservationCompany(id, cid); setPickCompany(false); })} />}
-      {moveUnit && (() => {
-        const curPrice = Number(r.roomType?.basePrice ?? 0);
-        return (
-        <div className="inv-backdrop" onClick={closeMove}>
-          <div className="invoice wz" style={{ width: 540 }} onClick={(e) => e.stopPropagation()}>
-            <div className="wz-head"><div className="wz-titlerow"><div><h2>{moveCands?.unit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</h2><div className="muted" style={{ marginTop: 4 }}>{priceAsk ? "Cílový pokoj má jinou cenu — jak naložit s cenou ubytování?" : moveCands?.unit === "bed" ? "Volná lůžka stejného typu v termínu." : "Volné pokoje (i jiného typu) s dostatečnou kapacitou v termínu."}</div></div><button className="linkx" onClick={closeMove}>zavřít</button></div></div>
-            <div className="wz-body">
-              {priceAsk ? (
-                <div>
-                  <div className="wz-summary" style={{ marginBottom: 18 }}>
-                    <div className="kv"><span>Nový pokoj</span><b>{priceAsk.label}</b></div>
-                    <div className="kv"><span>Cena nového pokoje</span><b>{money(priceAsk.pricePerNight ?? 0)}/noc</b></div>
-                    <div className="kv"><span>Původní cena pokoje</span><b>{money(curPrice)}/noc</b></div>
-                  </div>
-                  <div className="wz-pay">
-                    <button className="btn" onClick={() => { const c = priceAsk; closeMove(); run(async () => { await api.assignUnit(id, c.id, "recompute"); }); }}>Přepočítat cenu na nový pokoj ({money(priceAsk.pricePerNight ?? 0)}/noc)</button>
-                    <button className="btn ghost" onClick={() => { const c = priceAsk; closeMove(); run(async () => { await api.assignUnit(id, c.id, "keep"); }); }}>Ponechat původní cenu {(priceAsk.pricePerNight ?? 0) > curPrice ? "(rozdíl jako sleva)" : ""}</button>
-                    <button className="linkx" style={{ alignSelf: "flex-start" }} onClick={() => setPriceAsk(null)}>‹ zpět na výběr</button>
-                  </div>
-                </div>
-              ) : !moveCands ? <div className="muted">Načítám…</div> : moveCands.candidates.length === 0 ? <div className="muted">Žádné vhodné jednotky.</div> : (
-                <div className="wz-list">
-                  {moveCands.candidates.map((c) => (
-                    <div key={c.id} className={`wz-pick${c.current ? " sel" : ""}`} style={c.current || c.free ? undefined : { opacity: 0.55, cursor: "default" }}
-                      onClick={() => { if (c.current || !c.free) return; if (moveCands.unit === "room" && c.pricePerNight != null && Math.abs(c.pricePerNight - curPrice) >= 0.01) { setPriceAsk(c); return; } closeMove(); run(async () => { await api.assignUnit(id, c.id); }); }}>
-                      <div className="pinfo"><div className="pname">{c.label}</div><div className="pmeta">{c.current ? "✓ aktuálně přiřazeno" : c.free ? "volné" : "obsazeno v termínu"}</div></div>
-                      {!c.current && c.free && <span className="parrow">Přesunout ›</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {moveUnit && <UnitMoveOverlay reservationId={id} onClose={() => setMoveUnit(false)} onDone={refresh} />}
     </>
   );
 }
@@ -2760,6 +2725,52 @@ const EmailStatus = ({ s }: { s: string }) => {
   const [label, color] = map[s] ?? [s, "inherit"];
   return <span style={{ color, fontWeight: 600, fontSize: 13 }}>{label}</span>;
 };
+
+// Změna pokoje/lůžka rezervace — sdílené z detailu rezervace i z Plánu (tape chart).
+// Lůžka téhož typu; pokoje i jiného typu s dostatečnou kapacitou. U jiné ceny se ptá přepočítat/ponechat.
+function UnitMoveOverlay({ reservationId, onClose, onDone }: { reservationId: string; onClose: () => void; onDone: () => void }) {
+  const [data, setData] = useState<{ unit: "room" | "bed"; candidates: UnitCandidate[] } | null>(null);
+  const [priceAsk, setPriceAsk] = useState<UnitCandidate | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { api.unitCandidates(reservationId).then(setData).catch((e) => setErr(e instanceof Error ? e.message : String(e))); }, [reservationId]);
+  const curPrice = data?.candidates.find((c) => c.current)?.pricePerNight ?? null;
+  const apply = (unitId: string, reprice?: "recompute" | "keep") => { setBusy(true); setErr(""); api.assignUnit(reservationId, unitId, reprice).then(() => { onDone(); onClose(); }).catch((e) => { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }); };
+  return (
+    <div className="inv-backdrop" onClick={onClose}>
+      <div className="invoice wz" style={{ width: 540 }} onClick={(e) => e.stopPropagation()}>
+        <div className="wz-head"><div className="wz-titlerow"><div><h2>{data?.unit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</h2><div className="muted" style={{ marginTop: 4 }}>{priceAsk ? "Cílový pokoj má jinou cenu — jak naložit s cenou ubytování?" : data?.unit === "bed" ? "Volná lůžka stejného typu v termínu." : "Volné pokoje (i jiného typu) s dostatečnou kapacitou v termínu."}</div></div><button className="linkx" onClick={onClose}>zavřít</button></div></div>
+        <div className="wz-body">
+          {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
+          {priceAsk ? (
+            <div>
+              <div className="wz-summary" style={{ marginBottom: 18 }}>
+                <div className="kv"><span>Nový pokoj</span><b>{priceAsk.label}</b></div>
+                <div className="kv"><span>Cena nového pokoje</span><b>{money(priceAsk.pricePerNight ?? 0)}/noc</b></div>
+                <div className="kv"><span>Původní cena pokoje</span><b>{money(curPrice ?? 0)}/noc</b></div>
+              </div>
+              <div className="wz-pay">
+                <button className="btn" disabled={busy} onClick={() => apply(priceAsk.id, "recompute")}>Přepočítat cenu na nový pokoj ({money(priceAsk.pricePerNight ?? 0)}/noc)</button>
+                <button className="btn ghost" disabled={busy} onClick={() => apply(priceAsk.id, "keep")}>Ponechat původní cenu {(priceAsk.pricePerNight ?? 0) > (curPrice ?? 0) ? "(rozdíl jako sleva)" : ""}</button>
+                <button className="linkx" style={{ alignSelf: "flex-start" }} onClick={() => setPriceAsk(null)}>‹ zpět na výběr</button>
+              </div>
+            </div>
+          ) : !data ? <div className="muted">Načítám…</div> : data.candidates.length === 0 ? <div className="muted">Žádné vhodné jednotky.</div> : (
+            <div className="wz-list">
+              {data.candidates.map((c) => (
+                <div key={c.id} className={`wz-pick${c.current ? " sel" : ""}`} style={c.current || c.free ? undefined : { opacity: 0.55, cursor: "default" }}
+                  onClick={() => { if (c.current || !c.free || busy) return; if (data.unit === "room" && c.pricePerNight != null && curPrice != null && Math.abs(c.pricePerNight - curPrice) >= 0.01) { setPriceAsk(c); return; } apply(c.id); }}>
+                  <div className="pinfo"><div className="pname">{c.label}</div><div className="pmeta">{c.current ? "✓ aktuálně přiřazeno" : c.free ? "volné" : "obsazeno v termínu"}</div></div>
+                  {!c.current && c.free && <span className="parrow">Přesunout ›</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Popup z detailu rezervace: přehled odeslaných e-mailů + znovuodeslání.
 // Adresář hostů — výběr existujícího klienta (připojení k rezervaci nebo sloučení).
