@@ -51,6 +51,7 @@ export function App() {
   const [selId, setSelId] = useState(getProperty());
   const [tab, setTab] = useState("reception");
   const [openGroup, setOpenGroup] = useState(() => localStorage.getItem("navGroup") ?? "Hosté");
+  const [navOpen, setNavOpen] = useState(false); // mobilní výsuvné menu
   useEffect(() => { localStorage.setItem("navGroup", openGroup); }, [openGroup]);
 
   useEffect(() => {
@@ -120,10 +121,12 @@ export function App() {
     ] },
   ];
   const navItemsBottom = [{ id: "agents", label: "AI agenti", icon: "🤖" }];
-  const goTab = (id: string, group?: string) => { setTab(id); if (group) setOpenGroup(group); };
+  const goTab = (id: string, group?: string) => { setTab(id); if (group) setOpenGroup(group); setNavOpen(false); };
 
   return (
-    <div className="app">
+    <div className={`app${navOpen ? " nav-open" : ""}`}>
+      <button className="nav-toggle" aria-label="Menu" onClick={() => setNavOpen(true)}>☰</button>
+      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
       <aside className="sidebar">
         <div className="logo"><span>🛎️ Recepce</span>{(session.user.role === "manager" || isSuper) && <CallBell />}</div>
 
@@ -167,13 +170,13 @@ export function App() {
           {isSuper && (
             <>
               <div className="nav-sep">CENTRÁLA</div>
-              <button className={tab === "properties" ? "active" : ""} onClick={() => setTab("properties")}><span>🏢</span> Provozovny</button>
-              <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}><span>👤</span> Uživatelé</button>
-              <button className={tab === "cequipment" ? "active" : ""} onClick={() => setTab("cequipment")}><span>🧰</span> Vybavení</button>
-              <button className={tab === "whatsapp" ? "active" : ""} onClick={() => setTab("whatsapp")}><span>📲</span> WhatsApp</button>
+              <button className={tab === "properties" ? "active" : ""} onClick={() => goTab("properties")}><span>🏢</span> Provozovny</button>
+              <button className={tab === "users" ? "active" : ""} onClick={() => goTab("users")}><span>👤</span> Uživatelé</button>
+              <button className={tab === "cequipment" ? "active" : ""} onClick={() => goTab("cequipment")}><span>🧰</span> Vybavení</button>
+              <button className={tab === "whatsapp" ? "active" : ""} onClick={() => goTab("whatsapp")}><span>📲</span> WhatsApp</button>
             </>
           )}
-          <button onClick={logout} style={{ marginTop: 24 }}>🚪 Odhlásit ({session.user.name})</button>
+          <button onClick={() => { setNavOpen(false); logout(); }} style={{ marginTop: 24 }}>🚪 Odhlásit ({session.user.name})</button>
         </nav>
       </aside>
 
