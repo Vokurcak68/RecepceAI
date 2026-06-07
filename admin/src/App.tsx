@@ -965,10 +965,11 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [from, setFrom] = useState(prefill?.from ?? todayIso());
   const [to, setTo] = useState(prefill?.to ?? tomorrowIso());
   const [guests, setGuests] = useState(2);
-  const [extra, setExtra] = useState<{ firstName: string; lastName: string; dob: string; rateId: string }[]>([]);
+  const [extra, setExtra] = useState<{ firstName: string; lastName: string; dob: string; rateId: string; guestId?: string }[]>([]);
+  const [pickPersonIdx, setPickPersonIdx] = useState<number | null>(null); // výběr osoby z adresáře u i-té další osoby
   const [avail, setAvail] = useState<AvailUnit[] | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>(prefill?.roomTypeId ? { [prefill.roomTypeId]: 1 } : {});
-  const [bedsWanted, setBedsWanted] = useState(2);
+  const [bedsWanted, setBedsWanted] = useState(1);
   const [together, setTogether] = useState(true);
   const [freeRooms, setFreeRooms] = useState<FreeBedsRoom[] | null>(null);
   const [g, setG] = useState({ firstName: "", lastName: "", email: "", phone: "", language: "cs", dob: "", rateId: "" });
@@ -1054,7 +1055,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
         if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: wBedId || undefined }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
-        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => ({ roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; }
+        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; }
       } else {
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
@@ -1062,7 +1063,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         if (flat.length === 1) {
           const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults, childAges, guest, deferEmail: pay === "deposit" && Number(depositPct) > 0 });
           if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {});
-          for (const p of extra) if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {});
+          for (const p of extra) { if (p.guestId) await api.addResGuest(r.id, { guestId: p.guestId }).catch(() => {}); else if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {}); }
           ids = [{ id: r.id, code: r.code }];
         } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
@@ -1074,8 +1075,13 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         const base = Number(det.totalAmount) - Number(det.cityTax ?? 0);
         await api.setReservationAccommodation(ids[0].id, base + extraBedSurcharge);
       }
+      // Hlavní osoba z adresáře: u lůžek per osoba (každé lůžko = jiný člověk), u pokoje jen primární.
+      if (bedMode) {
+        for (let i = 0; i < ids.length; i++) { const gid = i === 0 ? pickedGuestId : (extra[i - 1]?.guestId ?? null); if (gid) await api.setReservationPrimaryGuest(ids[i].id, gid).catch(() => {}); }
+      } else if (pickedGuestId && ids[0]) {
+        await api.setReservationPrimaryGuest(ids[0].id, pickedGuestId).catch(() => {});
+      }
       for (const it of ids) {
-        if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
         if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
         if (bedMode && customer === "company") {
           if (wBedRateId) await api.setReservationBedRate(it.id, wBedRateId).catch(() => {}); // sjednaná sazba (přepíše cenu)
@@ -1241,8 +1247,13 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                 {extra.map((p, i) => (
                   <div key={i} className="wz-person" style={{ gridTemplateColumns: personCols }}>
                     <span className="pidx">{i + 2}</span>
-                    <input placeholder="Jméno" value={p.firstName} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} />
-                    <input type="date" value={p.dob} onChange={(e) => setPersonDob(i + 1, e.target.value)} />
+                    <div style={{ display: "flex", gap: 4, minWidth: 0 }}>
+                      <input placeholder="Jméno a příjmení" value={p.firstName} disabled={!!p.guestId} onChange={(e) => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, firstName: e.target.value } : x))} style={{ flex: 1, minWidth: 0 }} />
+                      {p.guestId
+                        ? <button className="btn sm ghost" title="zrušit výběr z adresáře" onClick={() => setExtra((arr) => arr.map((x, idx) => idx === i ? { ...x, guestId: undefined, firstName: "", lastName: "" } : x))}>×</button>
+                        : <button className="btn sm ghost" title="vybrat z adresáře" onClick={() => setPickPersonIdx(i)}>📇</button>}
+                    </div>
+                    <input type="date" value={p.dob} disabled={!!p.guestId} onChange={(e) => setPersonDob(i + 1, e.target.value)} />
                     {ratesEnabled && <select value={p.rateId} onChange={(e) => setPersonRate(i + 1, e.target.value)}><option value="">— typ —</option>{rateOptions}</select>}
                     {ratesEnabled && <span className="pprice">{p.rateId ? `${money(ratePrice(p.rateId))}/noc` : ""}</span>}
                   </div>
@@ -1308,6 +1319,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         </>)}
         {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setCompany({ id: c.id, name: c.name })); setPickCo(false); }} />}
         {pickGuest && <GuestPickerOverlay prefill={g.lastName || g.email || ""} onClose={() => setPickGuest(false)} onPick={(gid) => { api.guestProfile(gid).then((p) => { setG((s) => ({ ...s, firstName: p.guest.firstName, lastName: p.guest.lastName, email: p.guest.email ?? "", phone: p.guest.phone ?? "", language: p.guest.language ?? "cs" })); setPickedGuestId(gid); }); setPickGuest(false); }} />}
+        {pickPersonIdx !== null && <GuestPickerOverlay prefill="" title="Vybrat osobu z adresáře" subtitle="Doplní jméno této osoby (a napojí na rezervaci, ať ji nezadáváš znovu)." actionLabel="Vybrat" onClose={() => setPickPersonIdx(null)} onPick={(gid) => { const idx = pickPersonIdx; api.guestProfile(gid).then((p) => setExtra((arr) => arr.map((x, k) => k === idx ? { ...x, guestId: gid, firstName: `${p.guest.firstName} ${p.guest.lastName}`.trim(), lastName: p.guest.lastName } : x))); setPickPersonIdx(null); }} />}
       </div>
     </div>
   );
