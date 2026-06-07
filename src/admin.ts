@@ -353,6 +353,16 @@ export async function bedReservationBoard(propertyId: string) {
   });
 }
 
+/** Volná lůžka daného typu pro termín — pro nepovinný výběr konkrétního lůžka v průvodci. */
+export async function freeBedsForType(propertyId: string, roomTypeId: string, fromStr: string, toStr: string) {
+  const from = toDateOnly(new Date(fromStr)), to = toDateOnly(new Date(toStr));
+  const beds = await prisma.bed.findMany({ where: { room: { propertyId, roomTypeId }, status: { not: RoomStatus.out_of_service } }, orderBy: { label: "asc" }, select: { id: true, label: true, room: { select: { number: true } } } });
+  if (!beds.length) return [];
+  const clashes = await prisma.reservation.findMany({ where: { propertyId, bedId: { in: beds.map((b) => b.id) }, ...overlapWhere(from, to) }, select: { bedId: true } });
+  const taken = new Set(clashes.map((c) => c.bedId));
+  return beds.map((b) => ({ id: b.id, label: `Lůžko ${b.label} · pok. ${b.room.number}`, free: !taken.has(b.id) }));
+}
+
 /** Rezervace na konkrétním lůžku (časová osa) — pro správu lůžka. */
 export async function listBedReservations(propertyId: string, bedId: string) {
   const bed = await prisma.bed.findFirst({ where: { id: bedId, propertyId }, select: { id: true, label: true, room: { select: { number: true, roomTypeId: true } } } });

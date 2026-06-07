@@ -423,6 +423,7 @@ adminRouter.delete("/occupations/:id", h((req, res) => occupancy.deleteOccupatio
 
 adminRouter.get("/beds/board", h((_req, res) => admin.bedReservationBoard(pid(res))));
 adminRouter.get("/beds/free-per-room", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return availability.freeBedsPerRoom(pid(res), q.from, q.to); }));
+adminRouter.get("/beds/free-of-type", h((req, res) => { const q = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr }).parse(req.query); return admin.freeBedsForType(pid(res), q.roomTypeId, q.from, q.to); }));
 adminRouter.get("/beds/:id/reservations", h((req, res) => admin.listBedReservations(pid(res), req.params.id)));
 
 // ── Vratné kauce ──

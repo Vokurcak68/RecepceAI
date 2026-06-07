@@ -323,6 +323,7 @@ export const api = {
   // průvodce novou rezervací
   availabilityFor: (from: string, to: string, guests = 1) => req<AvailUnit[]>(`/admin/availability?from=${from}&to=${to}&guests=${guests}&_=${Date.now()}`),
   freeBedsPerRoom: (from: string, to: string) => req<FreeBedsRoom[]>(`/admin/beds/free-per-room?from=${from}&to=${to}&_=${Date.now()}`),
+  freeBedsOfType: (roomTypeId: string, from: string, to: string) => req<{ id: string; label: string; free: boolean }[]>(`/admin/beds/free-of-type?roomTypeId=${roomTypeId}&from=${from}&to=${to}&_=${Date.now()}`),
 
   // vratné kauce
   reservationDeposits: (id: string) => req<Deposit[]>(`/admin/reservations/${id}/deposits?_=${Date.now()}`),

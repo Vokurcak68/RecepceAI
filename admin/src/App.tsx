@@ -989,6 +989,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [wVip, setWVip] = useState(false);
   const [wEnergyFree, setWEnergyFree] = useState(false);
   const [wNote, setWNote] = useState("");
+  const [wBedId, setWBedId] = useState(""); // nepovinné konkrétní lůžko (bed mode, 1 lůžko)
+  const [freeBedsList, setFreeBedsList] = useState<{ id: string; label: string; free: boolean }[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<{ id: string; code: string }[] | null>(null);
@@ -1007,8 +1009,14 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const loadAvail = async () => {
     setErr(""); setBusy(true);
     try {
-      setAvail(await api.availabilityFor(from, to, bedMode ? 1 : guests));
-      if (bedMode) setFreeRooms(await api.freeBedsPerRoom(from, to));
+      const av = await api.availabilityFor(from, to, bedMode ? 1 : guests);
+      setAvail(av);
+      setWBedId("");
+      if (bedMode) {
+        setFreeRooms(await api.freeBedsPerRoom(from, to));
+        const bt = av.find((a) => a.unit === "bed");
+        setFreeBedsList(bt ? await api.freeBedsOfType(bt.roomTypeId, from, to) : []);
+      }
       setStep(2);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -1045,7 +1053,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       let memberPersons: typeof allPersons = [];
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
-        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
+        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest }); if (wBedId) await api.assignUnit(r.id, wBedId).catch(() => {}); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
         else { const rooms = Array.from({ length: bedsWanted }, (_, i) => ({ roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; }
       } else {
         const flat: string[] = [];
@@ -1184,6 +1192,17 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={together} onChange={(e) => setTogether(e.target.checked)} style={{ width: "auto" }} /> společně v jednom pokoji</label>
                   <span className="wz-tag">volná: {totalFreeBeds}</span>
                 </div>
+                {bedsWanted === 1 && (freeBedsList ?? []).length > 0 && (
+                  <div className="wz-row1" style={{ alignItems: "center", marginTop: 12 }}>
+                    <span className="row" style={{ gap: 8 }}><span className="muted">Konkrétní lůžko (nepovinné)</span>
+                      <select value={wBedId} onChange={(e) => setWBedId(e.target.value)}>
+                        <option value="">— přiřadit později —</option>
+                        {(freeBedsList ?? []).filter((b) => b.free || b.id === wBedId).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+                      </select>
+                    </span>
+                    <span className="muted" style={{ fontSize: 12 }}>Když vybereš, lůžko se rovnou zarezervuje; jinak ho přiřadíš později.</span>
+                  </div>
+                )}
                 {together && roomsWithEnough.length > 0 && <div className="muted" style={{ marginTop: 14 }}>Pohromadě možné v: {roomsWithEnough.map((r) => `pok. ${r.roomNumber} (${r.freeBeds})`).join(", ")}.</div>}
                 {together && roomsWithEnough.length === 0 && (
                   <div className="error" style={{ marginTop: 14 }}>
