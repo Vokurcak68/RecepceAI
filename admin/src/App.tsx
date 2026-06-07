@@ -982,6 +982,12 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [roomQ, setRoomQ] = useState("");
   const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company">("arrival");
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
+  // Firemní / dlouhodobé (jen lůžková provozovna + odběratel firma): sazba z ceníku, splatnost, VIP, poznámka.
+  const bedRatesA = useAsync<BedRate[]>(() => prop.inventoryUnit === "bed" ? api.bedRates() : Promise.resolve([]), []);
+  const [wBedRateId, setWBedRateId] = useState("");
+  const [wPayUntil, setWPayUntil] = useState("");
+  const [wVip, setWVip] = useState(false);
+  const [wNote, setWNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<{ id: string; code: string }[] | null>(null);
@@ -1062,6 +1068,11 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       for (const it of ids) {
         if (pickedGuestId) await api.setReservationPrimaryGuest(it.id, pickedGuestId).catch(() => {});
         if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
+        if (bedMode && customer === "company") {
+          if (wBedRateId) await api.setReservationBedRate(it.id, wBedRateId).catch(() => {}); // sjednaná sazba (přepíše cenu)
+          if (wPayUntil || wVip) await api.setReservationBooking(it.id, { payUntil: wPayUntil || null, vip: wVip }).catch(() => {});
+          if (wNote.trim()) await api.saveReservationNote(it.id, wNote.trim()).catch(() => {});
+        }
       }
       if (pay === "deposit" && ids.length === 1) { const det = await api.reservation(ids[0].id); const amt = Math.round(Number(det.totalAmount) * Number(depositPct) / 100); if (amt > 0) await api.issueProforma(ids[0].id, amt, undefined, true, true); }
       setDone(ids);
@@ -1245,6 +1256,21 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   {!bedMode && totalRooms === 1 && <label className={pay === "deposit" ? "sel" : ""}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> Zálohou <input type="number" min={0} max={100} style={{ width: 64, marginLeft: 6 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} /> %</label>}
                   {customer === "company" && <label className={pay === "company" ? "sel" : ""}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> Na fakturu firmě</label>}
                 </div>
+                {bedMode && customer === "company" && (
+                  <>
+                    <div className="wz-sec">Firemní / dlouhodobé</div>
+                    <div style={{ maxWidth: 520 }}>
+                      <FieldRow label="Sjednaná sazba"><select style={{ flex: 1, minWidth: 0 }} value={wBedRateId} onChange={(e) => setWBedRateId(e.target.value)}>
+                        <option value="">— dle ceny lůžka —</option>
+                        {(bedRatesA.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
+                      </select></FieldRow>
+                      <FieldRow label="Splatnost"><input type="date" style={{ flex: 1, minWidth: 0 }} value={wPayUntil} onChange={(e) => setWPayUntil(e.target.value)} /></FieldRow>
+                      <FieldRow label="VIP"><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={wVip} onChange={(e) => setWVip(e.target.checked)} /> prioritní/smluvní pobyt</label></FieldRow>
+                      <FieldRow label="Poznámka"><input style={{ flex: 1, minWidth: 0 }} value={wNote} onChange={(e) => setWNote(e.target.value)} placeholder="např. agentura, směna, kontakt…" /></FieldRow>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Konkrétní lůžka a střídání osob (obsazení) nastavíš po vytvoření v detailu rezervace.</div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
