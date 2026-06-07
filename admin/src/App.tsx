@@ -1012,12 +1012,14 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
     try {
       const av = await api.availabilityFor(from, to, bedMode ? 1 : guests);
       setAvail(av);
-      setWBedId("");
       if (bedMode) {
         setFreeRooms(await api.freeBedsPerRoom(from, to));
         const bt = av.find((a) => a.unit === "bed");
-        setFreeBedsList(bt ? await api.freeBedsOfType(bt.roomTypeId, from, to) : []);
-      }
+        const fb = bt ? await api.freeBedsOfType(bt.roomTypeId, from, to) : [];
+        setFreeBedsList(fb);
+        // Předvyplň konkrétní lůžko, pokud průvodce otevřen z konkrétního lůžka (Plán → Lůžka) a je volné.
+        setWBedId(prefill?.unitId && fb.some((b) => b.id === prefill.unitId && b.free) ? prefill.unitId : "");
+      } else { setWBedId(""); }
       setStep(2);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
