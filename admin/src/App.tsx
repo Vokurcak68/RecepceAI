@@ -1053,7 +1053,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       let memberPersons: typeof allPersons = [];
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
-        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest }); if (wBedId) await api.assignUnit(r.id, wBedId).catch(() => {}); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
+        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: wBedId || undefined }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
         else { const rooms = Array.from({ length: bedsWanted }, (_, i) => ({ roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; }
       } else {
         const flat: string[] = [];

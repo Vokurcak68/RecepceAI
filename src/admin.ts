@@ -58,7 +58,7 @@ export async function listReservations(propertyId: string, filter: { status?: st
 export async function createReservation(input: {
   propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; childAges?: number[];
   guest: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
-  billingCompany?: string; billingIco?: string; billingDic?: string; deferEmail?: boolean;
+  billingCompany?: string; billingIco?: string; billingDic?: string; deferEmail?: boolean; bedId?: string;
 }) {
   const { propertyId, roomTypeId, from, to, adults, guest } = input;
   const childAges = (input.childAges ?? []).filter((a) => Number.isFinite(a));
@@ -67,12 +67,20 @@ export async function createReservation(input: {
   if (nights < 1) throw new Error("Pobyt musí být alespoň jednu noc.");
   if (await freeUnitsForType(propertyId, roomTypeId, from, to) <= 0)
     throw new Error("Pro zvolený termín už není volná jednotka tohoto typu (předešlo se přebookování).");
+  // Konkrétní lůžko (nepovinné) — tvrdá kontrola, že JE volné v daném termínu (i pro dlouhodobé/sekvenční rezervace).
+  if (input.bedId) {
+    const bed = await prisma.bed.findFirst({ where: { id: input.bedId, room: { propertyId, roomTypeId } }, select: { id: true } });
+    if (!bed) throw new Error("Neplatné lůžko pro tento typ.");
+    const clash = await prisma.reservation.findFirst({ where: { bedId: input.bedId, ...overlapWhere(from, to) }, select: { id: true } });
+    if (clash) throw new Error("Zvolené lůžko je v tomto termínu už obsazené.");
+  }
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
   const gId = await createGuest(guest); // nového hosta nepárujeme dle e-mailu (napojení na stálého klienta je manuální přes adresář)
   const created = await prisma.reservation.create({
     data: {
       code: generateReservationCode(), property: { connect: { id: propertyId } },
       primaryGuest: { connect: { id: gId } }, roomType: { connect: { id: roomTypeId } },
+      ...(input.bedId ? { bed: { connect: { id: input.bedId } } } : {}),
       checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children, childAges,
       status: ReservationStatus.confirmed, source: "manual", billingCycle: price.billingCycle,
       totalAmount: price.total, cityTax: price.cityTax,
