@@ -130,6 +130,7 @@ export type ReservationDetail = Reservation & {
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
   previousStays?: number; review?: GuestReview | null; group?: { id: string; code: string; name: string } | null;
   primaryGuestLastReg?: { fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string } | null;
+  energyFeeExempt?: boolean;
   companyId?: string | null; company?: { id: string; name: string } | null;
   personRateId?: string | null; personRate?: { id: string; name: string; pricePerNight: Money } | null;
 };
@@ -264,6 +265,7 @@ export const api = {
   addResGuest: (id: string, b: unknown) => req<ResGuest>(`/admin/reservations/${id}/guests`, { method: "POST", body: JSON.stringify(b) }),
   updateResGuest: (rgId: string, b: unknown) => req<ResGuest>(`/admin/reservation-guests/${rgId}`, { method: "PATCH", body: JSON.stringify(b) }),
   setResGuestRate: (rgId: string, personRateId: string | null) => req<ResGuest>(`/admin/reservation-guests/${rgId}/rate`, { method: "PATCH", body: JSON.stringify({ personRateId }) }),
+  setReservationEnergyExempt: (id: string, exempt: boolean) => req<{ id: string; energyFeeExempt: boolean }>(`/admin/reservations/${id}/energy-exempt`, { method: "PATCH", body: JSON.stringify({ exempt }) }),
   removeResGuest: (id: string) => req(`/admin/reservation-guests/${id}`, { method: "DELETE" }),
 
   // ceník služeb (číselník)
@@ -290,13 +292,7 @@ export const api = {
 
   // lůžková obsazenost (firemní ubytovny)
   bedBoard: () => req<BedBoardItem[]>(`/admin/beds/board?_=${Date.now()}`),
-  bedOccupancies: (bedId: string) => req<BedOccupanciesData>(`/admin/beds/${bedId}/occupancies?_=${Date.now()}`),
-  createOccupancy: (b: unknown) => req<BedOccupancyItem>(`/admin/occupancies`, { method: "POST", body: JSON.stringify(b) }),
-  updateOccupancy: (id: string, b: unknown) => req(`/admin/occupancies/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
-  endOccupancy: (id: string, toDate?: string) => req(`/admin/occupancies/${id}/end`, { method: "POST", body: JSON.stringify(toDate ? { toDate } : {}) }),
-  deleteOccupancy: (id: string) => req(`/admin/occupancies/${id}`, { method: "DELETE" }),
-  companyOccupancies: (id: string) => req<BedOccupancyItem[]>(`/admin/companies/${id}/occupancies?_=${Date.now()}`),
-  companyOccupancyInvoice: (id: string, occupancyIds: string[]) => req<Doc>(`/admin/companies/${id}/occupancy-invoice`, { method: "POST", body: JSON.stringify({ occupancyIds }) }),
+  bedReservations: (bedId: string) => req<BedReservationsData>(`/admin/beds/${bedId}/reservations?_=${Date.now()}`),
 
   // číselník typů osob
   personRates: (all = false) => req<PersonRate[]>(`/admin/person-rates${all ? "?all=1" : ""}`),
@@ -413,10 +409,11 @@ export type Company = { id: string; name: string; ico: string | null; dic: strin
 export type AresResult = { ico: string; name: string | null; dic: string | null; street: string | null; city: string | null; zip: string | null; country: string; vatPayer: boolean; viesValid: boolean | null; account: string | null; accounts: string[]; found: boolean };
 export type CompanyResItem = { id: string; code: string; guestName: string; checkInDate: string; checkOutDate: string; status: string; balance: Money; propertyId?: string; propertyName?: string };
 export type CompanyDetail = Company & { reservations: CompanyResItem[]; totalBalance: Money };
-export type BedOccupancyItem = { id: string; bedId: string; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; occupantId: string; occupantName: string; occupantPhone: string | null; companyId: string | null; companyName: string | null; pricePerNight: Money; nights: number; amount: Money; invoicedAt: string | null; bedLabel?: string; energyFeeExempt: boolean; energyPerNight: Money; energyAmount: Money; total: Money; personRateId: string | null; personRateName: string | null; dateOfBirth: string | null };
+export type BedCurrentRes = { reservationId: string; code: string; guestName: string; companyName: string | null; fromDate: string; toDate: string; status: string };
+export type BedResItem = { id: string; code: string; guestName: string; companyName: string | null; fromDate: string; toDate: string; status: string; totalAmount: Money };
+export type BedReservationsData = { bed: { id: string; label: string; roomNumber: string; roomTypeId: string }; items: BedResItem[] };
 export type PersonRate = { id: string; name: string; ageFrom: number | null; ageTo: number | null; pricePerNight: Money; sortOrder: number; active: boolean };
-export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; status: string; current: BedOccupancyItem | null; upcoming: number; nextFrom: string | null };
-export type BedOccupanciesData = { bed: { id: string; label: string }; items: BedOccupancyItem[] };
+export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; roomTypeId: string; status: string; current: BedCurrentRes | null; upcoming: number; nextFrom: string | null };
 export type Deposit = { id: string; amount: Money; method: string; status: "held" | "returned" | "forfeited"; takenAt: string; returnedAt: string | null; returnedAmount: Money | null; note: string | null; reservationId: string | null; companyId: string | null };
 export const DEPOSIT_STATUS_LABEL: Record<string, string> = { held: "držena", returned: "vrácena", forfeited: "zadržena" };
 export type MoveItem = { date: string; kind: "reservation" | "occupancy"; name: string; where: string; code: string | null; companyName: string | null };

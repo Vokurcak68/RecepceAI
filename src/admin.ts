@@ -322,11 +322,60 @@ export async function roomDetail(propertyId: string, roomId: string) {
   };
 }
 
+/** Přehled lůžek z REZERVACÍ (sjednoceno — dlouhodobé i krátkodobé jsou rezervace na lůžko).
+ * Pro každé lůžko: aktuální obyvatel (rezervace kryjící dnešek) + počet nadcházejících rezervací. */
+export async function bedReservationBoard(propertyId: string) {
+  const today = toDateOnly(new Date());
+  const beds = await prisma.bed.findMany({
+    where: { propertyId },
+    include: { room: { select: { number: true, floor: true, roomTypeId: true } } },
+    orderBy: [{ room: { floor: "asc" } }, { label: "asc" }],
+  });
+  const resv = await prisma.reservation.findMany({
+    where: { propertyId, bedId: { not: null }, status: { in: [ReservationStatus.confirmed, ReservationStatus.checked_in] }, checkOutDate: { gt: today } },
+    include: { primaryGuest: { select: { firstName: true, lastName: true } }, company: { select: { name: true } } },
+    orderBy: { checkInDate: "asc" },
+  });
+  const byBed = new Map<string, typeof resv>();
+  for (const r of resv) { const a = byBed.get(r.bedId!) ?? []; a.push(r); byBed.set(r.bedId!, a); }
+  return beds.map((b) => {
+    const list = byBed.get(b.id) ?? [];
+    const cur = list.find((r) => r.checkInDate <= today && r.checkOutDate > today) ?? null;
+    const upcoming = list.filter((r) => r.checkInDate > today);
+    return {
+      bedId: b.id, label: b.label, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.status,
+      current: cur ? { reservationId: cur.id, code: cur.code, guestName: `${cur.primaryGuest.firstName} ${cur.primaryGuest.lastName}`, companyName: cur.company?.name ?? null, fromDate: cur.checkInDate, toDate: cur.checkOutDate, status: cur.status } : null,
+      upcoming: upcoming.length, nextFrom: upcoming[0]?.checkInDate ?? null,
+    };
+  });
+}
+
+/** Rezervace na konkrétním lůžku (časová osa) — pro správu lůžka. */
+export async function listBedReservations(propertyId: string, bedId: string) {
+  const bed = await prisma.bed.findFirst({ where: { id: bedId, propertyId }, select: { id: true, label: true, room: { select: { number: true, roomTypeId: true } } } });
+  if (!bed) throw NOT_FOUND();
+  const items = await prisma.reservation.findMany({
+    where: { propertyId, bedId, status: { not: ReservationStatus.cancelled } },
+    include: { primaryGuest: { select: { firstName: true, lastName: true } }, company: { select: { name: true } } },
+    orderBy: { checkInDate: "desc" }, take: 100,
+  });
+  return {
+    bed: { id: bed.id, label: bed.label, roomNumber: bed.room.number, roomTypeId: bed.room.roomTypeId },
+    items: items.map((r) => ({ id: r.id, code: r.code, guestName: `${r.primaryGuest.firstName} ${r.primaryGuest.lastName}`, companyName: r.company?.name ?? null, fromDate: r.checkInDate, toDate: r.checkOutDate, status: r.status, totalAmount: r.totalAmount })),
+  };
+}
+
 /** Nastaví cenu ubytování rezervace (totalAmount = ubytování + pobyt. poplatek) — pro per-person ceník (součet sazeb osob). */
 export async function setReservationAccommodation(propertyId: string, id: string, accommodation: number) {
   const r = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, cityTax: true } });
   if (!r) throw NOT_FOUND();
   return prisma.reservation.update({ where: { id }, data: { totalAmount: new Prisma.Decimal(accommodation).add(r.cityTax) }, select: { id: true, totalAmount: true } });
+}
+
+/** Energetický poplatek („vzdušné") osvobození na rezervaci (lůžkové/firemní pobyty). */
+export async function setReservationEnergyExempt(propertyId: string, id: string, exempt: boolean) {
+  await assertInProperty(propertyId, id);
+  return prisma.reservation.update({ where: { id }, data: { energyFeeExempt: exempt }, select: { id: true, energyFeeExempt: true } });
 }
 
 /** Přiřadí typ osoby (číselník) k rezervaci; volitelně přepočítá cenu ubytování = sazba × nocí (+ pobyt. poplatek). */

@@ -10,7 +10,7 @@ import {
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
   type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnitCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
-  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedOccupancyItem, type BedOccupanciesData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom, type ReceptionToday, type RecArrival, type RecRow,
+  type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedReservationsData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom, type ReceptionToday, type RecArrival, type RecRow,
 } from "./api";
 
 const Badge = ({ s }: { s: string }) => <span className={`badge b-${s}`}>{STATUS_LABEL[s] ?? s}</span>;
@@ -842,7 +842,7 @@ function PlanView({ selId, prop }: { selId: string; prop?: Property }) {
       {view === "plan" && <TapeChartView selId={selId} prop={prop} embedded />}
       {view === "list" && <OccupancyView selId={selId} prop={prop} embedded />}
       {view === "calendar" && <CalendarView selId={selId} embedded />}
-      {view === "beds" && bedMode && <BedBoardView selId={selId} embedded />}
+      {view === "beds" && bedMode && <BedBoardView selId={selId} prop={prop} embedded />}
     </>
   );
 }
@@ -2516,6 +2516,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Termín</span><span>{d(r.checkInDate)} → {d(r.checkOutDate)} ({r.nights} nocí)</span></div>
           <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}>{r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : <span className="muted">{r.roomType?.name ?? "—"} · nepřiřazeno</span>}<button className="btn sm ghost" disabled={busy} onClick={() => setMoveUnit(true)}>{data.property?.inventoryUnit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</button></span></div>
+          {data.property?.inventoryUnit === "bed" ? <div className="kvline"><span className="muted">Energie (vzdušné)</span><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={!!r.energyFeeExempt} disabled={busy} onChange={(e) => run(() => api.setReservationEnergyExempt(id, e.target.checked))} /> osvobozeno (neúčtovat)</label></div> : null}
           {r.group ? <div className="kvline"><span className="muted">Skupina</span><span><span className="chip">👥 {r.group.name}</span> <span className="muted">{r.group.code}</span></span></div> : null}
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
@@ -3200,23 +3201,26 @@ function DepositsPanel({ reservationId, companyId, suggested }: { reservationId?
   );
 }
 
-// ── Obsazení lůžek (firemní ubytovny) ────────────────────────
-function BedBoardView({ selId, embedded }: { selId: string; embedded?: boolean }) {
+// ── Lůžka (obsazenost z rezervací) ───────────────────────────
+function BedBoardView({ selId, prop, embedded }: { selId: string; prop?: Property; embedded?: boolean }) {
   const { data, error, reload } = useAsync<BedBoardItem[]>(() => api.bedBoard(), [selId]);
-  const [openBed, setOpenBed] = useState<{ id: string; label: string } | null>(null);
+  const [openBed, setOpenBed] = useState<BedBoardItem | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [wizard, setWizard] = useState<{ from?: string; to?: string; roomTypeId?: string; unitId?: string } | null>(null);
   const beds = data ?? [];
   const occupied = beds.filter((b) => b.current).length;
+  if (detailId && prop) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
   return (
     <>
-      {!embedded && <div className="h1"><span>Obsazení lůžek</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· kdo na kterém lůžku bydlí (pracovníci se střídají)</span> <button className="btn ghost sm" onClick={reload}>↻</button></div>}
+      {!embedded && <div className="h1"><span>Lůžka</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· obsazenost z rezervací (kdo na kterém lůžku bydlí)</span> <button className="btn ghost sm" onClick={reload}>↻</button></div>}
       {error && <div className="error">{error}</div>}
-      <div className="toolbar"><span className="muted">Obsazeno {occupied} / {beds.length} lůžek</span></div>
+      <div className="toolbar" style={{ alignItems: "center" }}><span className="muted">Obsazeno {occupied} / {beds.length} lůžek</span><span style={{ flex: 1 }} />{prop && <button className="btn" onClick={() => setWizard({})}>✨ Nová rezervace</button>}</div>
       <div className="panel">
         <Table cols={["Lůžko", "Pokoj", "Aktuální obyvatel", "Firma", "Do", "Další", ""]} rows={beds} empty="Žádná lůžka (provozovna nemá jednotku = lůžko)" render={(b: BedBoardItem) => (
-          <tr key={b.bedId} className="row-click" onClick={() => setOpenBed({ id: b.bedId, label: b.label })}>
+          <tr key={b.bedId} className="row-click" onClick={() => setOpenBed(b)}>
             <td><b>{b.label}</b></td>
             <td className="muted">{b.roomNumber} · {b.floor}.p</td>
-            <td>{b.current ? <>👤 {b.current.occupantName}</> : <span className="muted">volné</span>}</td>
+            <td>{b.current ? <>👤 {b.current.guestName}</> : <span className="muted">volné</span>}</td>
             <td className="muted">{b.current?.companyName ?? "—"}</td>
             <td className="muted">{b.current ? d(b.current.toDate) : "—"}</td>
             <td className="muted">{b.upcoming > 0 ? `${b.upcoming}× (od ${d(b.nextFrom!)})` : "—"}</td>
@@ -3224,85 +3228,31 @@ function BedBoardView({ selId, embedded }: { selId: string; embedded?: boolean }
           </tr>
         )} />
       </div>
-      {openBed && <BedOccupancyOverlay bedId={openBed.id} label={openBed.label} onClose={() => { setOpenBed(null); reload(); }} />}
+      {openBed && <BedReservationsOverlay bed={openBed} onClose={() => { setOpenBed(null); reload(); }} onDetail={(rid) => { setOpenBed(null); setDetailId(rid); }} onNew={() => { const b = openBed; setOpenBed(null); setWizard({ roomTypeId: b.roomTypeId, unitId: b.bedId }); }} />}
+      {wizard && prop && <NewReservationWizard prop={prop} prefill={wizard} onClose={() => setWizard(null)} onCreated={() => { setWizard(null); reload(); }} onOpenDetail={(rid) => { setWizard(null); setDetailId(rid); }} />}
     </>
   );
 }
 
-function BedOccupancyOverlay({ bedId, label, onClose }: { bedId: string; label: string; onClose: () => void }) {
-  const confirm = useConfirm();
-  const { data, error, reload } = useAsync<BedOccupanciesData>(() => api.bedOccupancies(bedId), [bedId]);
-  const companies = useAsync<Company[]>(() => api.companies(), []);
-  const rates = useAsync<PersonRate[]>(() => api.personRates(), []);
-  const today = todayIso();
-  const [f, setF] = useState({ firstName: "", lastName: "", phone: "", companyId: "", fromDate: today, toDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), ppn: "", energyExempt: false, note: "", personRateId: "", dob: "" });
-  const ageOf = (dob: string) => { const b = new Date(dob), n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a; };
-  const matchRateByDob = (dob: string): PersonRate | null => { if (!dob) return null; const age = ageOf(dob); const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0] ?? null; };
-  const pickRate = (id: string) => { const r = (rates.data ?? []).find((x) => x.id === id); setF((s) => ({ ...s, personRateId: id, ppn: r ? parseFloat(r.pricePerNight).toString() : s.ppn })); };
-  const onDob = (dob: string) => { const r = matchRateByDob(dob); setF((s) => ({ ...s, dob, ...(r ? { personRateId: r.id, ppn: parseFloat(r.pricePerNight).toString() } : {}) })); };
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const add = async () => {
-    if (!f.firstName.trim() || !f.lastName.trim()) { setMsg("Vyplň jméno a příjmení."); return; }
-    setBusy(true); setMsg("");
-    try {
-      await api.createOccupancy({ bedId, firstName: f.firstName, lastName: f.lastName, phone: f.phone || undefined, companyId: f.companyId || null, fromDate: f.fromDate, toDate: f.toDate, pricePerNight: f.ppn ? Number(f.ppn.replace(",", ".")) : 0, energyFeeExempt: f.energyExempt, note: f.note || null, personRateId: f.personRateId || null, dateOfBirth: f.dob || undefined });
-      setF({ ...f, firstName: "", lastName: "", phone: "", note: "", personRateId: "", dob: "" }); reload();
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-  };
-  const end = async (o: BedOccupancyItem) => { if (await confirm({ title: "Ukončit obsazení", message: <>Ukončit pobyt <b>{o.occupantName}</b> na lůžku {label} (dnešním dnem)?</>, confirmLabel: "Ukončit" })) { setBusy(true); try { await api.endOccupancy(o.id); reload(); } finally { setBusy(false); } } };
-  const del = async (o: BedOccupancyItem) => { if (await confirm({ title: "Smazat záznam", message: <>Smazat obsazení <b>{o.occupantName}</b>? (jen pro opravu chyby)</>, danger: true, confirmLabel: "Smazat" })) { setBusy(true); try { await api.deleteOccupancy(o.id); reload(); } finally { setBusy(false); } } };
-
+function BedReservationsOverlay({ bed, onClose, onDetail, onNew }: { bed: BedBoardItem; onClose: () => void; onDetail: (rid: string) => void; onNew: () => void }) {
+  const { data } = useAsync<BedReservationsData>(() => api.bedReservations(bed.bedId), [bed.bedId]);
   return (
     <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
-        <div className="inv-head">
-          <div><h2 style={{ margin: 0 }}>Lůžko {label}</h2><div className="muted" style={{ marginTop: 4 }}>Obsazení a střídání osob.</div></div>
-          <button className="linkx" onClick={onClose}>zavřít</button>
+      <div className="invoice wz" style={{ width: 600 }} onClick={(e) => e.stopPropagation()}>
+        <div className="wz-head"><div className="wz-titlerow"><div><h2>Lůžko {bed.label}</h2><div className="muted" style={{ marginTop: 4 }}>Pokoj {bed.roomNumber} · rezervace na tomto lůžku</div></div><button className="linkx" onClick={onClose}>zavřít</button></div></div>
+        <div className="wz-body">
+          {!data ? <div className="muted">Načítám…</div> : data.items.length === 0 ? <div className="muted">Žádné rezervace na tomto lůžku.</div> : (
+            <div className="wz-list">
+              {data.items.map((r) => (
+                <div key={r.id} className="wz-pick" onClick={() => onDetail(r.id)}>
+                  <div className="pinfo"><div className="pname">{r.guestName}{r.companyName ? <span className="muted" style={{ fontWeight: 400 }}> · {r.companyName}</span> : ""}</div><div className="pmeta">{d(r.fromDate)} → {d(r.toDate)} · {statusLabel(r.status)} · {r.code}</div></div>
+                  <span className="parrow">Detail ›</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {error && <div className="error">{error}</div>}
-        {msg && <div className="error">{msg}</div>}
-
-        <div className="panel" style={{ padding: 14, marginTop: 8 }}>
-          <h3 style={{ border: "none", padding: 0, marginBottom: 8 }}>Umístit osobu</h3>
-          <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
-            <input placeholder="Jméno" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} style={{ width: 130 }} />
-            <input placeholder="Příjmení" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} style={{ width: 140 }} />
-            <input placeholder="Telefon" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} style={{ width: 130 }} />
-            <select value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}><option value="">— firma —</option>{(companies.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-            {(rates.data ?? []).length > 0 && <select value={f.personRateId} onChange={(e) => pickRate(e.target.value)}><option value="">— typ osoby —</option>{(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)})</option>)}</select>}
-            <label className="row" style={{ gap: 4 }}>nar. <input type="date" value={f.dob} onChange={(e) => onDob(e.target.value)} /></label>
-          </div>
-          <div className="toolbar" style={{ flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
-            <label className="muted">Od <input type="date" value={f.fromDate} onChange={(e) => setF({ ...f, fromDate: e.target.value })} /></label>
-            <label className="muted">Do <input type="date" value={f.toDate} onChange={(e) => setF({ ...f, toDate: e.target.value })} /></label>
-            <input type="number" min={0} placeholder="Kč/noc" value={f.ppn} onChange={(e) => setF({ ...f, ppn: e.target.value })} style={{ width: 90 }} />
-            <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={f.energyExempt} onChange={(e) => setF({ ...f, energyExempt: e.target.checked })} /> energie zdarma</label>
-            <input placeholder="Poznámka" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
-            <button className="btn" disabled={busy} onClick={add}>Umístit</button>
-          </div>
-        </div>
-
-        <table style={{ marginTop: 12 }}>
-          <thead><tr><th>Osoba</th><th>Firma</th><th>Od → Do</th><th>Částka</th><th>Stav</th><th className="right"></th></tr></thead>
-          <tbody>
-            {(data?.items ?? []).map((o) => (
-              <tr key={o.id}>
-                <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.personRateName ? <span className="muted"> · {o.personRateName}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
-                <td className="muted">{o.companyName ?? "—"}</td>
-                <td>{d(o.fromDate)} → {d(o.toDate)}</td>
-                <td className="muted">{o.nights}× {money(o.pricePerNight)}{Number(o.energyAmount) > 0 ? <> + energie {money(o.energyAmount)}</> : o.energyFeeExempt ? <span title="osvobozeno od energie"> · bez energie</span> : null} = <b>{money(o.total)}</b>{o.invoicedAt ? <div style={{ fontSize: 12, color: "var(--ok)" }}>vyfakturováno</div> : null}</td>
-                <td>{o.status === "ended" ? <span className="muted">ukončeno</span> : <b style={{ color: "var(--ok)" }}>aktivní</b>}</td>
-                <td className="right" style={{ whiteSpace: "nowrap" }}>
-                  {o.status === "active" && <><button className="btn sm" disabled={busy} onClick={() => end(o)}>Ukončit</button>{" "}</>}
-                  <button className="btn sm ghost" disabled={busy} onClick={() => del(o)} style={{ color: "var(--danger)" }}>✕</button>
-                </td>
-              </tr>
-            ))}
-            {data && data.items.length === 0 && <tr><td colSpan={6} className="muted">Zatím žádné obsazení.</td></tr>}
-          </tbody>
-        </table>
+        <div className="wz-foot"><span className="muted" style={{ fontSize: 13 }}>Nový dlouhodobý/krátkodobý pobyt na tomto lůžku:</span><button className="btn" onClick={onNew}>✨ Nová rezervace na lůžko</button></div>
       </div>
     </div>
   );
@@ -3397,8 +3347,6 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
   const [msg, setMsg] = useState("");
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [doc, setDoc] = useState<Doc | null>(null);
-  const occA = useAsync<BedOccupancyItem[]>(() => api.companyOccupancies(id), [id]);
-  const [occSel, setOccSel] = useState<Record<string, boolean>>({});
   useEffect(() => { if (data) setEf({ name: data.name, ico: data.ico ?? "", dic: data.dic ?? "", account: data.account ?? "", street: data.street ?? "", city: data.city ?? "", zip: data.zip ?? "", country: data.country ?? "CZ", email: data.email ?? "", phone: data.phone ?? "", note: data.note ?? "", vatPayer: data.vatPayer, active: data.active }); }, [data?.id]); // eslint-disable-line
   const aresFill = async () => { if (!ef?.ico.trim()) return; setBusy(true); setMsg(""); try { const a: AresResult = await api.companyLookup(ef.ico); setEf({ ...ef, name: a.name ?? ef.name, dic: a.dic ?? ef.dic, account: a.account ?? ef.account, street: a.street ?? ef.street, city: a.city ?? ef.city, zip: a.zip ?? ef.zip, country: a.country ?? ef.country, vatPayer: a.vatPayer }); setMsg("Načteno z ARES — zkontroluj a ulož." + (a.account ? ` Účet: ${a.account}.` : "")); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
 
@@ -3410,14 +3358,6 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
     if (!selectedIds.length) return;
     if (await confirm({ title: "Souhrnná faktura", message: <>Vystavit jednu fakturu za <b>{selectedIds.length}</b> rezervací firmě <b>{data?.name}</b>?</>, confirmLabel: "Vystavit" })) {
       setBusy(true); try { const dc = await api.companyInvoice(id, selectedIds); setDoc(dc); setSel({}); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }
-  };
-  const occBillable = (occA.data ?? []).filter((o) => !o.invoicedAt);
-  const occSelIds = occBillable.filter((o) => occSel[o.id]).map((o) => o.id);
-  const invoiceOcc = async () => {
-    if (!occSelIds.length) return;
-    if (await confirm({ title: "Faktura za obsazenost", message: <>Vystavit fakturu firmě <b>{data?.name}</b> za <b>{occSelIds.length}</b> obsazení lůžek?</>, confirmLabel: "Vystavit" })) {
-      setBusy(true); try { const dc = await api.companyOccupancyInvoice(id, occSelIds); setDoc(dc); setOccSel({}); occA.reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }
   };
 
@@ -3474,24 +3414,6 @@ function CompanyDetailView({ id, selId, onBack }: { id: string; selId: string; o
         </div>
       </div>
 
-      {(occA.data ?? []).length > 0 && (
-        <div className="panel"><h3>Lůžková obsazenost <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· této provozovny · fakturace po lůžko-nocích</span></h3>
-          <Table cols={["", "Lůžko", "Osoba", "Od → Do", "Nocí × cena", "Částka", "Stav"]} rows={occA.data ?? []} empty="—" render={(o: BedOccupancyItem) => (
-            <tr key={o.id}>
-              <td>{o.invoicedAt ? <span className="muted" title="vyfakturováno">·</span> : <input type="checkbox" checked={!!occSel[o.id]} onChange={(e) => setOccSel({ ...occSel, [o.id]: e.target.checked })} />}</td>
-              <td className="muted">{o.bedLabel ?? "—"}</td><td>{o.occupantName}</td>
-              <td>{d(o.fromDate)} → {d(o.toDate)}</td>
-              <td className="muted">{o.nights}× {money(o.pricePerNight)}{Number(o.energyAmount) > 0 ? ` + energie ${money(o.energyAmount)}` : ""}</td>
-              <td><b>{money(o.total)}</b></td>
-              <td>{o.invoicedAt ? <span style={{ color: "var(--ok)" }}>vyfakturováno</span> : <span className="muted">{o.status === "ended" ? "ukončeno" : "aktivní"}</span>}</td>
-            </tr>
-          )} />
-          <div className="toolbar" style={{ padding: 16 }}>
-            <span className="muted">Zaškrtni nevyfakturovaná obsazení a vystav fakturu firmě.</span>
-            <button className="btn" disabled={busy || !occSelIds.length} onClick={invoiceOcc} style={{ marginLeft: "auto" }}>Vystavit fakturu za obsazenost ({occSelIds.length})</button>
-          </div>
-        </div>
-      )}
 
       <DepositsPanel companyId={id} />
 

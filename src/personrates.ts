@@ -55,7 +55,8 @@ export async function resolveRate(propertyId: string, input: { personRateId?: st
     if (!r) throw NOT_FOUND();
     if (price == null) price = Number(r.pricePerNight);
   } else if (input.dateOfBirth) {
-    const r = await rateForAge(propertyId, ageFromDob(new Date(input.dateOfBirth)));
+    // Auto dle věku jen u věkově OHRANIČENÝCH kategorií — neohraničené (uprchlík ap.) jen ruční volbou.
+    const r = await rateForAge(propertyId, ageFromDob(new Date(input.dateOfBirth)), true);
     if (r) { personRateId = r.id; if (price == null) price = Number(r.pricePerNight); }
   }
   return { personRateId, pricePerNight: price ?? 0 };

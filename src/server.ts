@@ -15,7 +15,7 @@ import {
 import { serialize } from "./serialize";
 import * as admin from "./admin";
 import * as companies from "./companies";
-import * as occupancy from "./occupancy";
+import * as availability from "./availability";
 import * as deposits from "./deposits";
 import { lookupAres } from "./ares";
 import * as personrates from "./personrates";
@@ -390,8 +390,6 @@ adminRouter.patch("/companies/:id", h((req) => companies.updateCompany(req.param
 adminRouter.delete("/companies/:id", h((req) => companies.deleteCompany(req.params.id)));
 adminRouter.get("/companies/:id/reservations", h((req, res) => companies.companyReservationsForProperty(pid(res), req.params.id)));
 adminRouter.post("/companies/:id/invoice", h((req, res) => billing.issueBulkInvoice(pid(res), z.object({ reservationIds: z.array(z.string().uuid()).min(1) }).parse(req.body).reservationIds)));
-adminRouter.get("/companies/:id/occupancies", h((req, res) => occupancy.companyOccupanciesForProperty(pid(res), req.params.id)));
-adminRouter.post("/companies/:id/occupancy-invoice", h((req, res) => billing.issueCompanyOccupancyInvoice(pid(res), req.params.id, z.object({ occupancyIds: z.array(z.string().uuid()).min(1) }).parse(req.body).occupancyIds)));
 adminRouter.post("/reservations/:id/company", h((req, res) => companies.setReservationCompany(pid(res), req.params.id, z.object({ companyId: z.string().uuid().nullable() }).parse(req.body).companyId)));
 
 // ── Lůžková obsazenost (firemní ubytovny) ──
@@ -405,19 +403,9 @@ adminRouter.get("/person-rates", h((req, res) => personrates.listPersonRates(pid
 adminRouter.post("/person-rates", h((req, res) => personrates.createPersonRate(pid(res), personRateBody.parse(req.body))));
 adminRouter.patch("/person-rates/:id", h((req, res) => personrates.updatePersonRate(pid(res), req.params.id, personRateBody.partial().parse(req.body))));
 adminRouter.delete("/person-rates/:id", h((req, res) => personrates.deletePersonRate(pid(res), req.params.id)));
-adminRouter.get("/beds/board", h((_req, res) => occupancy.bedBoard(pid(res))));
-adminRouter.get("/beds/free-per-room", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return occupancy.freeBedsPerRoom(pid(res), q.from, q.to); }));
-adminRouter.get("/beds/:id/occupancies", h((req, res) => occupancy.listBedOccupancies(pid(res), req.params.id)));
-const occBody = z.object({
-  bedId: z.string().uuid(), fromDate: dateStr, toDate: dateStr,
-  occupantGuestId: z.string().uuid().optional(), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(),
-  companyId: z.string().uuid().nullable().optional(), reservationId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional(), energyFeeExempt: z.boolean().optional(),
-  personRateId: z.string().uuid().nullable().optional(), dateOfBirth: dateStr.optional(),
-});
-adminRouter.post("/occupancies", h((req, res) => occupancy.createOccupancy(pid(res), occBody.parse(req.body))));
-adminRouter.patch("/occupancies/:id", h((req, res) => occupancy.updateOccupancy(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), companyId: z.string().uuid().nullable().optional(), note: z.string().nullable().optional(), pricePerNight: z.number().nonnegative().optional(), energyFeeExempt: z.boolean().optional() }).parse(req.body))));
-adminRouter.post("/occupancies/:id/end", h((req, res) => occupancy.endOccupancy(pid(res), req.params.id, z.object({ toDate: dateStr.optional() }).parse(req.body ?? {}).toDate)));
-adminRouter.delete("/occupancies/:id", h((req, res) => occupancy.deleteOccupancy(pid(res), req.params.id)));
+adminRouter.get("/beds/board", h((_req, res) => admin.bedReservationBoard(pid(res))));
+adminRouter.get("/beds/free-per-room", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return availability.freeBedsPerRoom(pid(res), q.from, q.to); }));
+adminRouter.get("/beds/:id/reservations", h((req, res) => admin.listBedReservations(pid(res), req.params.id)));
 
 // ── Vratné kauce ──
 adminRouter.post("/deposits", h((req, res) => deposits.createDeposit(pid(res), z.object({ reservationId: z.string().uuid().nullable().optional(), companyId: z.string().uuid().nullable().optional(), amount: z.number().positive(), method: z.nativeEnum(PaymentMethod).optional(), note: z.string().nullable().optional() }).parse(req.body))));
@@ -599,6 +587,7 @@ adminRouter.post("/reservations/:id/proforma", h(async (req, res) => {
   return doc;
 }));
 adminRouter.post("/reservations/:id/accommodation", h((req, res) => admin.setReservationAccommodation(pid(res), req.params.id, z.object({ amount: z.number().nonnegative() }).parse(req.body).amount)));
+adminRouter.patch("/reservations/:id/energy-exempt", h((req, res) => admin.setReservationEnergyExempt(pid(res), req.params.id, z.object({ exempt: z.boolean() }).parse(req.body).exempt)));
 
 // Pokladna — stav, otevření směny, příjem/výdej, uzávěrka, historie.
 adminRouter.get("/cashregister", h((_req, res) => cash.getState(pid(res))));

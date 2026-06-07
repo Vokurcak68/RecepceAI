@@ -128,6 +128,25 @@ export async function freeUnitsForType(propertyId: string, roomTypeId: string, f
   return totalUnits(rt, property.inventoryUnit) - booked;
 }
 
+/** Volná lůžka v jednotlivých pokojích za období (jen z rezervací) — pro upozornění
+ * průvodce „nejsou volná lůžka pohromadě". (Sjednoceno: obsazenost = rezervace na lůžko.) */
+export async function freeBedsPerRoom(propertyId: string, fromStr: string, toStr: string) {
+  const from = toDateOnly(new Date(fromStr)), to = toDateOnly(new Date(toStr));
+  const rooms = await prisma.room.findMany({
+    where: { propertyId, status: { not: "out_of_service" } },
+    include: { beds: { where: { status: { not: "out_of_service" } }, select: { id: true } } },
+    orderBy: [{ floor: "asc" }, { number: "asc" }],
+  });
+  const resv = await prisma.reservation.findMany({
+    where: { propertyId, bedId: { not: null }, ...overlapWhere(from, to) },
+    select: { bedId: true },
+  });
+  const taken = new Set(resv.map((r) => r.bedId!));
+  return rooms
+    .filter((r) => r.beds.length > 0)
+    .map((r) => ({ roomId: r.id, roomNumber: r.number, floor: r.floor, totalBeds: r.beds.length, freeBeds: r.beds.filter((b) => !taken.has(b.id)).length }));
+}
+
 /** Kalendář obsazenosti: pro každý typ pokoje/lůžka počet obsazeno/volno po dnech. */
 export async function occupancyCalendar(propertyId: string, from: Date, days: number) {
   const start = toDateOnly(from);

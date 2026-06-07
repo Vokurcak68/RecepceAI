@@ -103,7 +103,7 @@ export async function createDocument(input: CreateDocInput) {
 async function loadReservationForDoc(propertyId: string, reservationId: string) {
   const r = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId },
-    include: { primaryGuest: true, roomType: true, payments: true, charges: true, company: true },
+    include: { primaryGuest: true, roomType: true, payments: true, charges: true, company: true, property: { select: { inventoryUnit: true, energyFeePerNight: true } } },
   });
   if (!r) throw NOT_FOUND();
   return r;
@@ -124,6 +124,11 @@ function linesFromReservation(r: Awaited<ReturnType<typeof loadReservationForDoc
   const lines: LineInput[] = [];
   const accommodation = r.totalAmount.sub(r.cityTax);
   lines.push({ label: `Ubytování — ${r.roomType?.name ?? "pokoj"} (${r.nights} ${r.nights === 1 ? "noc" : "nocí"})`, unitPrice: accommodation, vatRate: VAT_ACCOMMODATION });
+  // Energetický poplatek („vzdušné") u lůžkových (firemních) pobytů — nocí × sazba, mimo osvobozené.
+  const energyRate = Number(r.property?.energyFeePerNight ?? 0);
+  if (r.property?.inventoryUnit === "bed" && !r.energyFeeExempt && energyRate > 0 && r.nights > 0) {
+    lines.push({ label: `Energie (vzdušné) — ${r.nights} ${r.nights === 1 ? "noc" : "nocí"}`, qty: r.nights, unitPrice: new Prisma.Decimal(energyRate), vatRate: VAT_DEFAULT });
+  }
   if (!r.cityTax.isZero()) lines.push({ label: "Pobytový poplatek", unitPrice: r.cityTax, vatRate: 0 });
   for (const c of r.charges) {
     lines.push({ label: `${CHARGE_LABEL[c.category]}${c.description ? ` — ${c.description}` : ""}`, qty: Number(c.quantity), unitPrice: c.unitPrice, vatRate: Number(c.vatRate) });
@@ -229,33 +234,8 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
   return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 });
 }
 
-/** Faktura firmě za lůžkovou obsazenost (bed-nights). Sečte vybraná obsazení a označí je jako vyfakturovaná. */
-export async function issueCompanyOccupancyInvoice(propertyId: string, companyId: string, occupancyIds: string[]) {
-  if (!occupancyIds.length) throw new Error("Vyber alespoň jedno obsazení.");
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) throw NOT_FOUND();
-  const occ = await prisma.bedOccupancy.findMany({
-    where: { id: { in: occupancyIds }, propertyId, companyId, invoicedAt: null },
-    include: { bed: { select: { label: true } }, occupant: { select: { firstName: true, lastName: true } } },
-  });
-  if (!occ.length) throw new Error("Žádné nevyfakturované obsazení k fakturaci.");
-  const energyRate = Number((await prisma.property.findUnique({ where: { id: propertyId }, select: { energyFeePerNight: true } }))?.energyFeePerNight ?? 0);
-  const lines: LineInput[] = [];
-  for (const o of occ) {
-    const nights = Math.max(0, Math.round((o.toDate.getTime() - o.fromDate.getTime()) / 86_400_000));
-    const who = `Lůžko ${o.bed.label} — ${o.occupant.firstName} ${o.occupant.lastName} (${iso(o.fromDate)}–${iso(o.toDate)})`;
-    lines.push({ label: who, qty: nights, unitPrice: o.pricePerNight, vatRate: VAT_ACCOMMODATION });
-    if (!o.energyFeeExempt && energyRate > 0) lines.push({ label: `Energie (vzdušné) — ${o.bed.label} (${nights} ${nights === 1 ? "noc" : "nocí"})`, qty: nights, unitPrice: energyRate, vatRate: VAT_DEFAULT });
-  }
-  const address = [company.street, [company.zip, company.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null;
-  const doc = await createDocument({
-    propertyId, type: BillingDocType.invoice,
-    customer: { name: company.name, address, ico: company.ico, dic: company.dic },
-    lines, paidTotal: 0, dueInDays: 14, note: `Ubytování — ${company.name}`,
-  });
-  await prisma.bedOccupancy.updateMany({ where: { id: { in: occ.map((o) => o.id) } }, data: { invoicedAt: new Date() } });
-  return doc;
-}
+// (Fakturace lůžkové obsazenosti firmě byla sjednocena do faktury z rezervací —
+//  energie se přidává v `linesFromReservation` u bed provozoven; viz issueBulkInvoice.)
 
 // ── Čtení ────────────────────────────────────────────────────
 export function listDocuments(propertyId: string, filter: { type?: BillingDocType; from?: Date; to?: Date } = {}) {

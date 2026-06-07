@@ -567,6 +567,9 @@ model Reservation {
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
   cityTax     Decimal @default(0) @db.Decimal(10, 2)
 
+  // Energetický poplatek („vzdušné") — u lůžkových (firemních) pobytů se účtuje navíc, leda osvobozeno.
+  energyFeeExempt Boolean @default(false)
+
   // Fakturace firmě (ubytovny / služební pobyty). Volný text = starší override; companyId = centrální firma.
   billingCompany String?
   billingIco     String?
