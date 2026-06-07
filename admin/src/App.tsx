@@ -986,11 +986,12 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   // Firemní / dlouhodobé (jen lůžková provozovna + odběratel firma): sazba z ceníku, splatnost, VIP, poznámka.
   const bedRatesA = useAsync<BedRate[]>(() => prop.inventoryUnit === "bed" ? api.bedRates() : Promise.resolve([]), []);
   const [wBedRateId, setWBedRateId] = useState("");
+  const [wAmount, setWAmount] = useState(""); // cena za lůžko / pobyt — předvyplněná z ceníku, ručně přepsatelná
   const [wPayUntil, setWPayUntil] = useState("");
   const [wVip, setWVip] = useState(false);
   const [wEnergyFree, setWEnergyFree] = useState(false);
   const [wNote, setWNote] = useState("");
-  const [wBedId, setWBedId] = useState(""); // nepovinné konkrétní lůžko (bed mode, 1 lůžko)
+  const [bedByIdx, setBedByIdx] = useState<Record<number, string>>({}); // konkrétní lůžko per osoba (index → bedId)
   const [freeBedsList, setFreeBedsList] = useState<{ id: string; label: string; free: boolean }[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1017,9 +1018,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         const bt = av.find((a) => a.unit === "bed");
         const fb = bt ? await api.freeBedsOfType(bt.roomTypeId, from, to) : [];
         setFreeBedsList(fb);
-        // Předvyplň konkrétní lůžko, pokud průvodce otevřen z konkrétního lůžka (Plán → Lůžka) a je volné.
-        setWBedId(prefill?.unitId && fb.some((b) => b.id === prefill.unitId && b.free) ? prefill.unitId : "");
-      } else { setWBedId(""); }
+        // Předvyplň konkrétní lůžko 1. osoby, pokud průvodce otevřen z konkrétního lůžka (Plán → Lůžka) a je volné.
+        setBedByIdx(prefill?.unitId && fb.some((b) => b.id === prefill.unitId && b.free) ? { 0: prefill.unitId } : {});
+      } else { setBedByIdx({}); }
       setStep(2);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -1056,8 +1057,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       let memberPersons: typeof allPersons = [];
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
-        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: wBedId || undefined }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
-        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; }
+        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: bedByIdx[0] || undefined }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
+        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
       } else {
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
@@ -1086,7 +1087,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       for (const it of ids) {
         if (customer === "company" && company) await api.setReservationCompany(it.id, company.id);
         if (bedMode && customer === "company") {
-          if (wBedRateId) await api.setReservationBedRate(it.id, wBedRateId).catch(() => {}); // sjednaná sazba (přepíše cenu)
+          if (wBedRateId) await api.setReservationBedRate(it.id, wBedRateId).catch(() => {}); // sjednaná sazba (předvyplní cenu)
+          { const a = Number(String(wAmount).replace(",", ".")); if (wAmount !== "" && !isNaN(a)) await api.setReservationAccommodation(it.id, a).catch(() => {}); } // ruční přepis ceny
           if (wPayUntil || wVip) await api.setReservationBooking(it.id, { payUntil: wPayUntil || null, vip: wVip }).catch(() => {});
           if (wEnergyFree) await api.setReservationEnergyExempt(it.id, true).catch(() => {});
           if (wNote.trim()) await api.saveReservationNote(it.id, wNote.trim()).catch(() => {});
@@ -1200,17 +1202,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={together} onChange={(e) => setTogether(e.target.checked)} style={{ width: "auto" }} /> společně v jednom pokoji</label>
                   <span className="wz-tag">volná: {totalFreeBeds}</span>
                 </div>
-                {bedsWanted === 1 && (freeBedsList ?? []).length > 0 && (
-                  <div className="wz-row1" style={{ alignItems: "center", marginTop: 12 }}>
-                    <span className="row" style={{ gap: 8 }}><span className="muted">Konkrétní lůžko (nepovinné)</span>
-                      <select value={wBedId} onChange={(e) => setWBedId(e.target.value)}>
-                        <option value="">— přiřadit později —</option>
-                        {(freeBedsList ?? []).filter((b) => b.free || b.id === wBedId).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-                      </select>
-                    </span>
-                    <span className="muted" style={{ fontSize: 12 }}>Když vybereš, lůžko se rovnou zarezervuje; jinak ho přiřadíš později.</span>
-                  </div>
-                )}
+                <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>Konkrétní lůžka (nepovinné) přiřadíš u jednotlivých osob v dalším kroku.</div>
                 {together && roomsWithEnough.length > 0 && <div className="muted" style={{ marginTop: 14 }}>Pohromadě možné v: {roomsWithEnough.map((r) => `pok. ${r.roomNumber} (${r.freeBeds})`).join(", ")}.</div>}
                 {together && roomsWithEnough.length === 0 && (
                   <div className="error" style={{ marginTop: 14 }}>
@@ -1266,6 +1258,25 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                     ? <div style={{ marginTop: 16, fontSize: 15 }}><b>Cena ubytování ≈ {money(estAccommodation)}</b> <span className="muted">(pokoj {money(roomBaseTotal)} + přistýlky {money(extraBedSurcharge)} dle osob na nich, bez pobyt. poplatku)</span></div>
                     : <div className="muted" style={{ marginTop: 16 }}>Cena = cena pokoje. Přistýlka se ocení dle typu osoby na ní (senior/dítě…); bez typu dle ceny přistýlky u pokoje.</div>)}
 
+                {bedMode && (freeBedsList ?? []).length > 0 && (
+                  <>
+                    <div className="wz-sec">Lůžka (nepovinné)</div>
+                    <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>Vyber konkrétní volné lůžko pro každou osobu, nebo nech „přiřadit později".</div>
+                    {allPersons.map((p, i) => {
+                      const taken = new Set(Object.entries(bedByIdx).filter(([k]) => Number(k) !== i).map(([, v]) => v).filter(Boolean));
+                      const nm = (i === 0 ? (g.firstName || g.lastName) : (extra[i - 1]?.firstName || extra[i - 1]?.lastName)) || `${i + 1}. osoba`;
+                      return (
+                        <FieldRow key={i} label={`${i + 1}. ${nm}`}>
+                          <select style={{ flex: 1, minWidth: 0 }} value={bedByIdx[i] ?? ""} onChange={(e) => setBedByIdx((m) => ({ ...m, [i]: e.target.value }))}>
+                            <option value="">— přiřadit později —</option>
+                            {(freeBedsList ?? []).filter((b) => (b.free && !taken.has(b.id)) || b.id === bedByIdx[i]).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+                          </select>
+                        </FieldRow>
+                      );
+                    })}
+                  </>
+                )}
+
                 <div className="wz-sec">Odběratel</div>
                 <div className="wz-pay">
                   <label className={customer === "guest" ? "sel" : ""}><input type="radio" checked={customer === "guest"} onChange={() => setCustomer("guest")} /> Host</label>
@@ -1294,10 +1305,11 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   <>
                     <div className="wz-sec">Firemní / dlouhodobé</div>
                     <div style={{ maxWidth: 520 }}>
-                      <FieldRow label="Sjednaná sazba"><select style={{ flex: 1, minWidth: 0 }} value={wBedRateId} onChange={(e) => setWBedRateId(e.target.value)}>
+                      <FieldRow label="Sjednaná sazba"><select style={{ flex: 1, minWidth: 0 }} value={wBedRateId} onChange={(e) => { const id = e.target.value; setWBedRateId(id); const r = (bedRatesA.data ?? []).find((x) => x.id === id); setWAmount(r ? String(Math.round(Number(r.pricePerNight) * nights)) : ""); }}>
                         <option value="">— dle ceny lůžka —</option>
                         {(bedRatesA.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
                       </select></FieldRow>
+                      <FieldRow label="Cena za lůžko (pobyt)"><input type="number" style={{ flex: 1, minWidth: 0 }} value={wAmount} placeholder={`${nights} nocí`} onChange={(e) => setWAmount(e.target.value)} /><span className="muted" style={{ fontSize: 12 }}>Kč</span></FieldRow>
                       <FieldRow label="Splatnost"><input type="date" style={{ flex: 1, minWidth: 0 }} value={wPayUntil} onChange={(e) => setWPayUntil(e.target.value)} /></FieldRow>
                       <FieldRow label="VIP"><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={wVip} onChange={(e) => setWVip(e.target.checked)} /> prioritní/smluvní pobyt</label></FieldRow>
                       <FieldRow label="Energie (vzdušné)"><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={wEnergyFree} onChange={(e) => setWEnergyFree(e.target.checked)} /> osvobozeno (neúčtovat)</label></FieldRow>
