@@ -9,7 +9,7 @@ import {
   type HousekeepingPlan, type PlanItem, type NightAudit, type PricingSuggestion, type DaySuggestion, type ChecksResult, type Finding,
   type MaintenancePlan, type MaintItem, type PendingCall, type PaymentRow, type PaymentsList, type Receipt, type ReceiptLine, type Doc, type DocLine,
   type CashState, type CashSession, type CashMovement, type Charge, type OccupancyRow, type ResGuest, type ServiceItem, type OccupancyCalendar, type TapeChart, type TapeRes, type UbyportData, type IcalImportFeed, type GuestListItem, type GuestProfile, type GuestStay, type ReviewsData, type ReviewItem,
-  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnitCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem,
+  type GroupListItem, type GroupDetail, type GroupMember, type GroupRoomInput, type BulkResult, type StaffRoom, type RoomBoardItem, type RoomDetail, type RoomCandidate, type UnitCandidate, type UnassignedRes, type RoomResItem, type RoomReqItem, type BedRate, type OccupationItem,
   type Company, type CompanyDetail, type CompanyResItem, type BedBoardItem, type BedReservationsData, type Deposit, type MoveItem, type MovementsReport, type AresResult, type PersonRate, type AvailUnit, type FreeBedsRoom, type ReceptionToday, type RecArrival, type RecRow,
 } from "./api";
 
@@ -136,6 +136,7 @@ export function App() {
       roomsTab,
       { id: "types", label: "Typy & ceny" },
       { id: "personrates", label: "Číselník osob" },
+      ...(prop?.inventoryUnit === "bed" ? [{ id: "bedrates", label: "Ceník lůžek" }] : []),
       { id: "equipment", label: "Vybavení" },
       { id: "ical", label: "iCal synchronizace" },
     ] },
@@ -225,6 +226,7 @@ export function App() {
         {prop && tab === "reception" && <ReceptionView selId={selId} prop={prop} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "personrates" && <PersonRatesView selId={selId} />}
+        {prop && tab === "bedrates" && <BedRatesView selId={selId} />}
         {prop && tab === "movements" && <MovementsView selId={selId} />}
         {prop && tab === "book" && <BookView selId={selId} />}
         {isSuper && tab === "properties" && <PropertiesView />}
@@ -2448,6 +2450,65 @@ function UsersView({ currentUserId }: { currentUserId: string }) {
 }
 
 // ── Detail rezervace ─────────────────────────────────────────
+// Dlouhodobé/firemní panely u lůžkové rezervace: sjednaná sazba + booking pole + obsazení (rotace osob).
+function BedReservationPanels({ id, data, onChanged }: { id: string; data: ReservationDetail; onChanged: () => void }) {
+  const confirm = useConfirm();
+  const rates = useAsync<BedRate[]>(() => api.bedRates(), [id]);
+  const occ = useAsync<OccupationItem[]>(() => api.reservationOccupations(id), [id]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [amount, setAmount] = useState("");
+  const [pickOcc, setPickOcc] = useState(false);
+  const blankOcc = () => ({ guestId: undefined as string | undefined, firstName: "", lastName: "", fromDate: todayIso(), toDate: (data.checkOutDate ?? "").slice(0, 10) || tomorrowIso(), note: "" });
+  const [of, setOf] = useState(blankOcc());
+  const curAcc = Number(data.totalAmount) - Number(data.cityTax);
+  const run = (fn: () => Promise<unknown>) => { setBusy(true); setMsg(""); fn().then(() => { onChanged(); occ.reload(); }).catch((e) => setMsg(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false)); };
+  const addOcc = () => {
+    if (!of.guestId && (!of.firstName.trim() || !of.lastName.trim())) { setMsg("Vyplň jméno a příjmení nebo vyber z adresáře."); return; }
+    run(() => api.createOccupation(id, { occupantGuestId: of.guestId, firstName: of.firstName || undefined, lastName: of.lastName || undefined, fromDate: of.fromDate, toDate: of.toDate, note: of.note || null }).then(() => setOf(blankOcc())));
+  };
+  return (
+    <>
+      <div className="panel"><h3>Dlouhodobé / firemní <span className="muted" style={{ fontSize: 14 }}>sjednaná sazba, splatnost, VIP</span></h3>
+        <div style={{ padding: 16, maxWidth: 520 }}>
+          <FieldRow label="Sjednaná sazba"><select style={{ flex: 1, minWidth: 0 }} value={data.bedRateId ?? ""} onChange={(e) => run(() => api.setReservationBedRate(id, e.target.value || null))}>
+            <option value="">— bez sazby (ruční cena) —</option>
+            {(rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
+          </select></FieldRow>
+          <FieldRow label="Cena ubytování"><input style={{ flex: 1, minWidth: 0 }} type="number" placeholder={`${curAcc} (× ${data.nights} nocí)`} value={amount} onChange={(e) => setAmount(e.target.value)} /><button className="btn sm" disabled={busy || !amount} onClick={() => { const n = Number(amount.replace(",", ".")); if (!isNaN(n)) run(() => api.setReservationAccommodation(id, n).then(() => setAmount(""))); }}>Přepsat</button></FieldRow>
+          <FieldRow label="Splatnost"><input type="date" style={{ flex: 1, minWidth: 0 }} defaultValue={data.payUntil ? data.payUntil.slice(0, 10) : ""} onChange={(e) => run(() => api.setReservationBooking(id, { payUntil: e.target.value || null }))} /></FieldRow>
+          <FieldRow label="Zaplaceno do"><input type="date" style={{ flex: 1, minWidth: 0 }} defaultValue={data.paidTo ? data.paidTo.slice(0, 10) : ""} onChange={(e) => run(() => api.setReservationBooking(id, { paidTo: e.target.value || null }))} /></FieldRow>
+          <FieldRow label="VIP"><label className="row" style={{ gap: 6 }}><input type="checkbox" defaultChecked={!!data.vip} onChange={(e) => run(() => api.setReservationBooking(id, { vip: e.target.checked }))} /> prioritní/smluvní pobyt</label></FieldRow>
+        </div>
+      </div>
+
+      <div className="panel"><h3>Obsazení lůžka <span className="muted" style={{ fontSize: 14 }}>kdo a kdy na lůžku bydlí (rotace pracovníků)</span></h3>
+        {msg && <div className="error" style={{ margin: "12px 16px 0" }}>{msg}</div>}
+        <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn sm ghost" onClick={() => setPickOcc(true)}>📇 Z adresáře</button>
+          <input placeholder="Jméno" value={of.guestId ? (of.firstName) : of.firstName} disabled={!!of.guestId} onChange={(e) => setOf({ ...of, firstName: e.target.value })} style={{ width: 120 }} />
+          <input placeholder="Příjmení" value={of.lastName} disabled={!!of.guestId} onChange={(e) => setOf({ ...of, lastName: e.target.value })} style={{ width: 130 }} />
+          {of.guestId && <button className="btn sm ghost" title="zrušit výběr" onClick={() => setOf({ ...of, guestId: undefined, firstName: "", lastName: "" })}>×</button>}
+          <label className="row" style={{ gap: 4 }}>od <input type="date" value={of.fromDate} onChange={(e) => setOf({ ...of, fromDate: e.target.value })} /></label>
+          <label className="row" style={{ gap: 4 }}>do <input type="date" value={of.toDate} onChange={(e) => setOf({ ...of, toDate: e.target.value })} /></label>
+          <input placeholder="Poznámka" value={of.note} onChange={(e) => setOf({ ...of, note: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
+          <button className="btn sm" disabled={busy} onClick={addOcc}>Přidat osobu</button>
+        </div>
+        <Table cols={["Osoba", "Od → Do", "Nocí", "Stav", ""]} rows={occ.data ?? []} empty="Zatím nikdo na lůžku" render={(o: OccupationItem) => (
+          <tr key={o.id}>
+            <td>{o.occupantName}{o.occupantPhone ? <span className="muted"> · {o.occupantPhone}</span> : ""}{o.note ? <div className="muted" style={{ fontSize: 12 }}>{o.note}</div> : null}</td>
+            <td>{d(o.fromDate)} → {d(o.toDate)}</td>
+            <td className="muted">{o.nights}</td>
+            <td>{o.status === "ended" ? <span className="muted">ukončeno</span> : <b style={{ color: "var(--ok)" }}>aktivní</b>}</td>
+            <td className="right" style={{ whiteSpace: "nowrap" }}>{o.status === "active" && <><button className="btn sm" disabled={busy} onClick={() => run(() => api.endOccupation(o.id))}>Ukončit</button>{" "}</>}<button className="btn sm ghost" disabled={busy} style={{ color: "var(--danger)" }} onClick={async () => { if (await confirm({ title: "Smazat obsazení", message: <>Smazat <b>{o.occupantName}</b> z lůžka?</>, danger: true, confirmLabel: "Smazat" })) run(() => api.deleteOccupation(o.id)); }}>✕</button></td>
+          </tr>
+        )} />
+      </div>
+      {pickOcc && <GuestPickerOverlay prefill="" title="Vybrat osobu na lůžko" subtitle="Z adresáře nebo zadej nového — bude obsazovat lůžko v zadaném termínu." actionLabel="Vybrat" onClose={() => setPickOcc(false)} onPick={(gid) => { api.guestProfile(gid).then((p) => setOf((s) => ({ ...s, guestId: gid, firstName: p.guest.firstName, lastName: p.guest.lastName }))); setPickOcc(false); }} />}
+    </>
+  );
+}
+
 function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Property; onBack: () => void }) {
   const confirm = useConfirm();
   const { data, error, reload } = useAsync<ReservationDetail>(() => api.reservation(id), [id]);
@@ -2563,35 +2624,24 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
 
       <DepositsPanel reservationId={id} suggested={data.property?.depositPct ? Math.round(Number(data.totalAmount) * data.property.depositPct / 100) : undefined} />
 
-      {(() => {
-        const bedMode = data.property?.inventoryUnit === "bed";
+      {data.property?.inventoryUnit === "bed" ? <BedReservationPanels id={id} data={data} onChanged={refresh} /> : (() => {
         const rates = personRates.data ?? [];
-        const showType = rates.length > 0; // typ osoby per osobu — u pokoje cena přistýlky, u lůžka cena lůžka
-        const typeLabel = bedMode ? "Typ osoby (cena lůžka)" : "Typ osoby (cena přistýlky)";
+        const showType = rates.length > 0; // typ osoby per osobu (cena přistýlky)
         return (
-      <div className="panel"><h3>Hosté na pokoji <span className="muted" style={{ fontSize: 14 }}>kdo {bedMode ? "na lůžku" : "na pokoji"} bydlí{showType ? (bedMode ? " · typ osoby určuje cenu lůžka" : " · typ osoby určuje cenu přistýlky") : ""}</span></h3>
+      <div className="panel"><h3>Hosté na pokoji <span className="muted" style={{ fontSize: 14 }}>kdo na pokoji bydlí{showType ? " · typ osoby určuje cenu přistýlky" : ""}</span></h3>
         <div className="req-actions" style={{ padding: 16, alignItems: "center", flexWrap: "wrap" }}>
-          {bedMode
-            ? <span className="muted">Lůžková rezervace = jedna osoba na lůžku. Typ osoby nastav v řádku níže. Další lidi přidej jako samostatné lůžkové rezervace (skupina).</span>
-            : <><button className="btn sm" onClick={() => setPickRoomGuest(true)}>📇 Přidat osobu z adresáře</button>
-              <span className="muted" style={{ fontSize: 13 }}>Vyber z adresáře nebo rovnou zadej nového — jako u hlavního hosta.</span></>}
+          <button className="btn sm" onClick={() => setPickRoomGuest(true)}>📇 Přidat osobu z adresáře</button>
+          <span className="muted" style={{ fontSize: 13 }}>Vyber z adresáře nebo rovnou zadej nového — jako u hlavního hosta.</span>
         </div>
-        <Table cols={showType ? ["Jméno", "Role", typeLabel, "Narození", "Doklad", ""] : ["Jméno", "Role", "Narození", "Doklad", ""]} rows={guestsA.data ?? []} empty="—"
+        <Table cols={showType ? ["Jméno", "Role", "Typ osoby (cena přistýlky)", "Narození", "Doklad", ""] : ["Jméno", "Role", "Narození", "Doklad", ""]} rows={guestsA.data ?? []} empty="—"
           render={(g: ResGuest) => (
             <tr key={g.id} className={gEdit === g.id ? "row-urgent" : ""}>
               <td>{g.guest.firstName} {g.guest.lastName}</td>
               <td>{g.isPrimary ? <span className="chip">hlavní host</span> : <span className="muted">spolubydlící</span>}</td>
-              {showType && <td>{bedMode
-                ? (g.isPrimary
-                  ? <select value={data.personRateId ?? ""} onChange={(e) => run(async () => { await api.setReservationPersonRate(id, e.target.value || null); })}>
-                      <option value="">— bez typu —</option>
-                      {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
-                    </select>
-                  : <span className="muted">—</span>)
-                : <select value={g.personRateId ?? ""} onChange={(e) => run(() => api.setResGuestRate(g.id, e.target.value || null))}>
+              {showType && <td><select value={g.personRateId ?? ""} onChange={(e) => run(() => api.setResGuestRate(g.id, e.target.value || null))}>
                     <option value="">— bez typu —</option>
                     {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>)}
-                  </select>}</td>}
+                  </select></td>}
               <td className="muted">{g.guest.dateOfBirth ? d(g.guest.dateOfBirth) : "—"}</td>
               <td className="muted">{g.guest.documentNumber ? `${DOCTYPE_LABEL[g.guest.documentType ?? ""] ?? ""} ${g.guest.documentNumber}` : "—"}</td>
               <td className="right" style={{ whiteSpace: "nowrap" }}>
@@ -3112,6 +3162,40 @@ function PersonRatesView({ selId }: { selId: string }) {
       </div>
       <div className="panel">
         <Table cols={["Název", "Věk od", "Věk do", "Kč/noc", "Aktivní", ""]} rows={data ?? []} empty="Žádné kategorie" render={(r: PersonRate) => <PersonRateRow key={r.id} r={r} onSave={save} onDelete={del} />} />
+      </div>
+    </>
+  );
+}
+
+// ── Ceník sazeb za lůžko/noc (firemní ubytovny) ──────────────
+function BedRatesView({ selId }: { selId: string }) {
+  const confirm = useConfirm();
+  const { data, reload } = useAsync<BedRate[]>(() => api.bedRates(true), [selId]);
+  const [nw, setNw] = useState({ name: "", price: "" });
+  const [busy, setBusy] = useState(false);
+  const add = async () => { if (!nw.name.trim()) return; setBusy(true); try { await api.createBedRate({ name: nw.name.trim(), pricePerNight: Number(nw.price.replace(",", ".")) || 0 }); setNw({ name: "", price: "" }); reload(); } finally { setBusy(false); } };
+  const save = (id: string, patch: unknown) => api.updateBedRate(id, patch).then(reload);
+  const del = async (r: BedRate) => { if (await confirm({ title: "Smazat sazbu", message: <>Smazat sazbu <b>{r.name}</b>?</>, danger: true, confirmLabel: "Smazat" })) { await api.deleteBedRate(r.id); reload(); } };
+  return (
+    <>
+      <div className="h1"><span>Ceník lůžek</span> <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· sjednané sazby za lůžko/noc (firemní ubytovny)</span></div>
+      <div className="panel"><h3>Nová sazba</h3>
+        <div className="toolbar" style={{ padding: 16, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <input placeholder="Název (např. Standard, Agentura X)" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} style={{ flex: 1, minWidth: 220 }} />
+          <input type="number" placeholder="Kč/noc" value={nw.price} onChange={(e) => setNw({ ...nw, price: e.target.value })} style={{ width: 110 }} />
+          <button className="btn" disabled={busy} onClick={add}>Přidat</button>
+        </div>
+        <div className="muted" style={{ padding: "0 16px 16px" }}>Sazbu pak vybereš v detailu lůžkové rezervace (sekce „Dlouhodobé / firemní"); výslednou částku lze ručně přepsat.</div>
+      </div>
+      <div className="panel">
+        <Table cols={["Název", "Kč/noc", "Aktivní", ""]} rows={data ?? []} empty="Žádné sazby" render={(r: BedRate) => (
+          <tr key={r.id}>
+            <td><input defaultValue={r.name} onBlur={(e) => e.target.value !== r.name && save(r.id, { name: e.target.value })} style={{ width: 240 }} /></td>
+            <td><input type="number" defaultValue={parseFloat(r.pricePerNight)} onBlur={(e) => save(r.id, { pricePerNight: Number(e.target.value.replace(",", ".")) || 0 })} style={{ width: 100 }} /></td>
+            <td><input type="checkbox" checked={r.active} onChange={(e) => save(r.id, { active: e.target.checked })} /></td>
+            <td className="right"><button className="btn sm danger" onClick={() => del(r)}>Smazat</button></td>
+          </tr>
+        )} />
       </div>
     </>
   );

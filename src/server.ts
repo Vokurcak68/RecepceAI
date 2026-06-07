@@ -16,6 +16,7 @@ import { serialize } from "./serialize";
 import * as admin from "./admin";
 import * as companies from "./companies";
 import * as availability from "./availability";
+import * as occupancy from "./occupancy";
 import * as deposits from "./deposits";
 import { lookupAres } from "./ares";
 import * as personrates from "./personrates";
@@ -403,6 +404,23 @@ adminRouter.get("/person-rates", h((req, res) => personrates.listPersonRates(pid
 adminRouter.post("/person-rates", h((req, res) => personrates.createPersonRate(pid(res), personRateBody.parse(req.body))));
 adminRouter.patch("/person-rates/:id", h((req, res) => personrates.updatePersonRate(pid(res), req.params.id, personRateBody.partial().parse(req.body))));
 adminRouter.delete("/person-rates/:id", h((req, res) => personrates.deletePersonRate(pid(res), req.params.id)));
+
+// ── Ceník sazeb za lůžko/noc (firemní ubytovny) ──
+const bedRateBody = z.object({ name: z.string().min(1), pricePerNight: z.number().nonnegative(), sortOrder: z.number().int().optional(), active: z.boolean().optional() });
+adminRouter.get("/bed-rates", h((req, res) => personrates.listBedRates(pid(res), req.query.all === "1")));
+adminRouter.post("/bed-rates", h((req, res) => personrates.createBedRate(pid(res), bedRateBody.parse(req.body))));
+adminRouter.patch("/bed-rates/:id", h((req, res) => personrates.updateBedRate(pid(res), req.params.id, bedRateBody.partial().parse(req.body))));
+adminRouter.delete("/bed-rates/:id", h((req, res) => personrates.deleteBedRate(pid(res), req.params.id)));
+
+// ── Dlouhodobé/firemní rezervace: sazba, booking pole, obsazení (rotace osob) ──
+adminRouter.patch("/reservations/:id/bed-rate", h((req, res) => admin.setReservationBedRate(pid(res), req.params.id, z.object({ bedRateId: z.string().uuid().nullable() }).parse(req.body).bedRateId)));
+adminRouter.patch("/reservations/:id/booking", h((req, res) => admin.setReservationBooking(pid(res), req.params.id, z.object({ payUntil: dateStr.nullable().optional(), paidTo: dateStr.nullable().optional(), vip: z.boolean().optional() }).parse(req.body))));
+adminRouter.get("/reservations/:id/occupations", h((req, res) => occupancy.listOccupations(pid(res), req.params.id)));
+adminRouter.post("/reservations/:id/occupations", h((req, res) => occupancy.createOccupation(pid(res), req.params.id, z.object({ occupantGuestId: z.string().uuid().optional(), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(), fromDate: dateStr, toDate: dateStr, note: z.string().nullable().optional() }).parse(req.body))));
+adminRouter.patch("/occupations/:id", h((req, res) => occupancy.updateOccupation(pid(res), req.params.id, z.object({ fromDate: dateStr.optional(), toDate: dateStr.optional(), note: z.string().nullable().optional() }).parse(req.body))));
+adminRouter.post("/occupations/:id/end", h((req, res) => occupancy.endOccupation(pid(res), req.params.id, z.object({ toDate: dateStr.optional() }).parse(req.body ?? {}).toDate)));
+adminRouter.delete("/occupations/:id", h((req, res) => occupancy.deleteOccupation(pid(res), req.params.id)));
+
 adminRouter.get("/beds/board", h((_req, res) => admin.bedReservationBoard(pid(res))));
 adminRouter.get("/beds/free-per-room", h((req, res) => { const q = z.object({ from: dateStr, to: dateStr }).parse(req.query); return availability.freeBedsPerRoom(pid(res), q.from, q.to); }));
 adminRouter.get("/beds/:id/reservations", h((req, res) => admin.listBedReservations(pid(res), req.params.id)));

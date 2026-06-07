@@ -432,6 +432,23 @@ model PersonRate {
   @@index([propertyId, active])
 }
 
+/// Ceník sjednaných sazeb za lůžko/noc (firemní ubytovny) — per provozovna. = TVM PriceList.
+model BedRate {
+  id            String  @id @default(uuid())
+  propertyId    String
+  name          String // např. „Standard", „Agentura X", „Dvoulůžko"
+  pricePerNight Decimal @default(0) @db.Decimal(10, 2)
+  sortOrder     Int     @default(0)
+  active        Boolean @default(true)
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, active])
+}
+
 enum DepositStatus {
   held      // kauce přijata a držena
   returned  // vrácena hostovi (celá nebo částečně)
@@ -479,8 +496,9 @@ model BedOccupancy {
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyId String?
 
-  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
-  reservationId String?
+  // Obsazení je vždy POD rezervací lůžka (TVM Occupation pod Booking/BookedBed) — rotace osob.
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId String
 
   personRate   PersonRate? @relation(fields: [personRateId], references: [id], onDelete: SetNull)
   personRateId String?
@@ -569,6 +587,13 @@ model Reservation {
 
   // Energetický poplatek („vzdušné") — u lůžkových (firemních) pobytů se účtuje navíc, leda osvobozeno.
   energyFeeExempt Boolean @default(false)
+
+  // Dlouhodobé/firemní ubytování (TVM Booking): sjednaná sazba, splatnost, zaplaceno do, VIP.
+  bedRate    BedRate?  @relation(fields: [bedRateId], references: [id], onDelete: SetNull)
+  bedRateId  String?
+  payUntil   DateTime? @db.Date
+  paidTo     DateTime? @db.Date
+  vip        Boolean   @default(false)
 
   // Fakturace firmě (ubytovny / služební pobyty). Volný text = starší override; companyId = centrální firma.
   billingCompany String?

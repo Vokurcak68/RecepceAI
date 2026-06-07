@@ -46,6 +46,23 @@ export async function rateForAge(propertyId: string, age: number, boundedOnly = 
   return matching[0];
 }
 
+// ── Ceník sazeb za lůžko/noc (firemní ubytovny, TVM PriceList) ──
+export type BedRateInput = { name: string; pricePerNight: number; sortOrder?: number; active?: boolean };
+export const listBedRates = (propertyId: string, includeInactive = false) =>
+  prisma.bedRate.findMany({ where: { propertyId, ...(includeInactive ? {} : { active: true }) }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+export const createBedRate = (propertyId: string, d: BedRateInput) => prisma.bedRate.create({ data: { propertyId, ...d } });
+export async function updateBedRate(propertyId: string, id: string, d: Partial<BedRateInput>) {
+  const r = await prisma.bedRate.findFirst({ where: { id, propertyId }, select: { id: true } });
+  if (!r) throw NOT_FOUND();
+  return prisma.bedRate.update({ where: { id }, data: d });
+}
+export async function deleteBedRate(propertyId: string, id: string) {
+  const r = await prisma.bedRate.findFirst({ where: { id, propertyId }, select: { id: true } });
+  if (!r) throw NOT_FOUND();
+  await prisma.bedRate.delete({ where: { id } });
+  return { ok: true };
+}
+
 /** Z (personRateId | dateOfBirth) určí cenu/noc a kategorii. Explicitní cena má přednost. */
 export async function resolveRate(propertyId: string, input: { personRateId?: string | null; dateOfBirth?: string | null; pricePerNight?: number }) {
   let personRateId = input.personRateId ?? null;

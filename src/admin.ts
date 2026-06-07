@@ -9,6 +9,7 @@ import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, a
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
 import { createGuest, previousStaysCount } from "./guests";
+import { currentOccupantsByBed } from "./occupancy";
 import { computeCancellationFee } from "./policies";
 
 // ── Dashboard ────────────────────────────────────────────────
@@ -97,6 +98,7 @@ export async function getReservation(propertyId: string, id: string) {
       group: { select: { id: true, code: true, name: true } },
       company: { select: { id: true, name: true } },
       personRate: { select: { id: true, name: true, pricePerNight: true } },
+      bedRate: { select: { id: true, name: true, pricePerNight: true } },
     },
   });
   if (!r) throw NOT_FOUND();
@@ -338,13 +340,14 @@ export async function bedReservationBoard(propertyId: string) {
   });
   const byBed = new Map<string, typeof resv>();
   for (const r of resv) { const a = byBed.get(r.bedId!) ?? []; a.push(r); byBed.set(r.bedId!, a); }
+  const occByBed = await currentOccupantsByBed(propertyId); // konkrétní osoba na lůžku dnes (rotace)
   return beds.map((b) => {
     const list = byBed.get(b.id) ?? [];
     const cur = list.find((r) => r.checkInDate <= today && r.checkOutDate > today) ?? null;
     const upcoming = list.filter((r) => r.checkInDate > today);
     return {
       bedId: b.id, label: b.label, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.status,
-      current: cur ? { reservationId: cur.id, code: cur.code, guestName: `${cur.primaryGuest.firstName} ${cur.primaryGuest.lastName}`, companyName: cur.company?.name ?? null, fromDate: cur.checkInDate, toDate: cur.checkOutDate, status: cur.status } : null,
+      current: cur ? { reservationId: cur.id, code: cur.code, guestName: occByBed.get(b.id) ?? `${cur.primaryGuest.firstName} ${cur.primaryGuest.lastName}`, companyName: cur.company?.name ?? null, fromDate: cur.checkInDate, toDate: cur.checkOutDate, status: cur.status } : null,
       upcoming: upcoming.length, nextFrom: upcoming[0]?.checkInDate ?? null,
     };
   });
@@ -376,6 +379,34 @@ export async function setReservationAccommodation(propertyId: string, id: string
 export async function setReservationEnergyExempt(propertyId: string, id: string, exempt: boolean) {
   await assertInProperty(propertyId, id);
   return prisma.reservation.update({ where: { id }, data: { energyFeeExempt: exempt }, select: { id: true, energyFeeExempt: true } });
+}
+
+/** Sjednaná sazba za lůžko/noc (ceník) na rezervaci → přepočítá cenu ubytování = sazba × nocí (+ pobyt. poplatek).
+ * Výslednou částku lze pak ručně přepsat přes setReservationAccommodation. */
+export async function setReservationBedRate(propertyId: string, id: string, bedRateId: string | null) {
+  const r = await prisma.reservation.findFirst({ where: { id, propertyId }, select: { id: true, nights: true, cityTax: true } });
+  if (!r) throw NOT_FOUND();
+  let totalAmount: Prisma.Decimal | undefined;
+  if (bedRateId) {
+    const rate = await prisma.bedRate.findFirst({ where: { id: bedRateId, propertyId }, select: { pricePerNight: true } });
+    if (!rate) throw NOT_FOUND();
+    totalAmount = rate.pricePerNight.mul(r.nights).add(r.cityTax);
+  }
+  return prisma.reservation.update({ where: { id }, data: { bedRateId, ...(totalAmount !== undefined ? { totalAmount } : {}) }, select: { id: true, bedRateId: true, totalAmount: true } });
+}
+
+/** Booking pole dlouhodobé/firemní rezervace: splatnost, zaplaceno do, VIP. */
+export async function setReservationBooking(propertyId: string, id: string, patch: { payUntil?: string | null; paidTo?: string | null; vip?: boolean }) {
+  await assertInProperty(propertyId, id);
+  return prisma.reservation.update({
+    where: { id },
+    data: {
+      ...(patch.payUntil !== undefined ? { payUntil: patch.payUntil ? new Date(patch.payUntil) : null } : {}),
+      ...(patch.paidTo !== undefined ? { paidTo: patch.paidTo ? new Date(patch.paidTo) : null } : {}),
+      ...(patch.vip !== undefined ? { vip: patch.vip } : {}),
+    },
+    select: { id: true, payUntil: true, paidTo: true, vip: true },
+  });
 }
 
 /** Přiřadí typ osoby (číselník) k rezervaci; volitelně přepočítá cenu ubytování = sazba × nocí (+ pobyt. poplatek). */
