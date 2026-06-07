@@ -987,6 +987,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [wBedRateId, setWBedRateId] = useState("");
   const [wPayUntil, setWPayUntil] = useState("");
   const [wVip, setWVip] = useState(false);
+  const [wEnergyFree, setWEnergyFree] = useState(false);
   const [wNote, setWNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1071,6 +1072,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
         if (bedMode && customer === "company") {
           if (wBedRateId) await api.setReservationBedRate(it.id, wBedRateId).catch(() => {}); // sjednaná sazba (přepíše cenu)
           if (wPayUntil || wVip) await api.setReservationBooking(it.id, { payUntil: wPayUntil || null, vip: wVip }).catch(() => {});
+          if (wEnergyFree) await api.setReservationEnergyExempt(it.id, true).catch(() => {});
           if (wNote.trim()) await api.saveReservationNote(it.id, wNote.trim()).catch(() => {});
         }
       }
@@ -1266,6 +1268,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                       </select></FieldRow>
                       <FieldRow label="Splatnost"><input type="date" style={{ flex: 1, minWidth: 0 }} value={wPayUntil} onChange={(e) => setWPayUntil(e.target.value)} /></FieldRow>
                       <FieldRow label="VIP"><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={wVip} onChange={(e) => setWVip(e.target.checked)} /> prioritní/smluvní pobyt</label></FieldRow>
+                      <FieldRow label="Energie (vzdušné)"><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={wEnergyFree} onChange={(e) => setWEnergyFree(e.target.checked)} /> osvobozeno (neúčtovat)</label></FieldRow>
                       <FieldRow label="Poznámka"><input style={{ flex: 1, minWidth: 0 }} value={wNote} onChange={(e) => setWNote(e.target.value)} placeholder="např. agentura, směna, kontakt…" /></FieldRow>
                       <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Konkrétní lůžka a střídání osob (obsazení) nastavíš po vytvoření v detailu rezervace.</div>
                     </div>
