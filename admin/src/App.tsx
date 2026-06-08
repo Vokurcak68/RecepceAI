@@ -1107,8 +1107,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const personCols = ratesEnabled ? "26px minmax(0,1fr) 160px minmax(0,1fr) 92px" : "26px minmax(0,1fr) 160px";
   const rateOptions = (rates.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name} ({money(r.pricePerNight)}/noc)</option>);
   return (
-    <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice wz" onClick={(e) => e.stopPropagation()}>
+    <div className="inv-backdrop">{/* klik mimo okno NEZAVÍRÁ — průvodce má rozdělanou rezervaci; zavírá jen tlačítko */}
+      <div className="invoice wz">
         <div className="wz-head">
           <div className="wz-titlerow">
             <h2>Nová rezervace</h2>
