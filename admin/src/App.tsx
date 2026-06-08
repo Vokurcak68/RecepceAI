@@ -2811,8 +2811,8 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
         onPick={(gid) => run(async () => { await api.addResGuest(id, { guestId: gid }); setPickRoomGuest(false); })}
       />}
       {gEdit && (
-        <div className="inv-backdrop" onClick={resetGf}>
-          <div className="invoice wz" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="inv-backdrop">
+          <div className="invoice wz" style={{ width: 560 }}>
             <div className="wz-head"><div className="wz-titlerow"><div><h2>Upravit hosta</h2><div className="muted" style={{ marginTop: 4 }}>Uprav údaje, nebo vyber jinou osobu z adresáře. Údaje slouží i pro evidenční knihu / UBYPORT.</div></div><button className="linkx" onClick={resetGf}>zavřít</button></div></div>
             <div className="wz-body">
               <div className="req-actions" style={{ padding: 0, marginBottom: 14, alignItems: "center" }}>
@@ -2862,8 +2862,8 @@ function UnitMoveOverlay({ reservationId, onClose, onDone }: { reservationId: st
   const curPrice = data?.candidates.find((c) => c.current)?.pricePerNight ?? null;
   const apply = (unitId: string, reprice?: "recompute" | "keep") => { setBusy(true); setErr(""); api.assignUnit(reservationId, unitId, reprice).then(() => { onDone(); onClose(); }).catch((e) => { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }); };
   return (
-    <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice wz" style={{ width: 540 }} onClick={(e) => e.stopPropagation()}>
+    <div className="inv-backdrop">
+      <div className="invoice wz" style={{ width: 540 }}>
         <div className="wz-head"><div className="wz-titlerow"><div><h2>{data?.unit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</h2><div className="muted" style={{ marginTop: 4 }}>{priceAsk ? "Cílový pokoj má jinou cenu — jak naložit s cenou ubytování?" : data?.unit === "bed" ? "Volná lůžka stejného typu v termínu." : "Volné pokoje (i jiného typu) s dostatečnou kapacitou v termínu."}</div></div><button className="linkx" onClick={onClose}>zavřít</button></div></div>
         <div className="wz-body">
           {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
@@ -2915,8 +2915,8 @@ function GuestPickerOverlay({ prefill, onPick, onClose, title = "Adresář host�
     catch (e) { setNerr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice wz" style={{ width: 700 }} onClick={(e) => e.stopPropagation()}>
+    <div className="inv-backdrop">
+      <div className="invoice wz" style={{ width: 700 }}>
         <div className="wz-head">
           <div className="wz-titlerow">
             <div><h2>{title}</h2><div className="muted" style={{ marginTop: 4 }}>{subtitle}</div></div>
@@ -2980,8 +2980,8 @@ function CompanyPickerOverlay({ onPick, onClose }: { onPick: (companyId: string)
   const list = (data ?? []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || (c.ico ?? "").includes(q));
   const createPick = async () => { if (!nw.trim()) return; setBusy(true); try { const c = await api.createCompany({ name: nw.trim() }); onPick(c.id); } finally { setBusy(false); } };
   return (
-    <div className="inv-backdrop" onClick={onClose}>
-      <div className="invoice wz" style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
+    <div className="inv-backdrop">
+      <div className="invoice wz" style={{ width: 640 }}>
         <div className="wz-head">
           <div className="wz-titlerow">
             <div><h2>Vybrat firmu</h2><div className="muted" style={{ marginTop: 4 }}>Odběratel na dokladech této rezervace.</div></div>
