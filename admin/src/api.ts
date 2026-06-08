@@ -54,7 +54,7 @@ export type Room = { id: string; number: string; floor: number; status: string; 
 export type Reservation = {
   id: string; code: string; status: string; checkInDate: string; checkOutDate: string;
   nights: number; adults: number; children?: number; childAges?: number[]; totalAmount: Money; cityTax: Money; billingCycle?: string;
-  primaryGuest?: Guest; roomType?: RoomType; room?: Room | null; bed?: Bed | null;
+  primaryGuest?: Guest; roomType?: RoomType; room?: Room | null; bed?: Bed | null; createdAt?: string;
 };
 export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string; stayFrom: string; stayTo: string };
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };

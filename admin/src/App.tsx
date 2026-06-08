@@ -1457,13 +1457,14 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
         {sel.size > 0 && <button className="btn" onClick={bulk}>🧾 Hromadná faktura ({sel.size})</button>}
       </div>
       <div className="panel">
-        <Table cols={["", "Kód", "Host", "Termín", "Jednotka", "Stav", "Částka", ""]} rows={data ?? []} empty="Žádné rezervace"
+        <Table cols={["", "Kód", "Host", "Termín", "Vznik", "Jednotka", "Stav", "Částka", ""]} rows={[...(data ?? [])].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))} empty="Žádné rezervace"
           render={(r: Reservation) => (
             <tr key={r.id}>
               <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>
               <td className="muted">{r.code}</td>
               <td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td>
               <td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td>
+              <td className="muted" style={{ whiteSpace: "nowrap" }}>{r.createdAt ? new Date(r.createdAt).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
               <td>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</td>
               <td><Badge s={r.status} /></td>
               <td>{money(r.totalAmount)}{r.billingCycle === "monthly" && <span className="chip">měsíčně</span>}</td>
