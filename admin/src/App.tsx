@@ -886,6 +886,7 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
   const confirm = useConfirm();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [wizard, setWizard] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -912,7 +913,7 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
   return (
     <>
       <div className="h1"><span>Recepce</span> {data && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {d(data.date)}</span>}
-        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost sm" onClick={reloadAll}>↻</button></div>
+        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost" onClick={() => setPlanOpen(true)}>🗺 Půdorys</button> <button className="btn ghost sm" onClick={reloadAll}>↻</button></div>
       {error && <div className="error">{error}</div>}
       {msg && <div className="error">{msg}</div>}
       {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reloadAll(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
@@ -981,10 +982,12 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
         );
       })()}
 
-      {(board.data?.length ?? 0) > 0 && (
-        <div className="panel">
-          <h3>Plánek obsazenosti <button className="btn sm ghost" style={{ float: "right" }} onClick={() => onOpen?.("roomstatus")}>Zobrazit celý přehled →</button></h3>
-          <div style={{ padding: 12 }}><FloorPlanView prop={prop} compact onPickRes={setDetailId} onOpenFull={() => onOpen?.("roomstatus")} /></div>
+      {planOpen && (
+        <div className="inv-backdrop" onClick={() => setPlanOpen(false)}>
+          <div className="fp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="fp-modal-head"><h3 style={{ margin: 0 }}>Půdorys obsazenosti</h3><button className="linkx" onClick={() => setPlanOpen(false)}>zavřít ✕</button></div>
+            <div className="fp-modal-body"><FloorPlanView prop={prop} /></div>
+          </div>
         </div>
       )}
 
