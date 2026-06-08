@@ -268,13 +268,25 @@ export function toCzIban(raw: string | null | undefined): string | null {
   return "CZ" + String(check).padStart(2, "0") + bban;
 }
 
+/** Sestaví SPAYD (Short Payment Descriptor) řetězec pro českou QR platbu. */
+function buildSpayd(acc: string, amount: number, vs: string, msg: string): string {
+  return `SPD*1.0*ACC:${acc}*AM:${amount.toFixed(2)}*CC:CZK*X-VS:${vs}*MSG:${msg}`;
+}
+
 /** SPAYD řetězec pro QR platbu (jen proforma; účet provozovatele má přednost před IBANem provozovny). */
 function spaydFor(doc: { type: BillingDocType; number: string; total: Prisma.Decimal; supplierAccount: string | null; property: { iban: string | null } }): string | null {
   if (doc.type !== BillingDocType.proforma) return null;
   const acc = toCzIban(doc.supplierAccount) ?? toCzIban(doc.property.iban);
   if (!acc) return null;
-  const vs = doc.number.replace(/\D/g, "").slice(-10);
-  return `SPD*1.0*ACC:${acc}*AM:${doc.total.toFixed(2)}*CC:CZK*X-VS:${vs}*MSG:Zaloha ${doc.number}`;
+  return buildSpayd(acc, Number(doc.total), doc.number.replace(/\D/g, "").slice(-10), `Zaloha ${doc.number}`);
+}
+
+/** SPAYD pro úhradu rezervace (QR v potvrzovacím/připomínkovém e-mailu). VS = číslice z kódu rezervace.
+ * Účet provozovatele (operatorAccount) má přednost před IBANem provozovny; bez účtu vrací null. */
+export function reservationSpayd(property: { operatorAccount: string | null; iban: string | null }, code: string, amount: number): string | null {
+  const acc = toCzIban(property.operatorAccount) ?? toCzIban(property.iban);
+  if (!acc || !(amount > 0)) return null;
+  return buildSpayd(acc, amount, code.replace(/\D/g, "").slice(-10), `Rezervace ${code}`);
 }
 
 export async function getDocument(propertyId: string, id: string) {

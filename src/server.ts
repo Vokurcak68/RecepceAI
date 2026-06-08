@@ -38,7 +38,7 @@ import { icalToken, buildExportIcs, listIcalFeeds, addIcalFeed, deleteIcalFeed, 
 import { chat as aiChat, type ChatMsg } from "./ai";
 import * as guests from "./guests";
 import * as groups from "./groups";
-import { startPolicyScheduler, stopPolicyScheduler } from "./policies";
+import { startPolicyScheduler, stopPolicyScheduler, processPrepay } from "./policies";
 import { UPLOAD_DIR } from "./uploads";
 import { createToken, readToken, verifyPassword } from "./auth";
 
@@ -162,6 +162,7 @@ app.post("/reservations/:id/payments", h(async (req) => { const b = paymentBody.
 
 app.post("/maintenance/release-holds", h(async () => ({ released: await releaseExpiredHolds() })));
 app.post("/maintenance/purge-registrations", h(async () => ({ purged: await purgeExpiredRegistrations() })));
+app.post("/maintenance/run-prepay", h(async () => await processPrepay())); // platba předem: připomínky + auto-storno
 
 // ── Přivolání člověka: WhatsApp personálu + zvoneček manažerům (kiosek) ──
 app.post("/call/notify", h(async (req) => {
@@ -370,7 +371,7 @@ adminRouter.delete("/service-items/:id", h((req, res) => admin.deleteServiceItem
 
 adminRouter.get("/reservations", h((req, res) => admin.listReservations(pid(res), { status: req.query.status as string | undefined, q: req.query.q as string | undefined })));
 adminRouter.post("/reservations", h((req, res) => {
-  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional(), deferEmail: z.boolean().optional(), bedId: z.string().uuid().optional() }).parse(req.body);
+  const b = z.object({ roomTypeId: z.string().uuid(), from: dateStr, to: dateStr, adults: z.number().int().positive(), children: z.number().int().nonnegative().optional(), childAges: z.array(z.number().int().min(0).max(25)).optional(), guest: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }), billingCompany: z.string().optional(), billingIco: z.string().optional(), billingDic: z.string().optional(), deferEmail: z.boolean().optional(), bedId: z.string().uuid().optional(), prepayDays: z.number().int().min(1).max(365).optional() }).parse(req.body);
   return admin.createReservation({ propertyId: pid(res), ...b, from: new Date(b.from), to: new Date(b.to) });
 }));
 adminRouter.get("/reservations/:id", h((req, res) => admin.getReservation(pid(res), req.params.id)));

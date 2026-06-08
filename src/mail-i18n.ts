@@ -22,6 +22,8 @@ const cs: Dict = {
   introGroup: "Dobrý den, {name},<br>potvrzujeme vaši skupinovou rezervaci <b>{group}</b> ({rooms} pokojů) v <b>{property}</b>. Souhrn najdete níže.",
   subjReminder: "Připomínka pobytu — {property}", titleReminder: "Těšíme se na vás", introReminder: "Dobrý den, {name},<br>připomínáme váš blížící se pobyt v <b>{property}</b> (příjezd {date}). Těšíme se na vás!",
   depositNote: "Požadovaná záloha: <b>{amount}</b> ({pct} % z ceny). Pokyny k úhradě vám rádi sdělíme.", cancelFeeNote: "V souladu se storno podmínkami účtujeme storno poplatek <b>{amount}</b>.",
+  subjPrepay: "Připomínka platby — rezervace {code} ({property})", titlePrepay: "Připomínka platby", introPrepay: "Dobrý den, {name},<br>vaši rezervaci v <b>{property}</b> zatím evidujeme jako neuhrazenou. Prosíme o úhradu do <b>{due}</b>, jinak bude rezervace automaticky zrušena.",
+  prepayDueNote: "Uhraďte prosím <b>{amount}</b> nejpozději do <b>{due}</b>. Bez úhrady bude rezervace v tento den automaticky zrušena.", qrHeading: "QR platba", qrNote: "Naskenujte QR kód v mobilní bankovní aplikaci a platbu odešlete.",
   footerAuto: "Tato zpráva byla odeslána automaticky. Neodpovídejte na ni prosím, případné dotazy směřujte na kontakt výše.",
 };
 const en: Dict = {
@@ -41,6 +43,8 @@ const en: Dict = {
   introGroup: "Hello {name},<br>we confirm your group reservation <b>{group}</b> ({rooms} rooms) at <b>{property}</b>. Summary below.",
   subjReminder: "Upcoming stay reminder — {property}", titleReminder: "We look forward to seeing you", introReminder: "Hello {name},<br>a reminder of your upcoming stay at <b>{property}</b> (arrival {date}). We look forward to welcoming you!",
   depositNote: "Required deposit: <b>{amount}</b> ({pct}% of the price). We'll gladly share payment instructions.", cancelFeeNote: "In line with our cancellation policy we charge a cancellation fee of <b>{amount}</b>.",
+  subjPrepay: "Payment reminder — reservation {code} ({property})", titlePrepay: "Payment reminder", introPrepay: "Hello {name},<br>your reservation at <b>{property}</b> is still unpaid. Please pay by <b>{due}</b>, otherwise it will be cancelled automatically.",
+  prepayDueNote: "Please pay <b>{amount}</b> by <b>{due}</b>. Without payment the reservation will be cancelled automatically on that day.", qrHeading: "QR payment", qrNote: "Scan the QR code in your mobile banking app to send the payment.",
   footerAuto: "This message was sent automatically. Please do not reply; for questions use the contact above.",
 };
 const de: Dict = {

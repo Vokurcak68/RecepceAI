@@ -3,7 +3,8 @@
 // reminderHours/noShowHours). Automatika běží in-process jako u iCalu.
 import { ReservationStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
-import { toDateOnly } from "./dates";
+import { toDateOnly, addDays } from "./dates";
+import { computeFolio } from "./reservations";
 import * as mailer from "./mailer";
 
 const MS_DAY = 86_400_000;
@@ -97,6 +98,41 @@ export async function processDailyService(): Promise<number> {
   return tasks;
 }
 
+/** Platba předem: den před vypršením lhůty pošle připomínku s QR, po vypršení
+ * neuhrazenou nefiremní rezervaci automaticky stornuje. Dedup připomínky přes EmailLog. */
+export async function processPrepay(): Promise<{ reminded: number; cancelled: number }> {
+  const today = toDateOnly(new Date());
+  const tomorrow = addDays(today, 1);
+  const list = await prisma.reservation.findMany({
+    where: {
+      prepayDueAt: { not: null },
+      status: { in: [ReservationStatus.pending, ReservationStatus.confirmed] },
+      companyId: null, billingCompany: null, // firemní/faktura se předem QR neplatí
+    },
+    select: { id: true, prepayDueAt: true },
+    take: 500,
+  });
+  let reminded = 0, cancelled = 0;
+  for (const r of list) {
+    const folio = await computeFolio(r.id);
+    if (folio.balance.lte(0)) continue; // už uhrazeno → bez akce
+    const due = toDateOnly(r.prepayDueAt!);
+    if (due.getTime() < today.getTime()) {
+      // lhůta prošla a stále neuhrazeno → auto-storno + e-mail
+      await prisma.reservation.update({ where: { id: r.id }, data: { status: ReservationStatus.cancelled } });
+      await mailer.sendCancellation(r.id);
+      cancelled++;
+    } else if (due.getTime() === tomorrow.getTime()) {
+      // den před vypršením → připomínka (1× na rezervaci)
+      if (await prisma.emailLog.count({ where: { reservationId: r.id, type: "prepay_reminder" } })) continue;
+      await mailer.sendPrepayReminder(r.id);
+      reminded++;
+    }
+  }
+  if (reminded || cancelled) console.log(`[policies] platba předem: ${reminded} připomínek, ${cancelled} storno`);
+  return { reminded, cancelled };
+}
+
 // ── Scheduler (in-process, hodinový) ─────────────────────────
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -105,7 +141,7 @@ export function startPolicyScheduler() {
   const run = async () => {
     if (running) return;
     running = true;
-    try { await processNoShows(); await sendReminders(); await processDailyService(); }
+    try { await processNoShows(); await sendReminders(); await processPrepay(); await processDailyService(); }
     catch (e) { console.error(`[policies] chyba: ${(e as Error).message}`); }
     finally { running = false; }
   };

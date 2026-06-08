@@ -59,6 +59,7 @@ export async function createReservation(input: {
   propertyId: string; roomTypeId: string; from: Date; to: Date; adults: number; children?: number; childAges?: number[];
   guest: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
   billingCompany?: string; billingIco?: string; billingDic?: string; deferEmail?: boolean; bedId?: string;
+  prepayDays?: number; // platba předem: úhrada nejpozději N dnů před příjezdem, jinak auto-storno
 }) {
   const { propertyId, roomTypeId, from, to, adults, guest } = input;
   const childAges = (input.childAges ?? []).filter((a) => Number.isFinite(a));
@@ -75,6 +76,11 @@ export async function createReservation(input: {
     if (clash) throw new Error("Zvolené lůžko je v tomto termínu už obsazené.");
   }
   const price = await getStayPrice(roomTypeId, from, to, adults, childAges);
+  // Platba předem: lhůta = příjezd − N dnů, nikdy do minulosti (rezervace na poslední chvíli → dnešek).
+  // Firemní rezervace (faktura) se neplatí předem QR platbou → lhůtu nenastavujeme.
+  const prepayDueAt = input.prepayDays && input.prepayDays > 0 && !input.billingCompany
+    ? (() => { const d = addDays(toDateOnly(from), -input.prepayDays!); const today = toDateOnly(new Date()); return d < today ? today : d; })()
+    : null;
   const gId = await createGuest(guest); // nového hosta nepárujeme dle e-mailu (napojení na stálého klienta je manuální přes adresář)
   const created = await prisma.reservation.create({
     data: {
@@ -83,7 +89,7 @@ export async function createReservation(input: {
       ...(input.bedId ? { bed: { connect: { id: input.bedId } } } : {}),
       checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults, children, childAges,
       status: ReservationStatus.confirmed, source: "manual", billingCycle: price.billingCycle,
-      totalAmount: price.total, cityTax: price.cityTax,
+      totalAmount: price.total, cityTax: price.cityTax, prepayDueAt,
       billingCompany: input.billingCompany, billingIco: input.billingIco, billingDic: input.billingDic,
       reservationGuests: { create: { guest: { connect: { id: gId } }, isPrimary: true } },
     },

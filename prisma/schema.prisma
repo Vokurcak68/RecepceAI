@@ -595,6 +595,10 @@ model Reservation {
   paidTo     DateTime? @db.Date
   vip        Boolean   @default(false)
 
+  // Platba předem: lhůta úhrady (= příjezd − N dnů). Po jejím uplynutí se neuhrazená
+  // nefiremní rezervace automaticky stornuje; den předem chodí připomínka s QR platbou.
+  prepayDueAt DateTime? @db.Date
+
   // Fakturace firmě (ubytovny / služební pobyty). Volný text = starší override; companyId = centrální firma.
   billingCompany String?
   billingIco     String?

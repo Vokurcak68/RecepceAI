@@ -3,9 +3,12 @@
 // konfigurace v .env (SMTP_*). Vše je BEST-EFFORT: když mail selže nebo není
 // nakonfigurován / host nemá e-mail, rezervační flow běží dál bez chyby.
 import nodemailer, { type Transporter } from "nodemailer";
+import QRCode from "qrcode";
 import { Prisma, PaymentStatus, PaymentType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { mailLang, mt, type MailLang } from "./mail-i18n";
+import { computeFolio } from "./reservations";
+import { reservationSpayd } from "./billing";
 
 let transporter: Transporter | null = null;
 
@@ -106,6 +109,7 @@ export const EMAIL_TYPES: Record<string, string> = {
   checkout: "Poděkování (check-out)",
   cancellation: "Zrušení rezervace",
   reminder: "Připomínka před příjezdem",
+  prepay_reminder: "Připomínka platby předem",
   proforma: "Zálohová faktura",
 };
 
@@ -114,7 +118,9 @@ async function logEmail(reservationId: string, type: string, recipient: string, 
   catch (e) { console.error(`📧 [mail] nelze zapsat EmailLog: ${(e as Error).message}`); }
 }
 
-async function deliver(r: ResForMail, type: string, subject: string, html: string): Promise<void> {
+type MailAttachment = { filename: string; content: Buffer; cid: string };
+
+async function deliver(r: ResForMail, type: string, subject: string, html: string, attachments?: MailAttachment[]): Promise<void> {
   const t = getTransport();
   const to = r.primaryGuest?.email;
   if (!to) return;                                  // host nemá e-mail → nelze poslat, nezaznamenáváme
@@ -126,6 +132,7 @@ async function deliver(r: ResForMail, type: string, subject: string, html: strin
       ...(r.property.email ? { replyTo: r.property.email } : {}),
       subject,
       html,
+      ...(attachments?.length ? { attachments } : {}),
     });
     console.log(`📧 [mail] odesláno "${subject}" → ${to} (${r.code})`);
     await logEmail(r.id, type, to, subject, "sent");
@@ -140,6 +147,29 @@ const guestUrl = (code: string) =>
   process.env.PUBLIC_GUEST_URL ? `${process.env.PUBLIC_GUEST_URL.replace(/\/$/, "")}/?code=${encodeURIComponent(code)}` : null;
 const feedbackUrl = (code: string) =>
   process.env.PUBLIC_GUEST_URL ? `${process.env.PUBLIC_GUEST_URL.replace(/\/$/, "")}/?code=${encodeURIComponent(code)}&rate=1` : null;
+
+/** Neuhrazený zůstatek rezervace — jen když se NEplatí fakturou/firmou (jinak 0). */
+async function unpaidBalance(r: ResForMail): Promise<number> {
+  if (r.companyId || r.billingCompany) return 0; // platí fakturou → bez QR
+  const folio = await computeFolio(r.id);
+  const bal = Number(folio.balance);
+  return bal > 0 ? bal : 0;
+}
+
+/** QR platba pro daný (kladný) zůstatek — HTML blok + PNG příloha (cid:qrpay).
+ * Null, když provozovna nemá bankovní účet nebo se QR nepodaří vygenerovat. */
+async function qrPayBlock(r: ResForMail, lang: MailLang, amount: number): Promise<{ html: string; attachment: MailAttachment } | null> {
+  const spd = reservationSpayd(r.property, r.code, amount);
+  if (!spd) return null;
+  let buf: Buffer;
+  try { buf = await QRCode.toBuffer(spd, { margin: 1, width: 240 }); } catch { return null; }
+  const html = `<div style="margin:18px 0 0;padding:16px 18px;background:#f6f8fa;border-radius:10px;text-align:center;">
+    <div style="font-weight:600;color:#243240;margin-bottom:4px;">${esc(mt(lang, "qrHeading"))} · ${money(amount)}</div>
+    <img src="cid:qrpay" alt="QR" width="200" height="200" style="display:inline-block;margin:6px 0;" />
+    <div style="font-size:12px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "qrNote"))}</div>
+  </div>`;
+  return { html, attachment: { filename: "qr-platba.png", content: buf, cid: "qrpay" } };
+}
 
 // ── Jednotlivé e-maily ───────────────────────────────────────
 /** Potvrzení vytvořené rezervace. */
@@ -160,10 +190,16 @@ export async function sendReservationCreated(reservationId: string, proforma?: {
     const deposit = r.property.depositPct > 0 ? Math.round(Number(r.totalAmount) * r.property.depositPct / 100) : 0;
     depositHtml = deposit > 0 ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "depositNote", { amount: money(deposit), pct: r.property.depositPct })}</p>` : "";
   }
-  const extra = depositHtml + (link ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
+  // QR platba + věta o splatnosti — jen u neuhrazené nefiremní rezervace.
+  const amount = await unpaidBalance(r);
+  const qr = amount > 0 ? await qrPayBlock(r, lang, amount) : null;
+  const prepayHtml = r.prepayDueAt && amount > 0
+    ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "prepayDueNote", { amount: money(amount), due: fmtDate(r.prepayDueAt) })}</p>`
+    : "";
+  const extra = depositHtml + prepayHtml + (qr ? qr.html : "") + (link ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "createdExtra"))}</p>` : "");
   const html = layout(lang, r.property, mt(lang, "titleCreated"), mt(lang, "introCreated", vars), rows,
     link ? mt(lang, "ctaManage") : undefined, link ?? undefined, extra);
-  await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html);
+  await deliver(r, "created", mt(lang, "subjCreated", { code: r.code, property: r.property.name }), html, qr ? [qr.attachment] : undefined);
 }
 
 /** E-mail se zálohovou fakturou (proforma) — odešle se po jejím vystavení. */
@@ -251,6 +287,30 @@ export async function sendReminder(reservationId: string): Promise<void> {
   await deliver(r, "reminder", mt(lang, "subjReminder", { property: r.property.name }), html);
 }
 
+/** Připomínka platby předem (den před vypršením lhůty) — s QR platbou. Posílá se jen
+ * u neuhrazené nefiremní rezervace; jinak nemá co připomínat a vrací se bez odeslání. */
+export async function sendPrepayReminder(reservationId: string): Promise<void> {
+  const r = await load(reservationId);
+  if (!r) return;
+  const amount = await unpaidBalance(r);
+  if (!(amount > 0)) return;                       // uhrazeno / faktura → nic neposíláme
+  const lang = mailLang(r.primaryGuest?.language);
+  const due = r.prepayDueAt ? fmtDate(r.prepayDueAt) : "—";
+  const link = guestUrl(r.code);
+  const qr = await qrPayBlock(r, lang, amount);
+  const rows = [
+    row(mt(lang, "rowCode"), `<span style="font-family:monospace;">${esc(r.code)}</span>`),
+    row(mt(lang, "rowUnit"), esc(unitLabel(r, lang))),
+    row(mt(lang, "rowTotal"), money(amount)),
+    row(mt(lang, "rowDue"), due),
+  ].join("");
+  const note = `<p style="margin:14px 0 0;font-size:13px;color:#6b7a89;line-height:1.6;">${mt(lang, "prepayDueNote", { amount: money(amount), due })}</p>`;
+  const html = layout(lang, r.property, mt(lang, "titlePrepay"),
+    mt(lang, "introPrepay", { name: esc(r.primaryGuest.firstName), property: esc(r.property.name), due }), rows,
+    link ? mt(lang, "ctaManage") : undefined, link ?? undefined, note + (qr ? qr.html : ""));
+  await deliver(r, "prepay_reminder", mt(lang, "subjPrepay", { code: r.code, property: r.property.name }), html, qr ? [qr.attachment] : undefined);
+}
+
 /** Souhrnný e-mail organizátorovi skupinové rezervace (jeden za celou skupinu). */
 export async function sendGroupSummary(groupId: string): Promise<void> {
   const group = await prisma.reservationGroup.findUnique({
@@ -298,6 +358,7 @@ export async function resend(reservationId: string, type: string): Promise<void>
     case "checkout": return sendCheckOut(reservationId);
     case "cancellation": return sendCancellation(reservationId);
     case "reminder": return sendReminder(reservationId);
+    case "prepay_reminder": return sendPrepayReminder(reservationId);
     default: throw new Error("Neznámý typ e-mailu.");
   }
 }

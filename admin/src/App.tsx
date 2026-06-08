@@ -1008,8 +1008,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [pickGuest, setPickGuest] = useState(false);
   const [pickedGuestId, setPickedGuestId] = useState<string | null>(null);
   const [roomQ, setRoomQ] = useState("");
-  const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company">("arrival");
+  const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company" | "prepay">("arrival");
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
+  const [prepayDays, setPrepayDays] = useState("3"); // platba předem: úhrada N dnů před příjezdem, jinak storno
   // Firemní / dlouhodobé (jen lůžková provozovna + odběratel firma): sazba z ceníku, splatnost, VIP, poznámka.
   const bedRatesA = useAsync<BedRate[]>(() => prop.inventoryUnit === "bed" ? api.bedRates() : Promise.resolve([]), []);
   const [wBedRateId, setWBedRateId] = useState("");
@@ -1077,6 +1078,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
     setErr(""); setBusy(true);
     try {
       const guest = { firstName: g.firstName, lastName: g.lastName, email: g.email || undefined, phone: g.phone || undefined, language: g.language };
+      const ppDays = pay === "prepay" && customer !== "company" && Number(prepayDays) > 0 ? Number(prepayDays) : undefined; // platba předem (jinak storno)
       const ages = allPersons.map((p) => ageOf(p.dob)).filter((a): a is number => a != null);
       const childAges = ages.filter((a) => a < 18);
       const adults = Math.max(1, personCount - childAges.length);
@@ -1084,14 +1086,14 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       let memberPersons: typeof allPersons = [];
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
-        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: bedByIdx[0] || undefined }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
+        if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: bedByIdx[0] || undefined, prepayDays: ppDays }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
         else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
       } else {
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
         if (!flat.length) throw new Error("Vyber alespoň jeden pokoj.");
         if (flat.length === 1) {
-          const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults, childAges, guest, deferEmail: pay === "deposit" && Number(depositPct) > 0 });
+          const r = await api.createReservation({ roomTypeId: flat[0], from, to, adults, childAges, guest, deferEmail: pay === "deposit" && Number(depositPct) > 0, prepayDays: ppDays });
           if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {});
           for (const p of extra) { if (p.guestId) await api.addResGuest(r.id, { guestId: p.guestId }).catch(() => {}); else if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {}); }
           ids = [{ id: r.id, code: r.code }];
@@ -1158,7 +1160,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
             <div className="wz-done">
               <div className="circle">✓</div>
               <h2 style={{ margin: "0 0 8px" }}>Rezervace vytvořena</h2>
-              <div className="muted">Kód: <b style={{ color: "var(--text)", fontFamily: "monospace" }}>{done.map((d) => d.code).join(", ")}</b>{pay === "deposit" && done.length === 1 ? " · vystavena zálohová faktura, e-mail odeslán hostovi" : ""}</div>
+              <div className="muted">Kód: <b style={{ color: "var(--text)", fontFamily: "monospace" }}>{done.map((d) => d.code).join(", ")}</b>{pay === "deposit" && done.length === 1 ? " · vystavena zálohová faktura, e-mail odeslán hostovi" : ""}{pay === "prepay" && customer !== "company" ? ` · odeslán e-mail s QR platbou, splatnost ${prepayDays} dnů před příjezdem` : ""}</div>
             </div>
           </div>
           <div className="wz-foot">
@@ -1327,7 +1329,9 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   <label className={pay === "departure" ? "sel" : ""}><input type="radio" checked={pay === "departure"} onChange={() => setPay("departure")} /> Při odjezdu</label>
                   {!bedMode && totalRooms === 1 && <label className={pay === "deposit" ? "sel" : ""}><input type="radio" checked={pay === "deposit"} onChange={() => setPay("deposit")} /> Zálohou <input type="number" min={0} max={100} style={{ width: 64, marginLeft: 6 }} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} /> %</label>}
                   {customer === "company" && <label className={pay === "company" ? "sel" : ""}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> Na fakturu firmě</label>}
+                  {customer !== "company" && <label className={pay === "prepay" ? "sel" : ""}><input type="radio" checked={pay === "prepay"} onChange={() => setPay("prepay")} /> Platba předem — uhradit <input type="number" min={1} max={365} style={{ width: 56, marginLeft: 6, marginRight: 6 }} value={prepayDays} onChange={(e) => setPrepayDays(e.target.value)} /> dnů před příjezdem (jinak storno)</label>}
                 </div>
+                {pay === "prepay" && customer !== "company" && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Hostovi odešleme potvrzení s QR platbou. Den před vypršením lhůty přijde připomínka; bez úhrady se rezervace v termínu automaticky stornuje.</div>}
                 {bedMode && customer === "company" && (
                   <>
                     <div className="wz-sec">Firemní / dlouhodobé</div>
