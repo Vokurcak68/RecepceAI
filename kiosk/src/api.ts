@@ -17,6 +17,11 @@ export type Guest = {
   email: string | null;
   phone: string | null;
   language: string | null;
+  dateOfBirth?: string | null;
+  nationality?: string | null;
+  documentType?: string | null;
+  documentNumber?: string | null;
+  address?: string | null;
 };
 
 export type Room = {

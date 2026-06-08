@@ -152,6 +152,8 @@ const registrationBody = z.object({
 });
 app.post("/reservations/:id/registration", h(async (req) => {
   const b = registrationBody.parse(req.body);
+  // Nahraď případný předvyplněný zápis téhož hosta na rezervaci (z výběru z adresáře) údaji odkontrolovanými/upravenými hostem na kiosku.
+  await prisma.registrationEntry.deleteMany({ where: { reservationId: req.params.id, guestId: b.guestId } });
   return addRegistrationEntry({ reservationId: req.params.id, guestId: b.guestId, fullName: b.fullName, dateOfBirth: new Date(b.dateOfBirth), nationality: b.nationality, documentType: b.documentType, documentNumber: b.documentNumber, homeAddress: b.homeAddress, visaNumber: b.visaNumber, purposeOfStay: b.purposeOfStay, stayFrom: new Date(b.stayFrom), stayTo: new Date(b.stayTo) });
 }));
 

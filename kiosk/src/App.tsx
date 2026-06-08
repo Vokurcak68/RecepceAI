@@ -216,6 +216,20 @@ export function App() {
     go("co_folio", "coFolioTitle");
   }
 
+  // Předvyplní registrační formulář z profilu hosta (byl-li vybrán z adresáře / má doklad) — host jen odkontroluje.
+  function prefillRegFromGuest() {
+    const pg = res?.primaryGuest; if (!pg) return;
+    setReg((r) => ({
+      ...r,
+      fullName: `${pg.firstName} ${pg.lastName}`.trim() || r.fullName,
+      dob: pg.dateOfBirth ? pg.dateOfBirth.slice(0, 10) : r.dob,
+      nationality: pg.nationality || r.nationality,
+      documentType: pg.documentType || r.documentType,
+      documentNumber: pg.documentNumber || r.documentNumber,
+      homeAddress: pg.address || r.homeAddress,
+    }));
+  }
+
   // ── Registrace (ohlašovací povinnost) ──────────────────────
   async function submitRegistration(next: Screen) {
     if (!res || !reg.gdpr || !reg.fullName || !reg.dob || !reg.documentNumber || !reg.homeAddress) {
@@ -395,7 +409,7 @@ export function App() {
                 <div className="kv"><span>{res.nights} {t("nights")} · {res.adults} {t("guests")}</span><span className="v">{money(res.totalAmount)}</span></div>
                 <div className="row" style={{ marginTop: 20 }}>
                   <button className="btn secondary" onClick={startHumanCall}>{t("somethingWrong")}</button>
-                  <button className="btn ok" onClick={() => go("ci_registration", "regTitle")}>{t("matches")}</button>
+                  <button className="btn ok" onClick={() => { prefillRegFromGuest(); go("ci_registration", "regTitle"); }}>{t("matches")}</button>
                 </div>
               </div>
             )}
