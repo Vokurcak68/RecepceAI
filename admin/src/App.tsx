@@ -912,8 +912,14 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
 
   return (
     <>
-      <div className="h1"><span>Recepce</span> {data && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {d(data.date)}</span>}
-        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost" onClick={() => setPlanOpen(true)}>🗺 Půdorys</button> <button className="btn ghost sm" onClick={reloadAll}>↻</button></div>
+      <div className="h1">
+        <span>Recepce {data && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {d(data.date)}</span>}</span>
+        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+          <button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button>
+          <button className="btn ghost" onClick={() => setPlanOpen(true)}>🗺 Půdorys</button>
+          <button className="btn ghost sm" onClick={reloadAll}>↻</button>
+        </span>
+      </div>
       {error && <div className="error">{error}</div>}
       {msg && <div className="error">{msg}</div>}
       {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reloadAll(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
