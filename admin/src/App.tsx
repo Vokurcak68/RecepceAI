@@ -1045,7 +1045,8 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const nights = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 864e5));
   const personCount = bedMode ? bedsWanted : guests;
   const ageOf = (dob: string) => { if (!dob) return null; const b = new Date(dob), n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a; };
-  const rateByDob = (dob: string): string => { const age = ageOf(dob); if (age == null) return ""; const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom != null || r.ageTo != null) && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0]?.id ?? ""; };
+  // null = neplatné/nekompletní datum (neměnit) — chrání před mezistavem „rok 0001" při psaní; "" = žádná věková sazba neodpovídá (vyčistit); jinak id sazby.
+  const rateByDob = (dob: string): string | null => { const age = ageOf(dob); if (age == null || age < 0 || age > 120) return null; const list = (rates.data ?? []).filter((r) => r.active && (r.ageFrom != null || r.ageTo != null) && (r.ageFrom == null || age >= r.ageFrom) && (r.ageTo == null || age <= r.ageTo)); list.sort((a, b) => ((a.ageTo ?? 200) - (a.ageFrom ?? 0)) - ((b.ageTo ?? 200) - (b.ageFrom ?? 0))); return list[0]?.id ?? ""; };
   const ratePrice = (id: string) => { const r = (rates.data ?? []).find((x) => x.id === id); return r ? Number(r.pricePerNight) : 0; };
   const allPersons = [g, ...extra];
   // Ceny osob s typem (v pořadí zadání) — použijí se k ocenění přistýlek; ubytovna = čistý součet osob × noci.
@@ -1070,7 +1071,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const gotoGuests = () => { const want = Math.max(0, personCount - 1); setExtra((prev) => Array.from({ length: want }, (_, i) => prev[i] ?? { firstName: "", lastName: "", dob: "", rateId: "" })); setStep(3); };
-  const setPersonDob = (i: number, dob: string) => { const rid = rateByDob(dob); if (i === 0) setG((s) => ({ ...s, dob, rateId: rid || s.rateId })); else setExtra((arr) => arr.map((p, idx) => idx === i - 1 ? { ...p, dob, rateId: rid || p.rateId } : p)); };
+  const setPersonDob = (i: number, dob: string) => { const rid = rateByDob(dob); const next = (cur: string) => (rid === null ? cur : rid); if (i === 0) setG((s) => ({ ...s, dob, rateId: next(s.rateId) })); else setExtra((arr) => arr.map((p, idx) => idx === i - 1 ? { ...p, dob, rateId: next(p.rateId) } : p)); };
   const setPersonRate = (i: number, rid: string) => { if (i === 0) setG((s) => ({ ...s, rateId: rid })); else setExtra((arr) => arr.map((p, idx) => idx === i - 1 ? { ...p, rateId: rid } : p)); };
 
   const roomUnits = (avail ?? []).filter((a) => a.unit === "room");
