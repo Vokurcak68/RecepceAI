@@ -879,6 +879,9 @@ function OccupancyView({ selId, prop, embedded }: { selId: string; prop?: Proper
 // ── Domovská obrazovka recepce „Recepce (dnešek)" ────────────
 function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<ReceptionToday>(() => api.reception(), [selId]);
+  const bedMode = prop.inventoryUnit === "bed";
+  const board = useAsync<(RoomBoardItem | BedBoardItem)[]>(() => bedMode ? api.bedBoard() : api.roomBoard(), [selId]);
+  const reloadAll = () => { reload(); board.reload(); };
   const confirm = useConfirm();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [wizard, setWizard] = useState(false);
@@ -889,12 +892,12 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
   const checkin = async (r: RecArrival) => {
     if (!r.assigned) { setDetailId(r.id); return; } // nepřiřazený → detail (přiřaď pokoj a odbav)
     if (await confirm({ title: "Check-in", message: <>Ubytovat <b>{r.guestName}</b> ({r.code})?</>, confirmLabel: "Check-in" })) {
-      setBusy(true); setMsg(""); try { await api.checkin(r.id); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+      setBusy(true); setMsg(""); try { await api.checkin(r.id); reloadAll(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }
   };
   const checkout = async (r: RecRow) => {
     if (await confirm({ title: "Check-out", message: <>Odhlásit <b>{r.guestName}</b> ({r.code})?{Number(r.balance) > 0 ? ` Zůstatek ${money(r.balance)} musí být vyrovnán.` : ""}</>, confirmLabel: "Check-out" })) {
-      setBusy(true); setMsg(""); try { const x = await api.checkout(r.id); if (x.document) setDoc(x.document); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+      setBusy(true); setMsg(""); try { const x = await api.checkout(r.id); if (x.document) setDoc(x.document); reloadAll(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }
   };
 
@@ -908,10 +911,10 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
   return (
     <>
       <div className="h1"><span>Recepce</span> {data && <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {d(data.date)}</span>}
-        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost sm" onClick={reload}>↻</button></div>
+        &nbsp;<button className="btn" onClick={() => setWizard(true)}>✨ Nová rezervace</button> <button className="btn ghost sm" onClick={reloadAll}>↻</button></div>
       {error && <div className="error">{error}</div>}
       {msg && <div className="error">{msg}</div>}
-      {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reload(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
+      {wizard && <NewReservationWizard prop={prop} onClose={() => setWizard(false)} onCreated={() => { setWizard(false); reloadAll(); }} onOpenDetail={(rid) => { setWizard(false); setDetailId(rid); }} />}
 
       {data && (
         <div className="toolbar" style={{ gap: 18, flexWrap: "wrap" }}>
@@ -945,6 +948,27 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
             </div>
           ))}</div>)}
       </div>
+
+      {(() => {
+        const units = board.data ?? [];
+        const tile = (key: string, label: string, name: string | null | undefined, resId: string | undefined, sub?: string) => (
+          <div key={key} title={name ?? "volné"} onClick={() => resId && setDetailId(resId)}
+            style={{ minWidth: 92, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--line)", background: name ? "#eef2ff" : "#fff", cursor: resId ? "pointer" : "default" }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
+            <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{name ?? "volné"}{sub ? ` · ${sub}` : ""}</div>
+          </div>
+        );
+        const occ = bedMode ? (units as BedBoardItem[]).filter((b) => b.current).length : (units as RoomBoardItem[]).filter((r) => r.occupant).length;
+        return units.length === 0 ? null : (
+          <div className="panel"><h3>Obsazenost {bedMode ? "lůžek" : "pokojů"} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {occ}/{units.length} obsazeno</span></h3>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 12 }}>
+              {bedMode
+                ? (units as BedBoardItem[]).map((b) => tile(b.bedId, b.label, b.current?.guestName, b.current?.reservationId, b.current ? `do ${d(b.current.toDate)}` : (b.upcoming > 0 ? `od ${d(b.nextFrom!)}` : undefined)))
+                : (units as RoomBoardItem[]).map((r) => tile(r.id, r.number, r.occupant?.name, r.occupant?.reservationId, r.occupant ? `do ${d(r.occupant.checkOutDate)}` : (r.arrival ? `příjezd: ${r.arrival.name}` : undefined)))}
+            </div>
+          </div>
+        );
+      })()}
 
       {(data?.unpaid.length ?? 0) > 0 && card("Nezaplacené (ubytovaní)", data!.unpaid.length,
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.unpaid.map((r) => (
