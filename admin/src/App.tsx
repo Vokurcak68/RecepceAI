@@ -99,9 +99,10 @@ export function App() {
   const isSuper = session.user.role === "super_admin";
   const prop = session.properties.find((p) => p.id === selId);
 
-  const roomsTab = prop?.inventoryUnit === "bed"
-    ? { id: "beds", label: "Lůžka" }
-    : { id: "rooms", label: "Pokoje" };
+  // Ubytovna potřebuje spravovat POKOJE i LŮŽKA (lůžko patří do pokoje); hotel/penzion jen pokoje.
+  const roomsTabs = prop?.inventoryUnit === "bed"
+    ? [{ id: "rooms", label: "Pokoje" }, { id: "beds", label: "Lůžka" }]
+    : [{ id: "rooms", label: "Pokoje" }];
 
   // Samostatné položky (bez skupiny) + rozbalovací skupiny (varianta A)
   const navItems: { id: string; label: string; icon: string }[] = [
@@ -133,7 +134,7 @@ export function App() {
       { id: "checks", label: "Kontroly" },
     ] },
     { label: "Nastavení", icon: "🏨", items: [
-      roomsTab,
+      ...roomsTabs,
       { id: "types", label: "Typy & ceny" },
       { id: "personrates", label: "Číselník osob" },
       ...(prop?.inventoryUnit === "bed" ? [{ id: "bedrates", label: "Ceník lůžek" }] : []),
