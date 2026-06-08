@@ -20,7 +20,7 @@ export function generateReservationCode(): string {
   return `RC-${s}`;
 }
 
-const RES_INCLUDE = { primaryGuest: true, room: true, bed: true, roomType: true, payments: true, property: true } as const;
+const RES_INCLUDE = { primaryGuest: true, room: true, bed: { include: { room: true } }, roomType: true, payments: true, property: true } as const;
 
 // ── Identifikace (scopováno na provozovnu) ───────────────────
 export function findReservationByCode(propertyId: string, code: string) {

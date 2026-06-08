@@ -42,6 +42,7 @@ export type Reservation = {
   cityTax: Money;
   primaryGuest?: Guest;
   room?: Room | null;
+  bed?: { label: string; room?: Room | null } | null;
   roomType?: RoomType;
 };
 

@@ -454,13 +454,15 @@ export function App() {
             )}
 
             {/* KEY (check-in / walk-in) */}
-            {(screen === "ci_key" || screen === "wi_key") && res && (
+            {(screen === "ci_key" || screen === "wi_key") && res && (() => {
+              const unitRoom = res.room ?? res.bed?.room ?? null; // u ubytovny je pokoj přes lůžko
+              return (
               <div className="card" style={{ textAlign: "center" }}>
                 <h2>{t("keyTitle")}</h2>
                 <div className="muted">{t("yourRoom")}</div>
-                <div className="room-num">{res.room?.number ?? "—"}</div>
-                <div className="muted" style={{ marginBottom: 16 }}>{res.room?.floor}. {t("floor")}</div>
-                {res.room?.lockType === "smart_code" ? (
+                <div className="room-num">{unitRoom?.number ?? res.bed?.label ?? "—"}</div>
+                <div className="muted" style={{ marginBottom: 16 }}>{[unitRoom ? `${unitRoom.floor}. ${t("floor")}` : "", res.bed ? `${t("bed")} ${res.bed.label}` : ""].filter(Boolean).join(" · ")}</div>
+                {unitRoom?.lockType === "smart_code" ? (
                   <div className="kv"><span>{t("doorCode")}</span><span className="v">4 7 2 9</span></div>
                 ) : (
                   <div className="kv"><span>🔑</span><span className="v">{property.kioskKeyInfo || t("takeKey")}</span></div>
@@ -468,7 +470,8 @@ export function App() {
                 <div className="kv"><span>{t("wifi")}</span><span className="v">{property.kioskWifi || "PenzionWifi / vitejte"}</span></div>
                 <button className="btn big" style={{ marginTop: 20 }} onClick={idle}>{t("enjoy")}</button>
               </div>
-            )}
+              );
+            })()}
 
             {/* WALK-IN search */}
             {screen === "wi_search" && (
