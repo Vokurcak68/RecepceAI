@@ -44,39 +44,56 @@ export async function createGroup(propertyId: string, input: CreateGroupInput) {
       })
     : input.rooms;
 
-  const organizerId = await createGuest(organizer);
-  const group = await prisma.reservationGroup.create({
-    data: { code: generateGroupCode(), name: input.name.trim() || "Skupina", propertyId, note: input.note?.trim() || null, organizerGuestId: organizerId, billing: input.billing ?? GroupBilling.individual },
-  });
-
-  const created: string[] = [];
-  for (const room of rooms) {
-    if (await freeUnitsForType(propertyId, room.roomTypeId, from, to) <= 0) {
-      // co se povedlo, necháme; ohlásíme, kde došla kapacita
-      throw Object.assign(new Error(`Pro zvolený termín už není volná jednotka jednoho z typů (vytvořeno ${created.length} z ${rooms.length} pokojů).`), { partial: true, groupId: group.id });
+  // 1) KONTROLA KAPACITY DOPŘEDU (per typ) — skupina se vytvoří jen jako CELEK.
+  // Když není dost volných jednotek, nevytvoří se NIC a recepce dostane jasnou hlášku.
+  const wantByType = new Map<string, number>();
+  for (const r of rooms) wantByType.set(r.roomTypeId, (wantByType.get(r.roomTypeId) ?? 0) + 1);
+  const shortages: string[] = [];
+  for (const [rtId, want] of wantByType) {
+    const free = await freeUnitsForType(propertyId, rtId, from, to);
+    if (want > free) {
+      const rt = await prisma.roomType.findUnique({ where: { id: rtId }, select: { name: true } });
+      shortages.push(`${rt?.name ?? "typ"} — volných ${free}, požadováno ${want}`);
     }
+  }
+  if (shortages.length) {
+    const unit = property.inventoryUnit === InventoryUnit.bed ? "lůžek" : "pokojů";
+    throw new Error(`Pro zvolený termín není dost volných ${unit}; skupinu nelze vytvořit celou:\n• ${shortages.join("\n• ")}\nUprav počty nebo část přesuň na jiný typ.`);
+  }
+
+  // 2) Příprava hostů a cen (čtení + založení hostů) mimo transakci.
+  const organizerId = await createGuest(organizer);
+  const prepared: { room: GroupRoomInput; childAges: number[]; children: number; price: Awaited<ReturnType<typeof getStayPrice>>; guestId: string }[] = [];
+  for (const room of rooms) {
     const childAges = (room.childAges ?? []).filter((a) => Number.isFinite(a));
     const children = childAges.length || (room.children ?? 0);
     const price = await getStayPrice(room.roomTypeId, from, to, room.adults, childAges);
-    const guestId = room.firstName && room.lastName
-      ? await createGuest({ firstName: room.firstName, lastName: room.lastName })
-      : organizerId;
-    const res = await prisma.reservation.create({
-      data: {
-        code: generateReservationCode(),
-        property: { connect: { id: propertyId } }, group: { connect: { id: group.id } },
-        primaryGuest: { connect: { id: guestId } }, roomType: { connect: { id: room.roomTypeId } },
-        checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults: room.adults, children, childAges,
-        status: ReservationStatus.confirmed, source: ReservationSource.group, billingCycle: price.billingCycle,
-        totalAmount: price.total, cityTax: price.cityTax,
-        reservationGuests: { create: { guest: { connect: { id: guestId } }, isPrimary: true } },
-      },
-      select: { id: true },
-    });
-    created.push(res.id);
+    const guestId = room.firstName && room.lastName ? await createGuest({ firstName: room.firstName, lastName: room.lastName }) : organizerId;
+    prepared.push({ room, childAges, children, price, guestId });
   }
-  void mailer.sendGroupSummary(group.id); // jeden souhrnný e-mail organizátorovi (best-effort)
-  return getGroup(propertyId, group.id);
+
+  // 3) ATOMICKÉ vytvoření skupiny + VŠECH rezervací (vše, nebo nic).
+  const groupId = await prisma.$transaction(async (tx) => {
+    const group = await tx.reservationGroup.create({
+      data: { code: generateGroupCode(), name: input.name.trim() || "Skupina", propertyId, note: input.note?.trim() || null, organizerGuestId: organizerId, billing: input.billing ?? GroupBilling.individual },
+    });
+    for (const p of prepared) {
+      await tx.reservation.create({
+        data: {
+          code: generateReservationCode(),
+          property: { connect: { id: propertyId } }, group: { connect: { id: group.id } },
+          primaryGuest: { connect: { id: p.guestId } }, roomType: { connect: { id: p.room.roomTypeId } },
+          checkInDate: toDateOnly(from), checkOutDate: toDateOnly(to), nights, adults: p.room.adults, children: p.children, childAges: p.childAges,
+          status: ReservationStatus.confirmed, source: ReservationSource.group, billingCycle: p.price.billingCycle,
+          totalAmount: p.price.total, cityTax: p.price.cityTax,
+          reservationGuests: { create: { guest: { connect: { id: p.guestId } }, isPrimary: true } },
+        },
+      });
+    }
+    return group.id;
+  });
+  void mailer.sendGroupSummary(groupId); // jeden souhrnný e-mail organizátorovi (best-effort)
+  return getGroup(propertyId, groupId);
 }
 
 /** Znovu odešle souhrnný e-mail skupiny (scopováno na provozovnu). */
