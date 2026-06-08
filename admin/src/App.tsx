@@ -1331,7 +1331,17 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   {customer === "company" && <label className={pay === "company" ? "sel" : ""}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> Na fakturu firmě</label>}
                   {customer !== "company" && <label className={pay === "prepay" ? "sel" : ""}><input type="radio" checked={pay === "prepay"} onChange={() => setPay("prepay")} /> Platba předem — uhradit <input type="number" min={1} max={365} style={{ width: 56, marginLeft: 6, marginRight: 6 }} value={prepayDays} onChange={(e) => setPrepayDays(e.target.value)} /> dnů před příjezdem (jinak storno)</label>}
                 </div>
-                {pay === "prepay" && customer !== "company" && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Hostovi odešleme potvrzení s QR platbou. Den před vypršením lhůty přijde připomínka; bez úhrady se rezervace v termínu automaticky stornuje.</div>}
+                {pay === "prepay" && customer !== "company" && (() => {
+                  const n = Number(prepayDays);
+                  if (!(n > 0)) return null;
+                  const due = new Date(from + "T00:00:00"); due.setDate(due.getDate() - n);
+                  const today = new Date(todayIso() + "T00:00:00");
+                  const collapsed = due.getTime() < today.getTime();
+                  const fmt = (collapsed ? today : due).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+                  return collapsed
+                    ? <div style={{ fontSize: 12, marginTop: 6, color: "#c0392b" }}>⚠️ Termín příjezdu je dřív než zadaná lhůta — splatnost bude <b>ihned (dnes, {fmt})</b>, připomínka se nepošle a bez úhrady se rezervace následující den stornuje.</div>
+                    : <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Splatnost do <b>{fmt}</b>. Hostovi odešleme potvrzení s QR platbou, den předem přijde připomínka; bez úhrady se rezervace v termínu automaticky stornuje.</div>;
+                })()}
                 {bedMode && customer === "company" && (
                   <>
                     <div className="wz-sec">Firemní / dlouhodobé</div>
