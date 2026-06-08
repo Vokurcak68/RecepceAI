@@ -433,3 +433,42 @@ tr.row-click:hover td { background: #f3f6ff; }
   .req-actions > label > input[type="date"] { flex: 1; width: auto !important; }
   .req-actions > .btn { flex: 1 1 100%; }      /* tlačítko akce na celou šířku, dobře se trefí */
 }
+
+/* ── Grafický půdorys obsazenosti (FloorPlanView) ── */
+.fp-toggle { display: inline-flex; gap: 4px; margin-left: 8px; }
+.fp-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 6px 0 14px; font-size: 13px; color: var(--muted); }
+.fp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fp-sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid var(--line); }
+.fp-sw.occ { background: var(--accent); border-color: var(--accent); }
+.fp-sw.free { background: #eafaf1; border-color: #9ad9bb; }
+.fp-sw.oos { background: #eceff3; border-color: #d4dae3; }
+.fp-floor { margin-bottom: 18px; }
+.fp-floor-h { font-weight: 800; color: var(--muted); letter-spacing: .05em; margin: 4px 0 10px; font-size: 12px; text-transform: uppercase; }
+.fp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.fp-grid-rooms { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.fp-room { position: relative; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 78px; background: #fff; cursor: pointer; transition: transform .06s ease, box-shadow .06s ease; }
+.fp-room:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(27, 36, 64, .12); }
+.fp-room.free { background: #eafaf1; border-color: #9ad9bb; }
+.fp-room.occ { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fp-room.oos { background: #eceff3; border-color: #d4dae3; color: var(--muted); }
+.fp-num { font-weight: 800; font-size: 15px; }
+.fp-state { font-size: 13px; font-weight: 600; margin-top: 3px; }
+.fp-sub { font-size: 12px; opacity: .85; margin-top: 1px; }
+.fp-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.fp-tag { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(255,255,255,.22); }
+.fp-room.free .fp-tag, .fp-room.oos .fp-tag { background: #fff; border: 1px solid var(--line); color: var(--text); }
+.fp-roomlink { position: absolute; top: 7px; right: 9px; font-size: 11px; font-weight: 700; background: none; border: none; cursor: pointer; color: inherit; opacity: .7; padding: 0; }
+.fp-roomlink:hover { opacity: 1; text-decoration: underline; }
+.fp-bedroom { border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 10px; background: #fff; }
+.fp-bedroom-h { font-weight: 800; font-size: 13px; margin-bottom: 7px; }
+.fp-beds { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; }
+.fp-bed { border: 1.5px solid #9ad9bb; border-radius: 8px; padding: 6px 7px; font-size: 12px; background: #eafaf1; cursor: pointer; }
+.fp-bed.occ { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fp-bed.oos { background: #eceff3; border-color: #d4dae3; color: var(--muted); }
+.fp-bed.free { cursor: default; }
+.fp-bl { font-weight: 800; }
+.fp-bn { display: block; font-size: 11px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-compact .fp-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+.fp-compact .fp-room { min-height: 50px; padding: 7px 9px; }
+.fp-compact .fp-state { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-compact .fp-floor { margin-bottom: 12px; }

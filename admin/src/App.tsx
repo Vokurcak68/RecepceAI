@@ -224,7 +224,7 @@ export function App() {
         {prop && tab === "payments" && <PaymentsView selId={selId} />}
         {prop && tab === "cashregister" && <CashRegisterView selId={selId} />}
         {prop && tab === "documents" && <DocumentsView selId={selId} />}
-        {prop && tab === "reception" && <ReceptionView selId={selId} prop={prop} />}
+        {prop && tab === "reception" && <ReceptionView selId={selId} prop={prop} onOpen={setTab} />}
         {prop && tab === "companies" && <CompaniesView selId={selId} />}
         {prop && tab === "personrates" && <PersonRatesView selId={selId} />}
         {prop && tab === "bedrates" && <BedRatesView selId={selId} />}
@@ -877,7 +877,7 @@ function OccupancyView({ selId, prop, embedded }: { selId: string; prop?: Proper
 }
 
 // ── Domovská obrazovka recepce „Recepce (dnešek)" ────────────
-function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
+function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property; onOpen?: (tab: string) => void }) {
   const { data, error, reload } = useAsync<ReceptionToday>(() => api.reception(), [selId]);
   const bedMode = prop.inventoryUnit === "bed";
   const board = useAsync<(RoomBoardItem | BedBoardItem)[]>(() => bedMode ? api.bedBoard() : api.roomBoard(), [selId]);
@@ -979,6 +979,13 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
           </div>
         );
       })()}
+
+      {(board.data?.length ?? 0) > 0 && (
+        <div className="panel">
+          <h3>Plánek obsazenosti <button className="btn sm ghost" style={{ float: "right" }} onClick={() => onOpen?.("roomstatus")}>Zobrazit celý přehled →</button></h3>
+          <div style={{ padding: 12 }}><FloorPlanView prop={prop} compact onPickRes={setDetailId} onOpenFull={() => onOpen?.("roomstatus")} /></div>
+        </div>
+      )}
 
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
@@ -1497,21 +1504,156 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 const ROOM_STATES: [string, string][] = [["clean", "Uklizeno"], ["dirty", "K úklidu"], ["to_inspect", "Zkontrolovat"], ["inspected", "Zkontrolováno"], ["out_of_service", "Mimo"]];
 const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{ROOM_STATUS_LABEL[s] ?? s}</span>;
 
+// ── Grafický půdorys obsazenosti (po patrech, interaktivní) ──
+// Jen další pohled na stávající data (roomBoard/bedBoard) — barevně odliší
+// obsazené × volné, proklik na rezervaci/pokoj. compact = náhled na Recepci.
+const floorName = (n: number) => (n === 0 ? "Přízemí" : `${n}. patro`);
+
+function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Property; compact?: boolean; onPickRes?: (resId: string) => void; onOpenFull?: () => void }) {
+  const bedMode = prop.inventoryUnit === "bed";
+  const { data, error, reload } = useAsync<(RoomBoardItem | BedBoardItem)[]>(() => (bedMode ? api.bedBoard() : api.roomBoard()), [prop.id]);
+  const [openRoom, setOpenRoom] = useState<string | null>(null);
+  const [openRes, setOpenRes] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+
+  if (openRes) return <ReservationDetailView id={openRes} prop={prop} onBack={() => { setOpenRes(null); reload(); }} />;
+  if (openRoom) return <RoomDetailView roomId={openRoom} prop={prop} onBack={() => { setOpenRoom(null); reload(); }} />;
+
+  const pickRes = (id: string) => (onPickRes ? onPickRes(id) : compact ? onOpenFull?.() : setOpenRes(id));
+  const pickRoom = (id: string) => (compact ? onOpenFull?.() : setOpenRoom(id));
+  const items = data ?? [];
+  const floorsOf = (fs: number[]) => [...new Set(fs)].sort((a, b) => a - b);
+
+  const legend = (
+    <div className="fp-legend">
+      <span><i className="fp-sw occ" /> Obsazené</span>
+      <span><i className="fp-sw free" /> Volné</span>
+      <span><i className="fp-sw oos" /> Mimo provoz</span>
+      {!bedMode && !compact && <span className="muted">⚠ nevyrovnaný účet · 🚫 nerušit · 🔁 odjezd dnes · → příjezd · 🧹/🔧 úklid/údržba</span>}
+    </div>
+  );
+
+  // ───── Pokoje (hotel/penzion) ─────
+  if (!bedMode) {
+    const all = items as RoomBoardItem[];
+    const filters: [string, string, (r: RoomBoardItem) => boolean][] = [
+      ["all", "Vše", () => true],
+      ["occupied", "Obsazené", (r) => !!r.occupant],
+      ["free", "Volné", (r) => !r.occupant && r.status !== "out_of_service"],
+      ["arrivals", "Příjezdy dnes", (r) => !!r.arrival],
+      ["dirty", "K úklidu", (r) => r.status === "dirty"],
+      ["maint", "Údržba", (r) => r.openMaintenance > 0],
+    ];
+    const pred = filters.find((f) => f[0] === filter)?.[2] ?? (() => true);
+    const shown = all.filter(pred);
+    const floors = floorsOf(shown.map((r) => r.floor));
+    const tile = (r: RoomBoardItem) => {
+      const occ = r.occupant;
+      const cls = occ ? "occ" : r.status === "out_of_service" ? "oos" : "free";
+      return (
+        <div key={r.id} className={`fp-room ${cls}`} title={occ ? occ.name : "Volný"} onClick={() => (occ ? pickRes(occ.reservationId) : pickRoom(r.id))}>
+          {!compact && <button className="fp-roomlink" onClick={(e) => { e.stopPropagation(); pickRoom(r.id); }}>pokoj ›</button>}
+          <div className="fp-num">{r.number}</div>
+          <div className="fp-state">{occ ? `● ${occ.name}` : r.status === "out_of_service" ? "⛔ mimo" : "○ volný"}</div>
+          {occ && !compact && <div className="fp-sub">do {d(occ.checkOutDate)}</div>}
+          {!compact && (
+            <div className="fp-badges">
+              {occ && Number(occ.balance) > 0 && <span className="fp-tag">⚠ {money(occ.balance)}</span>}
+              {occ?.dnd && <span className="fp-tag">🚫</span>}
+              {occ?.departsToday && <span className="fp-tag">🔁</span>}
+              {r.arrival && <span className="fp-tag">→ {r.arrival.name}</span>}
+              {r.openHousekeeping > 0 && <span className="fp-tag">🧹 {r.openHousekeeping}</span>}
+              {r.openMaintenance > 0 && <span className="fp-tag">🔧 {r.openMaintenance}</span>}
+            </div>
+          )}
+        </div>
+      );
+    };
+    return (
+      <div className={`floorplan ${compact ? "fp-compact" : ""}`}>
+        {error && <div className="error">{error}</div>}
+        {!compact && <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filters.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l} ({all.filter(p).length})</button>)}</div>}
+        {legend}
+        {floors.length === 0 ? <div className="muted">Žádné pokoje.</div> : floors.map((f) => (
+          <div className="fp-floor" key={f}>
+            <div className="fp-floor-h">{floorName(f)}</div>
+            <div className="fp-grid">{shown.filter((r) => r.floor === f).sort((a, b) => a.number.localeCompare(b.number, "cs", { numeric: true })).map(tile)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ───── Lůžka v pokojích (ubytovna) ─────
+  const allB = items as BedBoardItem[];
+  const filtersB: [string, string, (b: BedBoardItem) => boolean][] = [
+    ["all", "Vše", () => true],
+    ["occupied", "Obsazená", (b) => !!b.current],
+    ["free", "Volná", (b) => !b.current && b.status !== "out_of_service"],
+    ["dirty", "K úklidu", (b) => b.status === "dirty"],
+  ];
+  const predB = filtersB.find((f) => f[0] === filter)?.[2] ?? (() => true);
+  const shownB = allB.filter(predB);
+  const floorsB = floorsOf(shownB.map((b) => b.floor));
+  const roomsOnFloor = (f: number) => {
+    const m = new Map<string, BedBoardItem[]>();
+    for (const b of shownB.filter((x) => x.floor === f)) { if (!m.has(b.roomNumber)) m.set(b.roomNumber, []); m.get(b.roomNumber)!.push(b); }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "cs", { numeric: true }));
+  };
+  const bedCell = (b: BedBoardItem) => {
+    const cur = b.current;
+    const cls = cur ? "occ" : b.status === "out_of_service" ? "oos" : "free";
+    return (
+      <div key={b.bedId} className={`fp-bed ${cls}`} title={cur ? cur.guestName : `Lůžko ${b.label}`} onClick={() => cur && pickRes(cur.reservationId)}>
+        <span className="fp-bl">{b.label}</span>
+        <span className="fp-bn">{cur ? (cur.companyName || cur.guestName) : "volné"}</span>
+      </div>
+    );
+  };
+  return (
+    <div className={`floorplan ${compact ? "fp-compact" : ""}`}>
+      {error && <div className="error">{error}</div>}
+      {!compact && <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filtersB.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l} ({allB.filter(p).length})</button>)}</div>}
+      {legend}
+      {floorsB.length === 0 ? <div className="muted">Žádná lůžka.</div> : floorsB.map((f) => (
+        <div className="fp-floor" key={f}>
+          <div className="fp-floor-h">{floorName(f)}</div>
+          <div className="fp-grid fp-grid-rooms">
+            {roomsOnFloor(f).map(([rn, beds]) => (
+              <div className="fp-bedroom" key={rn}>
+                <div className="fp-bedroom-h">Pokoj {rn}</div>
+                <div className="fp-beds">{beds.sort((a, b) => a.label.localeCompare(b.label, "cs", { numeric: true })).map(bedCell)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RoomBoardView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<RoomBoardItem[]>(() => api.roomBoard(), [selId]);
   const typesA = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
   const priceByName = (n: string | null) => { const t = (typesA.data ?? []).find((x) => x.name === n); return t ? money(t.basePrice) : ""; };
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
+  const [view, setView] = useState<"list" | "plan">("list");
   if (openId) return <RoomDetailView roomId={openId} prop={prop} onBack={() => { setOpenId(null); reload(); }} />;
   const rooms = data ?? [];
   const counts = { occupied: rooms.filter((r) => r.occupant).length, free: rooms.filter((r) => !r.occupant).length, arrivals: rooms.filter((r) => r.arrival).length, dirty: rooms.filter((r) => r.status === "dirty").length, maint: rooms.filter((r) => r.openMaintenance > 0).length };
   const match = (r: RoomBoardItem) => filter === "all" ? true : filter === "occupied" ? !!r.occupant : filter === "free" ? !r.occupant : filter === "arrivals" ? !!r.arrival : filter === "dirty" ? r.status === "dirty" : filter === "maint" ? r.openMaintenance > 0 : true;
   const shown = rooms.filter(match);
   const FILTERS: [string, string][] = [["all", `Vše (${rooms.length})`], ["occupied", `Obsazené (${counts.occupied})`], ["free", `Volné (${counts.free})`], ["arrivals", `Příjezdy dnes (${counts.arrivals})`], ["dirty", `K úklidu (${counts.dirty})`], ["maint", `Údržba (${counts.maint})`]];
+  if (view === "plan") return (
+    <>
+      <div className="h1"><span>Přehled pokojů</span> <span className="fp-toggle"><button className="btn sm ghost" onClick={() => setView("list")}>☰ Seznam</button> <button className="btn sm" onClick={() => setView("plan")}>▦ Půdorys</button></span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
+      <FloorPlanView prop={prop} />
+    </>
+  );
   return (
     <>
-      <div className="h1"><span>Přehled pokojů</span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
+      <div className="h1"><span>Přehled pokojů</span> <span className="fp-toggle"><button className="btn sm" onClick={() => setView("list")}>☰ Seznam</button> <button className="btn sm ghost" onClick={() => setView("plan")}>▦ Půdorys</button></span> <button className="btn ghost sm" onClick={reload}>↻ Obnovit</button></div>
       {error && <div className="error">{error}</div>}
       <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
         {FILTERS.map(([v, l]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l}</button>)}
