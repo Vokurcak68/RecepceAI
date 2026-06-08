@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, type ReactNode, type CSSProperties, type ChangeEvent } from "react";
+import type * as React from "react";
 import QRCode from "qrcode";
 import { useConfirm } from "./confirm";
 import {
@@ -1504,10 +1505,14 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
 const ROOM_STATES: [string, string][] = [["clean", "Uklizeno"], ["dirty", "K úklidu"], ["to_inspect", "Zkontrolovat"], ["inspected", "Zkontrolováno"], ["out_of_service", "Mimo"]];
 const RoomPill = ({ s }: { s: string }) => <span className={`rs-pill rs-${s}`}>{ROOM_STATUS_LABEL[s] ?? s}</span>;
 
-// ── Grafický půdorys obsazenosti (po patrech, interaktivní) ──
+// ── Grafický půdorys obsazenosti (po patrech, interaktivní + editor rozložení) ──
 // Jen další pohled na stávající data (roomBoard/bedBoard) — barevně odliší
 // obsazené × volné, proklik na rezervaci/pokoj. compact = náhled na Recepci.
+// Edit režim: pokoje/boxy lůžek se rozmístí tažením (uložené souřadnice posX/posY/w/h).
 const floorName = (n: number) => (n === 0 ? "Přízemí" : `${n}. patro`);
+const FP_CANVAS_W = 860, FP_GAP = 14, FP_SNAP = 6;
+type FPPos = { x: number; y: number; w: number; h: number };
+type FPNode = { id: string; floor: number; sx: number | null; sy: number | null; sw: number | null; sh: number | null; defW: number; defH: number; wrapClass: string; inner: ReactNode; onClick?: () => void };
 
 function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Property; compact?: boolean; onPickRes?: (resId: string) => void; onOpenFull?: () => void }) {
   const bedMode = prop.inventoryUnit === "bed";
@@ -1515,6 +1520,11 @@ function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Propert
   const [openRoom, setOpenRoom] = useState<string | null>(null);
   const [openRes, setOpenRes] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
+  const [edit, setEdit] = useState(false);
+  const [lay, setLay] = useState<Record<string, FPPos>>({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const drag = useRef<null | { id: string; mode: "move" | "resize"; px: number; py: number; ox: number; oy: number; ow: number; oh: number }>(null);
 
   if (openRes) return <ReservationDetailView id={openRes} prop={prop} onBack={() => { setOpenRes(null); reload(); }} />;
   if (openRoom) return <RoomDetailView roomId={openRoom} prop={prop} onBack={() => { setOpenRoom(null); reload(); }} />;
@@ -1524,110 +1534,155 @@ function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Propert
   const items = data ?? [];
   const floorsOf = (fs: number[]) => [...new Set(fs)].sort((a, b) => a - b);
 
+  // shelf-packing auto rozložení (pro uzly bez uložených souřadnic)
+  const autoPos = (ns: FPNode[]) => {
+    const m: Record<string, FPPos> = {}; let x = 0, y = 0, rowH = 0;
+    for (const n of ns) {
+      if (x + n.defW > FP_CANVAS_W && x > 0) { x = 0; y += rowH + FP_GAP; rowH = 0; }
+      m[n.id] = { x, y, w: n.defW, h: n.defH }; x += n.defW + FP_GAP; rowH = Math.max(rowH, n.defH);
+    }
+    return m;
+  };
+  const effOf = (ns: FPNode[]) => {
+    const auto = autoPos(ns); const m: Record<string, FPPos> = {};
+    for (const n of ns) m[n.id] = (n.sx != null && n.sy != null) ? { x: n.sx, y: n.sy, w: n.sw ?? n.defW, h: n.sh ?? n.defH } : auto[n.id];
+    return m;
+  };
+
+  const onDown = (e: React.PointerEvent, id: string, mode: "move" | "resize") => {
+    if (!edit) return;
+    e.stopPropagation(); e.preventDefault();
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    const c = lay[id]; if (!c) return;
+    drag.current = { id, mode, px: e.clientX, py: e.clientY, ox: c.x, oy: c.y, ow: c.w, oh: c.h };
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const dr = drag.current; if (!dr) return;
+    const dx = e.clientX - dr.px, dy = e.clientY - dr.py, snap = (v: number) => Math.round(v / FP_SNAP) * FP_SNAP;
+    setLay((L) => {
+      const c = L[dr.id]; if (!c) return L;
+      if (dr.mode === "move") return { ...L, [dr.id]: { ...c, x: Math.max(0, Math.min(FP_CANVAS_W - c.w, snap(dr.ox + dx))), y: Math.max(0, snap(dr.oy + dy)) } };
+      return { ...L, [dr.id]: { ...c, w: Math.max(96, Math.min(FP_CANVAS_W, snap(dr.ow + dx))), h: Math.max(54, snap(dr.oh + dy)) } };
+    });
+  };
+  const onUp = () => { drag.current = null; };
+
+  // ── stavba uzlů dle režimu (pokoj × box lůžek) ──
+  let nodes: FPNode[] = [];
+  let filtersBar: ReactNode = null;
+  if (!bedMode) {
+    const all = items as RoomBoardItem[];
+    const filters: [string, string, (r: RoomBoardItem) => boolean][] = [
+      ["all", "Vše", () => true], ["occupied", "Obsazené", (r) => !!r.occupant], ["free", "Volné", (r) => !r.occupant && r.status !== "out_of_service"],
+      ["arrivals", "Příjezdy dnes", (r) => !!r.arrival], ["dirty", "K úklidu", (r) => r.status === "dirty"], ["maint", "Údržba", (r) => r.openMaintenance > 0],
+    ];
+    const pred = edit ? () => true : (filters.find((f) => f[0] === filter)?.[2] ?? (() => true));
+    const shown = [...all].filter(pred).sort((a, b) => a.number.localeCompare(b.number, "cs", { numeric: true }));
+    nodes = shown.map((r) => {
+      const occ = r.occupant;
+      return {
+        id: r.id, floor: r.floor, sx: r.posX, sy: r.posY, sw: r.w, sh: r.h, defW: 150, defH: 90,
+        wrapClass: `fp-room ${occ ? "occ" : r.status === "out_of_service" ? "oos" : "free"}`,
+        onClick: () => (occ ? pickRes(occ.reservationId) : pickRoom(r.id)),
+        inner: (<>
+          {!compact && !edit && <button className="fp-roomlink" onClick={(e) => { e.stopPropagation(); pickRoom(r.id); }}>pokoj ›</button>}
+          <div className="fp-num">{r.number}</div>
+          <div className="fp-state">{occ ? `● ${occ.name}` : r.status === "out_of_service" ? "⛔ mimo" : "○ volný"}</div>
+          {occ && !compact && <div className="fp-sub">do {d(occ.checkOutDate)}</div>}
+          {!compact && <div className="fp-badges">
+            {occ && Number(occ.balance) > 0 && <span className="fp-tag">⚠ {money(occ.balance)}</span>}
+            {occ?.dnd && <span className="fp-tag">🚫</span>}
+            {occ?.departsToday && <span className="fp-tag">🔁</span>}
+            {r.arrival && <span className="fp-tag">→ {r.arrival.name}</span>}
+            {r.openHousekeeping > 0 && <span className="fp-tag">🧹 {r.openHousekeeping}</span>}
+            {r.openMaintenance > 0 && <span className="fp-tag">🔧 {r.openMaintenance}</span>}
+          </div>}
+        </>),
+      };
+    });
+    if (!compact) filtersBar = <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filters.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)} disabled={edit}>{l} ({all.filter(p).length})</button>)}</div>;
+  } else {
+    const allB = items as BedBoardItem[];
+    const filters: [string, string, (b: BedBoardItem) => boolean][] = [
+      ["all", "Vše", () => true], ["occupied", "Obsazená", (b) => !!b.current], ["free", "Volná", (b) => !b.current && b.status !== "out_of_service"], ["dirty", "K úklidu", (b) => b.status === "dirty"],
+    ];
+    const pred = edit ? () => true : (filters.find((f) => f[0] === filter)?.[2] ?? (() => true));
+    const byRoom = new Map<string, BedBoardItem[]>();
+    for (const b of allB.filter(pred)) { if (!byRoom.has(b.roomId)) byRoom.set(b.roomId, []); byRoom.get(b.roomId)!.push(b); }
+    nodes = [...byRoom.entries()].map(([roomId, beds]) => {
+      const first = beds[0]; const rows = Math.ceil(beds.length / 3);
+      return {
+        id: roomId, floor: first.floor, sx: first.roomPosX, sy: first.roomPosY, sw: first.roomW, sh: first.roomH, defW: 220, defH: 50 + rows * 48, wrapClass: "fp-bedroom",
+        inner: (<>
+          <div className="fp-bedroom-h">Pokoj {first.roomNumber}</div>
+          <div className="fp-beds">{[...beds].sort((a, b) => a.label.localeCompare(b.label, "cs", { numeric: true })).map((b) => {
+            const cur = b.current; const cls = cur ? "occ" : b.status === "out_of_service" ? "oos" : "free";
+            return <div key={b.bedId} className={`fp-bed ${cls}`} title={cur ? cur.guestName : `Lůžko ${b.label}`} onClick={() => cur && pickRes(cur.reservationId)}><span className="fp-bl">{b.label}</span><span className="fp-bn">{cur ? (cur.companyName || cur.guestName) : "volné"}</span></div>;
+          })}</div>
+        </>),
+      };
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    if (!compact) filtersBar = <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filters.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)} disabled={edit}>{l} ({allB.filter(p).length})</button>)}</div>;
+  }
+
+  const hasLayout = nodes.some((n) => n.sx != null);
+  const canvasMode = (edit || hasLayout) && !compact;
+  const floors = floorsOf(nodes.map((n) => n.floor));
+
+  const startEdit = () => { const m: Record<string, FPPos> = {}; for (const f of floors) Object.assign(m, effOf(nodes.filter((n) => n.floor === f))); setLay(m); setEdit(true); setMsg(""); };
+  const save = async () => { setSaving(true); setMsg(""); try { await api.saveRoomLayout(Object.entries(lay).map(([id, v]) => ({ id, posX: v.x, posY: v.y, w: v.w, h: v.h }))); setEdit(false); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setSaving(false); } };
+
   const legend = (
     <div className="fp-legend">
       <span><i className="fp-sw occ" /> Obsazené</span>
       <span><i className="fp-sw free" /> Volné</span>
       <span><i className="fp-sw oos" /> Mimo provoz</span>
-      {!bedMode && !compact && <span className="muted">⚠ nevyrovnaný účet · 🚫 nerušit · 🔁 odjezd dnes · → příjezd · 🧹/🔧 úklid/údržba</span>}
+      {!bedMode && !compact && <span className="muted">⚠ účet · 🚫 nerušit · 🔁 odjezd dnes · → příjezd · 🧹/🔧 úklid/údržba</span>}
     </div>
   );
 
-  // ───── Pokoje (hotel/penzion) ─────
-  if (!bedMode) {
-    const all = items as RoomBoardItem[];
-    const filters: [string, string, (r: RoomBoardItem) => boolean][] = [
-      ["all", "Vše", () => true],
-      ["occupied", "Obsazené", (r) => !!r.occupant],
-      ["free", "Volné", (r) => !r.occupant && r.status !== "out_of_service"],
-      ["arrivals", "Příjezdy dnes", (r) => !!r.arrival],
-      ["dirty", "K úklidu", (r) => r.status === "dirty"],
-      ["maint", "Údržba", (r) => r.openMaintenance > 0],
-    ];
-    const pred = filters.find((f) => f[0] === filter)?.[2] ?? (() => true);
-    const shown = all.filter(pred);
-    const floors = floorsOf(shown.map((r) => r.floor));
-    const tile = (r: RoomBoardItem) => {
-      const occ = r.occupant;
-      const cls = occ ? "occ" : r.status === "out_of_service" ? "oos" : "free";
-      return (
-        <div key={r.id} className={`fp-room ${cls}`} title={occ ? occ.name : "Volný"} onClick={() => (occ ? pickRes(occ.reservationId) : pickRoom(r.id))}>
-          {!compact && <button className="fp-roomlink" onClick={(e) => { e.stopPropagation(); pickRoom(r.id); }}>pokoj ›</button>}
-          <div className="fp-num">{r.number}</div>
-          <div className="fp-state">{occ ? `● ${occ.name}` : r.status === "out_of_service" ? "⛔ mimo" : "○ volný"}</div>
-          {occ && !compact && <div className="fp-sub">do {d(occ.checkOutDate)}</div>}
-          {!compact && (
-            <div className="fp-badges">
-              {occ && Number(occ.balance) > 0 && <span className="fp-tag">⚠ {money(occ.balance)}</span>}
-              {occ?.dnd && <span className="fp-tag">🚫</span>}
-              {occ?.departsToday && <span className="fp-tag">🔁</span>}
-              {r.arrival && <span className="fp-tag">→ {r.arrival.name}</span>}
-              {r.openHousekeeping > 0 && <span className="fp-tag">🧹 {r.openHousekeeping}</span>}
-              {r.openMaintenance > 0 && <span className="fp-tag">🔧 {r.openMaintenance}</span>}
-            </div>
-          )}
-        </div>
-      );
-    };
-    return (
-      <div className={`floorplan ${compact ? "fp-compact" : ""}`}>
-        {error && <div className="error">{error}</div>}
-        {!compact && <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filters.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l} ({all.filter(p).length})</button>)}</div>}
-        {legend}
-        {floors.length === 0 ? <div className="muted">Žádné pokoje.</div> : floors.map((f) => (
-          <div className="fp-floor" key={f}>
-            <div className="fp-floor-h">{floorName(f)}</div>
-            <div className="fp-grid">{shown.filter((r) => r.floor === f).sort((a, b) => a.number.localeCompare(b.number, "cs", { numeric: true })).map(tile)}</div>
-          </div>
-        ))}
+  const floorBlock = (f: number) => {
+    const fn = nodes.filter((n) => n.floor === f);
+    if (!canvasMode) return (
+      <div className="fp-floor" key={f}>
+        <div className="fp-floor-h">{floorName(f)}</div>
+        <div className={`fp-grid ${bedMode ? "fp-grid-rooms" : ""}`}>{fn.map((n) => <div key={n.id} className={n.wrapClass} onClick={n.onClick}>{n.inner}</div>)}</div>
       </div>
     );
-  }
+    const pos = edit ? Object.fromEntries(fn.map((n) => [n.id, lay[n.id] ?? autoPos(fn)[n.id]])) as Record<string, FPPos> : effOf(fn);
+    const height = Math.max(200, ...fn.map((n) => (pos[n.id]?.y ?? 0) + (pos[n.id]?.h ?? n.defH) + FP_GAP));
+    return (
+      <div className="fp-floor" key={f}>
+        <div className="fp-floor-h">{floorName(f)}</div>
+        <div className="fp-canvas-wrap"><div className={`fp-canvas ${edit ? "fp-editing" : ""}`} style={{ width: FP_CANVAS_W, height }}>
+          {fn.map((n) => { const p = pos[n.id] ?? { x: 0, y: 0, w: n.defW, h: n.defH };
+            return (
+              <div key={n.id} className={`fp-node ${n.wrapClass}`} style={{ left: p.x, top: p.y, width: p.w, height: p.h }}
+                onClick={edit ? undefined : n.onClick}
+                onPointerDown={edit ? (e) => onDown(e, n.id, "move") : undefined} onPointerMove={edit ? onMove : undefined} onPointerUp={edit ? onUp : undefined}>
+                {n.inner}
+                {edit && <span className="fp-resize" onPointerDown={(e) => onDown(e, n.id, "resize")} onPointerMove={onMove} onPointerUp={onUp} />}
+              </div>
+            );
+          })}
+        </div></div>
+      </div>
+    );
+  };
 
-  // ───── Lůžka v pokojích (ubytovna) ─────
-  const allB = items as BedBoardItem[];
-  const filtersB: [string, string, (b: BedBoardItem) => boolean][] = [
-    ["all", "Vše", () => true],
-    ["occupied", "Obsazená", (b) => !!b.current],
-    ["free", "Volná", (b) => !b.current && b.status !== "out_of_service"],
-    ["dirty", "K úklidu", (b) => b.status === "dirty"],
-  ];
-  const predB = filtersB.find((f) => f[0] === filter)?.[2] ?? (() => true);
-  const shownB = allB.filter(predB);
-  const floorsB = floorsOf(shownB.map((b) => b.floor));
-  const roomsOnFloor = (f: number) => {
-    const m = new Map<string, BedBoardItem[]>();
-    for (const b of shownB.filter((x) => x.floor === f)) { if (!m.has(b.roomNumber)) m.set(b.roomNumber, []); m.get(b.roomNumber)!.push(b); }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "cs", { numeric: true }));
-  };
-  const bedCell = (b: BedBoardItem) => {
-    const cur = b.current;
-    const cls = cur ? "occ" : b.status === "out_of_service" ? "oos" : "free";
-    return (
-      <div key={b.bedId} className={`fp-bed ${cls}`} title={cur ? cur.guestName : `Lůžko ${b.label}`} onClick={() => cur && pickRes(cur.reservationId)}>
-        <span className="fp-bl">{b.label}</span>
-        <span className="fp-bn">{cur ? (cur.companyName || cur.guestName) : "volné"}</span>
-      </div>
-    );
-  };
   return (
     <div className={`floorplan ${compact ? "fp-compact" : ""}`}>
       {error && <div className="error">{error}</div>}
-      {!compact && <div className="toolbar" style={{ flexWrap: "wrap", gap: 8 }}>{filtersB.map(([v, l, p]) => <button key={v} className={`btn sm ${filter === v ? "" : "ghost"}`} onClick={() => setFilter(v)}>{l} ({allB.filter(p).length})</button>)}</div>}
-      {legend}
-      {floorsB.length === 0 ? <div className="muted">Žádná lůžka.</div> : floorsB.map((f) => (
-        <div className="fp-floor" key={f}>
-          <div className="fp-floor-h">{floorName(f)}</div>
-          <div className="fp-grid fp-grid-rooms">
-            {roomsOnFloor(f).map(([rn, beds]) => (
-              <div className="fp-bedroom" key={rn}>
-                <div className="fp-bedroom-h">Pokoj {rn}</div>
-                <div className="fp-beds">{beds.sort((a, b) => a.label.localeCompare(b.label, "cs", { numeric: true })).map(bedCell)}</div>
-              </div>
-            ))}
-          </div>
+      {msg && <div className="error">{msg}</div>}
+      {!compact && (
+        <div className="toolbar" style={{ gap: 8, marginBottom: 4 }}>
+          {!edit && <button className="btn sm ghost" onClick={startEdit}>✎ Upravit rozložení</button>}
+          {edit && <><button className="btn sm" onClick={save} disabled={saving}>💾 Uložit rozložení</button> <button className="btn sm ghost" onClick={() => { setEdit(false); setMsg(""); }} disabled={saving}>Zrušit</button> <span className="muted" style={{ fontSize: 13 }}>Táhni dlaždice myší; roh vpravo dole mění velikost.</span></>}
         </div>
-      ))}
+      )}
+      {!edit && filtersBar}
+      {legend}
+      {floors.length === 0 ? <div className="muted">{bedMode ? "Žádná lůžka." : "Žádné pokoje."}</div> : floors.map(floorBlock)}
     </div>
   );
 }

@@ -184,6 +184,7 @@ export const api = {
 
   rooms: () => req<Room[]>(`/admin/rooms`),
   roomBoard: () => req<RoomBoardItem[]>(`/admin/room-board?_=${Date.now()}`),
+  saveRoomLayout: (rooms: RoomLayout[]) => req<{ saved: number }>(`/admin/rooms/layout`, { method: "PATCH", body: JSON.stringify({ rooms }) }),
   roomDetail: (id: string) => req<RoomDetail>(`/admin/rooms/${id}/detail?_=${Date.now()}`),
   setDnd: (reservationId: string, on: boolean) => req(`/admin/reservations/${reservationId}/dnd`, { method: "POST", body: JSON.stringify({ on }) }),
   roomCandidates: (reservationId: string) => req<RoomCandidate[]>(`/admin/reservations/${reservationId}/room-candidates`),
@@ -413,7 +414,7 @@ export type ServiceRequest = {
   room?: { number: string } | null; resolvedBy?: { id: string; name: string } | null;
 };
 export type StaffRoom = { id: string; number: string; status: string; roomType?: { name: string } | null };
-export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean; balance: Money; dnd?: boolean } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
+export type RoomBoardItem = { id: string; number: string; floor: number; roomType: string | null; status: string; posX: number | null; posY: number | null; w: number | null; h: number | null; occupant: { reservationId: string; name: string; checkInDate: string; checkOutDate: string; departsToday: boolean; balance: Money; dnd?: boolean } | null; arrival: { reservationId: string; name: string } | null; openHousekeeping: number; openMaintenance: number };
 export type RoomResItem = { id: string; code: string; guestName: string; status: string; checkInDate: string; checkOutDate: string; balance: Money };
 export type RoomReqItem = { id: string; type: string; domain: string; status: string; description: string | null; note?: string | null; imageUrls?: string[]; resolvedAt?: string | null; resolvedByName?: string | null; createdAt: string };
 export type RoomDetail = { room: { id: string; number: string; floor: number; status: string; lockType: string; notes: string; roomType: { id: string; name: string } }; occupantId: string | null; occupantBalance: string | null; occupantDnd?: boolean; reservations: RoomResItem[]; requests: RoomReqItem[] };
@@ -429,7 +430,8 @@ export type BedReservationsData = { bed: { id: string; label: string; roomNumber
 export type PersonRate = { id: string; name: string; ageFrom: number | null; ageTo: number | null; pricePerNight: Money; sortOrder: number; active: boolean };
 export type BedRate = { id: string; name: string; pricePerNight: Money; sortOrder: number; active: boolean };
 export type OccupationItem = { id: string; reservationId: string; bedId: string; occupantId: string; occupantName: string; occupantPhone: string | null; fromDate: string; toDate: string; status: "active" | "ended"; note: string | null; nights: number };
-export type BedBoardItem = { bedId: string; label: string; roomNumber: string; floor: number; roomTypeId: string; status: string; current: BedCurrentRes | null; upcoming: number; nextFrom: string | null };
+export type BedBoardItem = { bedId: string; label: string; roomId: string; roomNumber: string; floor: number; roomTypeId: string; status: string; roomPosX: number | null; roomPosY: number | null; roomW: number | null; roomH: number | null; current: BedCurrentRes | null; upcoming: number; nextFrom: string | null };
+export type RoomLayout = { id: string; posX: number; posY: number; w: number; h: number };
 export type Deposit = { id: string; amount: Money; method: string; status: "held" | "returned" | "forfeited"; takenAt: string; returnedAt: string | null; returnedAmount: Money | null; note: string | null; reservationId: string | null; companyId: string | null };
 export const DEPOSIT_STATUS_LABEL: Record<string, string> = { held: "držena", returned: "vrácena", forfeited: "zadržena" };
 export type MoveItem = { date: string; kind: "reservation" | "occupancy"; name: string; where: string; code: string | null; companyName: string | null };

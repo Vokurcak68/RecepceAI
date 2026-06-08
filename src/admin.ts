@@ -293,11 +293,21 @@ export async function roomBoard(propertyId: string) {
     const o = occ.get(r.id); const a = arr.get(r.id); const rq = reqs.get(r.id) ?? { housekeeping: 0, maintenance: 0 };
     return {
       id: r.id, number: r.number, floor: r.floor, roomType: r.roomType?.name ?? null, status: r.status,
+      posX: r.posX, posY: r.posY, w: r.w, h: r.h,
       occupant: o ? { reservationId: o.id, name: `${o.primaryGuest.firstName} ${o.primaryGuest.lastName}`, checkInDate: o.checkInDate, checkOutDate: o.checkOutDate, departsToday: o.checkOutDate.getTime() === todayMs, balance: balances.get(r.id) ?? "0", dnd: o.doNotDisturb } : null,
       arrival: a ? { reservationId: a.id, name: `${a.primaryGuest.firstName} ${a.primaryGuest.lastName}` } : null,
       openHousekeeping: rq.housekeeping, openMaintenance: rq.maintenance,
     };
   });
+}
+
+/** Uloží rozložení pokojů na grafickém půdorysu (souřadnice/velikost). Scopováno na provozovnu. */
+export async function setRoomLayout(propertyId: string, rooms: { id: string; posX: number; posY: number; w: number; h: number }[]) {
+  const owned = new Set((await prisma.room.findMany({ where: { id: { in: rooms.map((r) => r.id) }, propertyId }, select: { id: true } })).map((r) => r.id));
+  const ops = rooms.filter((r) => owned.has(r.id)).map((r) =>
+    prisma.room.update({ where: { id: r.id }, data: { posX: Math.round(r.posX), posY: Math.round(r.posY), w: Math.round(r.w), h: Math.round(r.h) } }));
+  await prisma.$transaction(ops);
+  return { saved: ops.length };
 }
 
 /** Detail pokoje — vše pro centrální ovládání: rezervace na pokoji, aktuální host
@@ -344,7 +354,7 @@ export async function bedReservationBoard(propertyId: string) {
   const today = toDateOnly(new Date());
   const beds = await prisma.bed.findMany({
     where: { propertyId },
-    include: { room: { select: { number: true, floor: true, roomTypeId: true } } },
+    include: { room: { select: { id: true, number: true, floor: true, roomTypeId: true, posX: true, posY: true, w: true, h: true } } },
     orderBy: [{ room: { floor: "asc" } }, { label: "asc" }],
   });
   const resv = await prisma.reservation.findMany({
@@ -360,7 +370,8 @@ export async function bedReservationBoard(propertyId: string) {
     const cur = list.find((r) => r.checkInDate <= today && r.checkOutDate > today) ?? null;
     const upcoming = list.filter((r) => r.checkInDate > today);
     return {
-      bedId: b.id, label: b.label, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.status,
+      bedId: b.id, label: b.label, roomId: b.room.id, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.status,
+      roomPosX: b.room.posX, roomPosY: b.room.posY, roomW: b.room.w, roomH: b.room.h,
       current: cur ? { reservationId: cur.id, code: cur.code, guestName: occByBed.get(b.id) ?? `${cur.primaryGuest.firstName} ${cur.primaryGuest.lastName}`, companyName: cur.company?.name ?? null, fromDate: cur.checkInDate, toDate: cur.checkOutDate, status: cur.status } : null,
       upcoming: upcoming.length, nextFrom: upcoming[0]?.checkInDate ?? null,
     };

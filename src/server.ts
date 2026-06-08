@@ -530,6 +530,7 @@ adminRouter.post("/reservations/:id/emails/resend", h((req, res) => admin.adminR
 
 adminRouter.get("/rooms", h((_req, res) => admin.listRooms(pid(res))));
 adminRouter.post("/rooms", h((req, res) => { const b = z.object({ roomTypeId: z.string().uuid(), number: z.string().min(1), floor: z.number().int(), lockType: z.nativeEnum(LockType).optional() }).parse(req.body); return admin.createRoom(pid(res), b); }));
+adminRouter.patch("/rooms/layout", h((req, res) => { const b = z.object({ rooms: z.array(z.object({ id: z.string().uuid(), posX: z.number(), posY: z.number(), w: z.number(), h: z.number() })) }).parse(req.body); return admin.setRoomLayout(pid(res), b.rooms); }));
 adminRouter.patch("/rooms/:id", h((req) => { const b = z.object({ number: z.string().optional(), floor: z.number().int().optional(), status: z.nativeEnum(RoomStatus).optional(), lockType: z.nativeEnum(LockType).optional(), notes: z.string().optional() }).parse(req.body); return admin.updateRoom("", req.params.id, b); }));
 adminRouter.post("/rooms/:id/clean", h((req) => admin.markRoomClean(req.params.id)));
 adminRouter.delete("/rooms/:id", h(async (req) => { await admin.deleteRoom(req.params.id); return { ok: true }; }));

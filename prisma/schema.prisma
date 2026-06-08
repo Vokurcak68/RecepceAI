@@ -319,6 +319,12 @@ model Room {
   notes    String?
   dailyServiceDate DateTime? @db.Date // den, kdy byl naposledy automaticky označen „Zkontrolovat" (dedup denní automatiky)
 
+  // Grafický půdorys (editovatelné rozložení na plátně patra; null = automatická mřížka).
+  posX Int?
+  posY Int?
+  w    Int?
+  h    Int?
+
   beds         Bed[]
   reservations Reservation[]
   equipment    EquipmentItem[]
