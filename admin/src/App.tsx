@@ -949,27 +949,6 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
           ))}</div>)}
       </div>
 
-      {(() => {
-        const units = board.data ?? [];
-        const tile = (key: string, label: string, name: string | null | undefined, resId: string | undefined, sub?: string) => (
-          <div key={key} title={name ?? "volné"} onClick={() => resId && setDetailId(resId)}
-            style={{ minWidth: 92, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--line)", background: name ? "#eef2ff" : "#fff", cursor: resId ? "pointer" : "default" }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
-            <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{name ?? "volné"}{sub ? ` · ${sub}` : ""}</div>
-          </div>
-        );
-        const occ = bedMode ? (units as BedBoardItem[]).filter((b) => b.current).length : (units as RoomBoardItem[]).filter((r) => r.occupant).length;
-        return units.length === 0 ? null : (
-          <div className="panel"><h3>Obsazenost {bedMode ? "lůžek" : "pokojů"} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {occ}/{units.length} obsazeno</span></h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 12 }}>
-              {bedMode
-                ? (units as BedBoardItem[]).map((b) => tile(b.bedId, b.label, b.current?.guestName, b.current?.reservationId, b.current ? `do ${d(b.current.toDate)}` : (b.upcoming > 0 ? `od ${d(b.nextFrom!)}` : undefined)))
-                : (units as RoomBoardItem[]).map((r) => tile(r.id, r.number, r.occupant?.name, r.occupant?.reservationId, r.occupant ? `do ${d(r.occupant.checkOutDate)}` : (r.arrival ? `příjezd: ${r.arrival.name}` : undefined)))}
-            </div>
-          </div>
-        );
-      })()}
-
       {(data?.unpaid.length ?? 0) > 0 && card("Nezaplacené (ubytovaní)", data!.unpaid.length,
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.unpaid.map((r) => (
           <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -977,6 +956,29 @@ function ReceptionView({ selId, prop }: { selId: string; prop: Property }) {
             <button className="btn sm" onClick={() => setDetailId(r.id)}>Doplatit</button>
           </div>
         ))}</div>)}
+
+      {(() => {
+        const units = board.data ?? [];
+        if (units.length === 0) return null;
+        const occ = bedMode ? (units as BedBoardItem[]).filter((b) => b.current).length : (units as RoomBoardItem[]).filter((r) => r.occupant).length;
+        const row = (key: string, label: string, name: string | null | undefined, resId: string | undefined, sub: string | undefined) => (
+          <tr key={key} className={resId ? "row-click" : ""} onClick={() => resId && setDetailId(resId)}>
+            <td><b>{label}</b></td>
+            <td>{name ? <span className="badge b-checked_in">obsazeno</span> : <span className="muted">volné</span>}</td>
+            <td>{name ? <>👤 {name}</> : <span className="muted">—</span>}</td>
+            <td className="muted">{sub ?? "—"}</td>
+            <td className="right">{resId && <button className="btn sm ghost" onClick={(e) => { e.stopPropagation(); setDetailId(resId); }}>Detail</button>}</td>
+          </tr>
+        );
+        return (
+          <div className="panel"><h3>Obsazenost {bedMode ? "lůžek" : "pokojů"} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {occ}/{units.length} obsazeno</span></h3>
+            <Table cols={[bedMode ? "Lůžko" : "Pokoj", "Stav", "Host", "Do / další", ""]} rows={units} empty="—"
+              render={(u: RoomBoardItem | BedBoardItem) => bedMode
+                ? (() => { const b = u as BedBoardItem; return row(b.bedId, `${b.label} · pok. ${b.roomNumber}`, b.current?.guestName, b.current?.reservationId, b.current ? `do ${d(b.current.toDate)}` : (b.upcoming > 0 ? `příjezd ${d(b.nextFrom!)}` : undefined)); })()
+                : (() => { const r = u as RoomBoardItem; return row(r.id, `${r.number} · ${r.floor}. p`, r.occupant?.name, r.occupant?.reservationId, r.occupant ? `do ${d(r.occupant.checkOutDate)}` : (r.arrival ? `příjezd: ${r.arrival.name}` : undefined)); })()} />
+          </div>
+        );
+      })()}
 
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
     </>
