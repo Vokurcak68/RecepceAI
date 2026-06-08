@@ -2209,6 +2209,13 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
   const [busy, setBusy] = useState(false);
   const [g, setG] = useState(blankGroupForm());
   const setRoom = (i: number, patch: Partial<GroupRoomInput>) => setG((s) => ({ ...s, rooms: s.rooms.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
+  // Dostupnost ve zvoleném termínu — nabízíme/limitujeme jen volné jednotky (skupina musí jít vytvořit celá).
+  const avail = useAsync<AvailUnit[]>(() => api.availabilityFor(g.from, g.to, 1), [selId, g.from, g.to]);
+  const freeByType = new Map((avail.data ?? []).map((a) => [a.roomTypeId, a.freeUnits]));
+  const typeName = (id: string) => (types.data ?? []).find((t) => t.id === id)?.name ?? "typ";
+  const wantByType = new Map<string, number>();
+  for (const r of g.rooms) { if (!r.roomTypeId) continue; const n = prop.inventoryUnit === "bed" ? Math.max(1, Number(r.adults) || 1) : 1; wantByType.set(r.roomTypeId, (wantByType.get(r.roomTypeId) ?? 0) + n); }
+  const shortages = [...wantByType.entries()].filter(([id, want]) => (freeByType.get(id) ?? 0) < want).map(([id, want]) => ({ name: typeName(id), free: freeByType.get(id) ?? 0, want }));
   const create = async () => {
     setErr("");
     if (!g.name.trim() || !g.firstName || !g.lastName) { setErr("Vyplň název skupiny a kontakt (jméno, příjmení)."); return; }
@@ -2256,7 +2263,7 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
                   <span className="muted" style={{ width: 20 }}>{i + 1}.</span>
                   <select value={r.roomTypeId} onChange={(e) => setRoom(i, { roomTypeId: e.target.value })}>
                     <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
-                    {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
+                    {(types.data ?? []).map((t) => { const free = freeByType.get(t.id); return <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc{free != null ? ` · volné ${free}` : ""})</option>; })}
                   </select>
                   <label className="row">{prop.inventoryUnit === "bed" ? "Lůžek" : "Dosp."} <input type="number" min={1} style={{ width: 56 }} value={r.adults} onChange={(e) => setRoom(i, { adults: Number(e.target.value) })} /></label>
                   {prop.inventoryUnit !== "bed" && <label className="row">Děti <input type="number" min={0} max={10} style={{ width: 56 }} value={r.children ?? 0} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setRoom(i, { children: n, childAges: Array.from({ length: n }, (_, j) => r.childAges?.[j] ?? 8) }); }} /></label>}
@@ -2276,7 +2283,8 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
             ))}
             <button className="btn ghost sm" onClick={() => setG((s) => ({ ...s, rooms: [...s.rooms, blankGroupRoom()] }))}>{prop.inventoryUnit === "bed" ? "+ Přidat typ lůžka" : "+ Přidat pokoj"}</button>
           </div>
-          <button className="btn" disabled={busy} onClick={create}>{busy ? "Vytvářím…" : prop.inventoryUnit === "bed" ? `Vytvořit skupinu (${g.rooms.reduce((s, r) => s + (Number(r.adults) || 0), 0)} lůžek)` : `Vytvořit skupinu (${g.rooms.length} pok.)`}</button>
+          {shortages.length > 0 && <div className="error" style={{ marginTop: 10 }}>⚠ V termínu {d(g.from)} – {d(g.to)} není dost volných {prop.inventoryUnit === "bed" ? "lůžek" : "pokojů"}: {shortages.map((s) => `${s.name} (volné ${s.free}, požadováno ${s.want})`).join("; ")}. Uprav počty nebo termín.</div>}
+          <button className="btn" disabled={busy || shortages.length > 0} onClick={create}>{busy ? "Vytvářím…" : prop.inventoryUnit === "bed" ? `Vytvořit skupinu (${g.rooms.reduce((s, r) => s + (Number(r.adults) || 0), 0)} lůžek)` : `Vytvořit skupinu (${g.rooms.length} pok.)`}</button>
         </div>
       )}
       <div className="panel">
