@@ -65,6 +65,9 @@ const GUEST_LANGS: [string, string][] = [["cs", "Čeština"], ["en", "English"],
 const guestUrl = (code: string) => `${GUEST_BASE}/?code=${encodeURIComponent(code)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const tomorrowIso = () => new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+const addDayIso = (iso: string) => { const t = Date.parse(iso); return Number.isNaN(t) ? iso : new Date(t + 864e5).toISOString().slice(0, 10); };
+// Odjezd ať je vždy aspoň den po příjezdu: při změně příjezdu vrátí příjezd+1, pokud odjezd není později.
+const departAfter = (arrival: string, current: string) => (arrival && (!current || current <= arrival) ? addDayIso(arrival) : current);
 
 export function App() {
   const [session, setSession] = useState<LoginResult | null>(null);
@@ -1195,7 +1198,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
               <div>
                 <div className="wz-sec">Termín pobytu</div>
                 <div className="wz-row1">
-                  <div className="wz-field wz-big-input" style={{ width: 190 }}><label>Příjezd</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+                  <div className="wz-field wz-big-input" style={{ width: 190 }}><label>Příjezd</label><input type="date" value={from} onChange={(e) => { const v = e.target.value; setFrom(v); setTo((t) => departAfter(v, t)); }} /></div>
                   <div className="wz-field wz-big-input" style={{ width: 190 }}><label>Odjezd</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
                   <span className="wz-tag" style={{ marginBottom: 6 }}>{nights} {nights === 1 ? "noc" : "nocí"}</span>
                 </div>
@@ -1444,7 +1447,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
               <option value="">{prop.inventoryUnit === "bed" ? "Typ lůžka…" : "Typ pokoje…"}</option>
               {(types.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({money(t.basePrice)}/noc)</option>)}
             </select>
-            <label className="row">Příjezd <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
+            <label className="row">Příjezd <input type="date" value={f.from} onChange={(e) => { const v = e.target.value; setF({ ...f, from: v, to: departAfter(v, f.to) }); }} /></label>
             <label className="row">Odjezd <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
             <label className="row">Dospělých <input type="number" min={1} style={{ width: 64 }} value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></label>
             <label className="row">Dětí <input type="number" min={0} max={10} style={{ width: 64 }} value={f.children} onChange={(e) => { const n = Math.max(0, Math.min(10, Number(e.target.value) || 0)); setF({ ...f, children: n, childAges: Array.from({ length: n }, (_, i) => f.childAges[i] ?? 8) }); }} /></label>
@@ -2241,7 +2244,7 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
           {err && <div className="error">{err}</div>}
           <div className="toolbar">
             <input placeholder="Název skupiny (Svatba Novákovi, Zájezd ČD…)" style={{ minWidth: 260 }} value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} />
-            <label className="row">Příjezd <input type="date" value={g.from} onChange={(e) => setG({ ...g, from: e.target.value })} /></label>
+            <label className="row">Příjezd <input type="date" value={g.from} onChange={(e) => { const v = e.target.value; setG({ ...g, from: v, to: departAfter(v, g.to) }); }} /></label>
             <label className="row">Odjezd <input type="date" value={g.to} onChange={(e) => setG({ ...g, to: e.target.value })} /></label>
           </div>
           <div className="toolbar">
