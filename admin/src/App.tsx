@@ -1533,6 +1533,7 @@ function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Propert
   const [lay, setLay] = useState<Record<string, FPPos>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [floorSel, setFloorSel] = useState<number | "all" | null>(null); // volič patra (null = výchozí dle počtu pater)
   const drag = useRef<null | { id: string; mode: "move" | "resize"; px: number; py: number; ox: number; oy: number; ow: number; oh: number }>(null);
 
   if (openRes) return <ReservationDetailView id={openRes} prop={prop} onBack={() => { setOpenRes(null); reload(); }} />;
@@ -1637,6 +1638,13 @@ function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Propert
   const hasLayout = nodes.some((n) => n.sx != null);
   const canvasMode = (edit || hasLayout) && !compact;
   const floors = floorsOf(nodes.map((n) => n.floor));
+  // Volič patra: u velkých budov (>4 patra) výchozí jedno patro, jinak vše. Obsazenost počítáme ze syrových dat.
+  const allFloors = floorsOf((items as { floor: number }[]).map((x) => x.floor));
+  const floorStat = (f: number) => bedMode
+    ? { occ: (items as BedBoardItem[]).filter((b) => b.floor === f && b.current).length, total: (items as BedBoardItem[]).filter((b) => b.floor === f).length }
+    : { occ: (items as RoomBoardItem[]).filter((r) => r.floor === f && r.occupant).length, total: (items as RoomBoardItem[]).filter((r) => r.floor === f).length };
+  const effSel: number | "all" = floorSel ?? (allFloors.length > 4 ? (allFloors[0] ?? "all") : "all");
+  const shownFloors = effSel === "all" ? floors : floors.filter((f) => f === effSel);
 
   const startEdit = () => { const m: Record<string, FPPos> = {}; for (const f of floors) Object.assign(m, effOf(nodes.filter((n) => n.floor === f))); setLay(m); setEdit(true); setMsg(""); };
   const save = async () => { setSaving(true); setMsg(""); try { await api.saveRoomLayout(Object.entries(lay).map(([id, v]) => ({ id, posX: v.x, posY: v.y, w: v.w, h: v.h }))); setEdit(false); reload(); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setSaving(false); } };
@@ -1684,14 +1692,22 @@ function FloorPlanView({ prop, compact, onPickRes, onOpenFull }: { prop: Propert
       {error && <div className="error">{error}</div>}
       {msg && <div className="error">{msg}</div>}
       {!compact && (
-        <div className="toolbar" style={{ gap: 8, marginBottom: 4 }}>
+        <div className="toolbar" style={{ gap: 8, marginBottom: 4, alignItems: "center" }}>
+          {allFloors.length > 1 && (
+            <label className="row" style={{ gap: 6 }}>Patro:
+              <select value={String(effSel)} onChange={(e) => setFloorSel(e.target.value === "all" ? "all" : Number(e.target.value))}>
+                <option value="all">Všechna patra</option>
+                {allFloors.map((f) => { const s = floorStat(f); return <option key={f} value={f}>{floorName(f)} ({s.occ}/{s.total} obsazeno)</option>; })}
+              </select>
+            </label>
+          )}
           {!edit && <button className="btn sm ghost" onClick={startEdit}>✎ Upravit rozložení</button>}
           {edit && <><button className="btn sm" onClick={save} disabled={saving}>💾 Uložit rozložení</button> <button className="btn sm ghost" onClick={() => { setEdit(false); setMsg(""); }} disabled={saving}>Zrušit</button> <span className="muted" style={{ fontSize: 13 }}>Táhni dlaždice myší; roh vpravo dole mění velikost.</span></>}
         </div>
       )}
       {!edit && filtersBar}
       {legend}
-      {floors.length === 0 ? <div className="muted">{bedMode ? "Žádná lůžka." : "Žádné pokoje."}</div> : floors.map(floorBlock)}
+      {shownFloors.length === 0 ? <div className="muted">{bedMode ? "Žádná lůžka." : "Žádné pokoje."}</div> : shownFloors.map(floorBlock)}
     </div>
   );
 }
