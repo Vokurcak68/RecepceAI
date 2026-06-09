@@ -904,6 +904,10 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
   const [detailId, setDetailId] = useState<string | null>(null);
   const [wizard, setWizard] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [arrQ, setArrQ] = useState(""); // hledání v Příjezdech dnes
+  const [depQ, setDepQ] = useState(""); // hledání v Odjezdech dnes
+  const fnorm = (s: string) => (s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const matchArr = (r: { guestName: string; where?: string; code?: string }, q: string) => { const t = fnorm(q).trim(); return !t || fnorm(`${r.guestName} ${r.where ?? ""} ${r.code ?? ""}`).includes(t); };
   const [doc, setDoc] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -951,27 +955,37 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
       )}
 
       <div className="grid2">
-        {card("Příjezdy dnes", data?.arrivals.length ?? 0, (data?.arrivals.length ?? 0) === 0 ? empty :
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.arrivals.map((r) => (
-            <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where} · {r.code}</span></span>
-              <span className="req-actions">
-                <button className="btn sm ghost" onClick={() => setDetailId(r.id)}>Detail</button>
-                <button className="btn sm ok" disabled={busy} onClick={() => checkin(r)}>{r.assigned ? "Check-in" : "Přiřadit"}</button>
-              </span>
-            </div>
-          ))}</div>)}
+        {card("Příjezdy dnes", data?.arrivals.length ?? 0, (data?.arrivals.length ?? 0) === 0 ? empty : (() => {
+          const shown = data!.arrivals.filter((r) => matchArr(r, arrQ));
+          return (<>
+            <input className="wz-filter" placeholder="🔍 Hledat hosta / kód…" value={arrQ} onChange={(e) => setArrQ(e.target.value)} style={{ marginBottom: 8 }} />
+            {shown.length === 0 ? <div className="muted">Nic nenalezeno.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{shown.map((r) => (
+              <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where} · {r.code}</span></span>
+                <span className="req-actions">
+                  <button className="btn sm ghost" onClick={() => setDetailId(r.id)}>Detail</button>
+                  <button className="btn sm ok" disabled={busy} onClick={() => checkin(r)}>{r.assigned ? "Check-in" : "Přiřadit"}</button>
+                </span>
+              </div>
+            ))}</div>}
+          </>);
+        })())}
 
-        {card("Odjezdy dnes", data?.departures.length ?? 0, (data?.departures.length ?? 0) === 0 ? empty :
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{data!.departures.map((r) => (
-            <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where}</span>{Number(r.balance) > 0 ? <b style={{ color: "var(--warn)" }}> · {money(r.balance)}</b> : ""}</span>
-              <span className="req-actions">
-                {Number(r.balance) > 0 && <button className="btn sm" onClick={() => setDetailId(r.id)}>Doplatit</button>}
-                <button className="btn sm ok" disabled={busy} onClick={() => checkout(r)}>Check-out</button>
-              </span>
-            </div>
-          ))}</div>)}
+        {card("Odjezdy dnes", data?.departures.length ?? 0, (data?.departures.length ?? 0) === 0 ? empty : (() => {
+          const shown = data!.departures.filter((r) => matchArr(r, depQ));
+          return (<>
+            <input className="wz-filter" placeholder="🔍 Hledat hosta / kód…" value={depQ} onChange={(e) => setDepQ(e.target.value)} style={{ marginBottom: 8 }} />
+            {shown.length === 0 ? <div className="muted">Nic nenalezeno.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{shown.map((r) => (
+              <div key={r.id} className="rd-req" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span>👤 <b>{r.guestName}</b> <span className="muted">· {r.where}</span>{Number(r.balance) > 0 ? <b style={{ color: "var(--warn)" }}> · {money(r.balance)}</b> : ""}</span>
+                <span className="req-actions">
+                  {Number(r.balance) > 0 && <button className="btn sm" onClick={() => setDetailId(r.id)}>Doplatit</button>}
+                  <button className="btn sm ok" disabled={busy} onClick={() => checkout(r)}>Check-out</button>
+                </span>
+              </div>
+            ))}</div>}
+          </>);
+        })())}
       </div>
 
       {(data?.unpaid.length ?? 0) > 0 && card("Nezaplacené (ubytovaní)", data!.unpaid.length,
