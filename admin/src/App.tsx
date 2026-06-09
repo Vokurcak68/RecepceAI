@@ -3006,7 +3006,19 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
         </div></div>
         <div className="panel"><h3>Vyúčtování</h3><div style={{ padding: 16 }}>
-          <div className="kvline"><span className="muted">Celkem</span><b>{folio ? money(folio.charges) : "…"}</b></div>
+          {(() => {
+            const acc = Number(r.totalAmount) - Number(r.cityTax ?? 0);
+            const ct = Number(r.cityTax ?? 0);
+            const en = (data.property?.inventoryUnit === "bed" && !r.energyFeeExempt && Number(data.property.energyFeePerNight) > 0) ? Number(data.property.energyFeePerNight) * r.nights : 0;
+            const chg = (chargesA.data ?? []).reduce((s, c) => s + Number(c.amount), 0);
+            return (<>
+              <div className="kvline"><span className="muted">Ubytování</span><span>{money(acc)}</span></div>
+              {ct > 0 && <div className="kvline"><span className="muted">Pobytový poplatek</span><span>{money(ct)}</span></div>}
+              {en > 0 && <div className="kvline"><span className="muted">Energie (vzdušné)</span><span>{money(en)}</span></div>}
+              {chg !== 0 && <div className="kvline"><span className="muted">Položky / služby</span><span>{money(chg)}</span></div>}
+            </>);
+          })()}
+          <div className="kvline" style={{ borderTop: "1px solid var(--line)", marginTop: 4, paddingTop: 6 }}><span className="muted">Celkem</span><b>{folio ? money(folio.charges) : "…"}</b></div>
           <div className="kvline"><span className="muted">Zaplaceno</span><span>{folio ? money(folio.paid) : "…"}</span></div>
           <div className="kvline"><span className="muted">{bal >= 0 ? "Zbývá doplatit" : "Přeplatek"}</span><b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{folio ? money(Math.abs(bal)) : "…"}</b></div>
           {prop?.depositPct ? <div className="kvline"><span className="muted">Požadovaná záloha</span><span>{money(Math.round(Number(r.totalAmount) * prop.depositPct / 100))} ({prop.depositPct} %)</span></div> : null}
