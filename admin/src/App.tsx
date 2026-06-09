@@ -2909,6 +2909,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [pickGuest, setPickGuest] = useState(false);
   const [pickCompany, setPickCompany] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null); // proklik na skupinu
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
@@ -2926,6 +2927,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setActErr(""); try { await fn(); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const addCharge = () => { const q = parseFloat(chg.quantity.replace(",", ".")) || 1; const p = parseFloat(chg.unitPrice.replace(",", ".")); if (isNaN(p) || p < 0) return; run(async () => { await api.addCharge(id, { category: chg.category, description: chg.description || undefined, quantity: q, unitPrice: p }); setChg({ category: chg.category, description: "", quantity: "1", unitPrice: "" }); }); };
 
+  if (openGroup && prop) return <GroupDetailView id={openGroup} prop={prop} onBack={() => { setOpenGroup(null); refresh(); }} />;
   if (error) return <><div className="h1"><button className="btn ghost" onClick={onBack}>← Zpět</button></div><div className="error">{error}</div></>;
   if (!data) return <div className="muted" style={{ padding: 20 }}>Načítám…</div>;
   const r = data; const folio = folioA.data;
@@ -2949,7 +2951,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           <div className="kvline"><span className="muted">Osob</span><span>{r.adults} {r.adults === 1 ? "dospělý" : "dosp."}{r.children ? ` + ${r.children} ${r.children === 1 ? "dítě" : "dětí"}` : ""}{r.childAges && r.childAges.length > 0 ? ` (věk ${r.childAges.join(", ")})` : ""}</span></div>
           <div className="kvline"><span className="muted">Jednotka</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}>{r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : <span className="muted">{r.roomType?.name ?? "—"} · nepřiřazeno</span>}<button className="btn sm ghost" disabled={busy} onClick={() => setMoveUnit(true)}>{data.property?.inventoryUnit === "bed" ? "Změnit lůžko" : "Změnit pokoj"}</button></span></div>
           {data.property?.inventoryUnit === "bed" ? <div className="kvline"><span className="muted">Energie (vzdušné)</span><label className="row" style={{ gap: 6 }}><input type="checkbox" checked={!!r.energyFeeExempt} disabled={busy} onChange={(e) => run(() => api.setReservationEnergyExempt(id, e.target.checked))} /> osvobozeno (neúčtovat)</label></div> : null}
-          {r.group ? <div className="kvline"><span className="muted">Skupina</span><span><span className="chip">👥 {r.group.name}</span> <span className="muted">{r.group.code}</span></span></div> : null}
+          {r.group ? <div className="kvline"><span className="muted">Skupina</span><span>{prop ? <button className="chip" style={{ cursor: "pointer", border: "none" }} onClick={() => setOpenGroup(r.group!.id)} title="Otevřít skupinu">👥 {r.group.name} ›</button> : <span className="chip">👥 {r.group.name}</span>} <span className="muted">{r.group.code}</span></span></div> : null}
           {r.onlineCheckinAt && <div className="kvline"><span className="muted">Online check-in</span><span style={{ color: "var(--ok)", fontWeight: 600 }}>✓ odbaveno online {d(r.onlineCheckinAt)}</span></div>}
           {r.billingCompany && <div className="kvline"><span className="muted">Fakturovat</span><span>{r.billingCompany}{r.billingIco ? ` (IČO ${r.billingIco})` : ""}</span></div>}
         </div></div>
