@@ -156,10 +156,10 @@ async function unpaidBalance(r: ResForMail): Promise<number> {
   return bal > 0 ? bal : 0;
 }
 
-/** QR platba pro daný (kladný) zůstatek — HTML blok + PNG příloha (cid:qrpay).
- * Null, když provozovna nemá bankovní účet nebo se QR nepodaří vygenerovat. */
-async function qrPayBlock(r: ResForMail, lang: MailLang, amount: number): Promise<{ html: string; attachment: MailAttachment } | null> {
-  const spd = reservationSpayd(r.property, r.code, amount);
+/** QR platba pro daný (kladný) zůstatek na účet provozovny — HTML blok + PNG příloha (cid:qrpay).
+ * `code` určuje variabilní symbol (rezervace nebo skupina). Null bez účtu / když se QR nepovede. */
+async function qrImageBlock(property: { operatorAccount: string | null; iban: string | null }, code: string, amount: number, lang: MailLang): Promise<{ html: string; attachment: MailAttachment } | null> {
+  const spd = reservationSpayd(property, code, amount);
   if (!spd) return null;
   let buf: Buffer;
   try { buf = await QRCode.toBuffer(spd, { margin: 1, width: 240 }); } catch { return null; }
@@ -169,6 +169,11 @@ async function qrPayBlock(r: ResForMail, lang: MailLang, amount: number): Promis
     <div style="font-size:12px;color:#6b7a89;line-height:1.6;">${esc(mt(lang, "qrNote"))}</div>
   </div>`;
   return { html, attachment: { filename: "qr-platba.png", content: buf, cid: "qrpay" } };
+}
+
+/** QR platba pro (kladný) zůstatek rezervace — VS = kód rezervace. */
+async function qrPayBlock(r: ResForMail, lang: MailLang, amount: number): Promise<{ html: string; attachment: MailAttachment } | null> {
+  return qrImageBlock(r.property, r.code, amount, lang);
 }
 
 // ── Jednotlivé e-maily ───────────────────────────────────────
@@ -333,14 +338,22 @@ export async function sendGroupSummary(groupId: string): Promise<void> {
   }).join("");
   const rows = row(mt(lang, "rowStay"), `${fmtDate(from)} – ${fmtDate(until)}`) + roomRows + row(mt(lang, "rowTotal"), money(total));
   const vars = { name: esc(group.organizer?.firstName ?? ""), group: esc(group.name), rooms: String(active.length), property: esc(group.property.name) };
-  const html = layout(lang, group.property, mt(lang, "titleGroup"), mt(lang, "introGroup", vars), rows);
+  // Společný účet (kolektivní platba) = jeden plátce → QR na CELKOVÝ zůstatek skupiny.
+  let qr: { html: string; attachment: MailAttachment } | null = null;
+  if (group.billing === "collective") {
+    let charges = new Prisma.Decimal(0), paid = new Prisma.Decimal(0);
+    for (const r of active) { const f = await computeFolio(r.id); charges = charges.add(f.charges); paid = paid.add(f.paid); }
+    const balance = Number(charges.sub(paid));
+    if (balance > 0) qr = await qrImageBlock(group.property, group.code, balance, lang);
+  }
+  const html = layout(lang, group.property, mt(lang, "titleGroup"), mt(lang, "introGroup", vars), rows, undefined, undefined, qr ? qr.html : "");
   const subject = mt(lang, "subjGroup", { group: group.name, property: group.property.name });
   const log = (status: string, error?: string) =>
     prisma.emailLog.create({ data: { groupId, type: "group_summary", recipient: to, subject, status, error } }).catch((e) => console.error(`📧 [mail] EmailLog skupiny: ${(e as Error).message}`));
   const t = getTransport();
   if (!t) { await log("skipped", "SMTP není nakonfigurováno"); console.log(`📧 [mail] souhrn skupiny ${group.code} přeskočen (SMTP nenakonfigurováno)`); return; }
   try {
-    await t.sendMail({ from: `"${group.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`, to, ...(group.property.email ? { replyTo: group.property.email } : {}), subject, html });
+    await t.sendMail({ from: `"${group.property.name}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`, to, ...(group.property.email ? { replyTo: group.property.email } : {}), subject, html, ...(qr ? { attachments: [qr.attachment] } : {}) });
     console.log(`📧 [mail] souhrn skupiny "${group.name}" → ${to} (${group.code})`);
     await log("sent");
   } catch (e) { const msg = (e as Error).message; console.error(`📧 [mail] souhrn skupiny CHYBA → ${to}: ${msg}`); await log("failed", msg); }
