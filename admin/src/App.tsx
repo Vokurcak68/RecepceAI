@@ -2372,6 +2372,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
   const [results, setResults] = useState<BulkResult[] | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [invoiceCo, setInvoiceCo] = useState<{ id: string; name: string } | null>(null); // firma pro společnou fakturu
+  const [gPreview, setGPreview] = useState<{ doc: Doc; onIssue: () => Promise<Doc> } | null>(null);
   const [pickCo, setPickCo] = useState(false);
   const act = async (fn: () => Promise<unknown>, label: string) => {
     setBusy(true); setMsg(""); setResults(null);
@@ -2392,7 +2393,9 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
           <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
           <span className="row" style={{ gap: 4 }}>
-            <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id)); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+            {data.invoice
+              ? <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.document(data.invoice!.id)); return "Faktura"; }, "")}>🧾 Zobrazit fakturu</button>
+              : <button className="btn ghost" disabled={busy} onClick={() => act(async () => { const p = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, true); setGPreview({ doc: p, onIssue: async () => { const dd = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id); reload(); return dd; } }); return ""; }, "")}>🧾 Společná faktura</button>}
             <button className="btn ghost sm" disabled={busy} onClick={() => setPickCo(true)} title="Fakturovat na firmu">{invoiceCo ? `🏢 ${invoiceCo.name}` : "🏢 firma…"}</button>
             {invoiceCo && <button className="linkx" disabled={busy} onClick={() => setInvoiceCo(null)} title="Zrušit firmu">×</button>}
           </span>
@@ -2445,6 +2448,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
             )} />
         )}
       </div></div>
+      {gPreview && <DocumentOverlay doc={gPreview.doc} preview onIssue={gPreview.onIssue} onClose={() => setGPreview(null)} />}
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
       {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setInvoiceCo({ id: c.id, name: c.name })).catch(() => {}); setPickCo(false); }} />}
       {memberPick && <GuestPickerOverlay
@@ -2948,6 +2952,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   useEffect(() => { if (data) { setNoteText(data.note ?? ""); setNoteDirty(false); setReg((s) => (s.fullName ? s : { ...s, fullName: `${data.primaryGuest?.firstName ?? ""} ${data.primaryGuest?.lastName ?? ""}`.trim() })); } }, [data?.id]); // eslint-disable-line
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
+  const [previewState, setPreviewState] = useState<{ doc: Doc; onIssue: () => Promise<Doc> } | null>(null);
   const [guestQr, setGuestQr] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [pickGuest, setPickGuest] = useState(false);
@@ -2955,8 +2960,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const [openGroup, setOpenGroup] = useState<string | null>(null); // proklik na skupinu
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
-  const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!isNaN(n) && n > 0) issueDoc(() => api.issueProforma(id, n)); };
-  const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; issueDoc(() => api.periodInvoice(id, from, to)); };
+  // Náhled → teprve po „Vystavit" se doklad založí (DocumentOverlay preview). Zobrazit existující = otevře už vystavený.
+  const previewDoc = async (previewFn: () => Promise<Doc>, issueFn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { const p = await previewFn(); setPreviewState({ doc: p, onIssue: async () => { const dd = await issueFn(); refresh(); return dd; } }); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!(n > 0)) return; previewDoc(() => api.issueProforma(id, n, undefined, undefined, undefined, true), () => api.issueProforma(id, n)); };
+  const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; previewDoc(() => api.periodInvoice(id, from, to, true), () => api.periodInvoice(id, from, to)); };
 
   const refresh = () => { reload(); folioA.reload(); chargesA.reload(); guestsA.reload(); };
   const resetGf = () => { setEgf(blankGuestFields()); setGEdit(null); setEditPrimary(false); setEditGuestId(undefined); setPickForEdit(false); };
@@ -3013,9 +3020,15 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {canCheckOut && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{r.code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(id); if (x.document) setIssuedDoc(x.document); }); }}>Check-out</button>}
           {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Úhrada kartou", message: <>Zaúčtovat úhradu <b>{money(bal)}</b> kartou?</>, confirmLabel: "Zaúčtovat" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "card_terminal" })); }}>Doplatit {money(bal)} kartou</button>}
           {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={async () => { if (await confirm({ title: "Platba fakturou", message: <>Označit <b>{money(bal)}</b> jako zaplaceno fakturou?</>, confirmLabel: "Označit zaplaceno" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` })); }}>Zaplaceno fakturou</button>}
-          <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>
-          <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.issueDocument(id, "receipt"))}>🧾 Vystavit účtenku</button>
-          <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>
+          {(() => { const ex = r.documents?.find((x) => x.type === "invoice" && x.status !== "cancelled"); return ex
+            ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>📄 Zobrazit fakturu</button>
+            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "invoice", true), () => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>; })()}
+          {(() => { const ex = r.documents?.find((x) => x.type === "receipt" && x.status !== "cancelled"); return ex
+            ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>🧾 Zobrazit účtenku</button>
+            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "receipt", true), () => api.issueDocument(id, "receipt"))}>🧾 Vystavit účtenku</button>; })()}
+          {(() => { const ex = r.documents?.find((x) => x.type === "proforma" && x.status !== "cancelled"); return ex
+            ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>💶 Zobrazit zálohovou f.</button>
+            : <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>; })()}
           {(prop?.allowLongTerm || r.billingCycle === "monthly") && <button className="btn ghost" disabled={busy} onClick={askPeriod}>📅 Faktura za období</button>}
           <button className="btn ghost" onClick={() => setGuestQr(true)}>🏷 QR pro hosta</button>
           <button className="btn ghost" onClick={() => setEmailsOpen(true)}>📧 E-maily</button>
@@ -3139,6 +3152,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           )} />
       </div>
 
+      {previewState && <DocumentOverlay doc={previewState.doc} preview onIssue={previewState.onIssue} onClose={() => setPreviewState(null)} />}
       {issuedDoc && <DocumentOverlay doc={issuedDoc} onClose={() => setIssuedDoc(null)} />}
       {receipt && <ReceiptOverlay rec={receipt} onClose={() => setReceipt(null)} />}
       {guestQr && <GuestQrLabels rows={[{ code: r.code, title: r.room ? `Pokoj ${r.room.number}` : r.bed ? `Lůžko ${r.bed.label}` : r.code, subtitle: `${r.primaryGuest?.firstName ?? ""} ${r.primaryGuest?.lastName ?? ""}`.trim() }]} onClose={() => setGuestQr(false)} />}
@@ -3969,12 +3983,14 @@ function DocumentsView({ selId }: { selId: string }) {
   );
 }
 
-function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
+function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose: () => void; preview?: boolean; onIssue?: () => Promise<Doc> }) {
   const confirm = useConfirm();
   const [cur, setCur] = useState<Doc>(doc);
+  const [isPreview, setIsPreview] = useState(!!preview);
   const [busy, setBusy] = useState(false);
   const [perr, setPerr] = useState("");
   const [qrImg, setQrImg] = useState("");
+  const issue = async () => { if (!onIssue) return; setBusy(true); setPerr(""); try { setCur(await onIssue()); setIsPreview(false); } catch (e) { setPerr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   useEffect(() => { if (cur.qrPayment) QRCode.toDataURL(cur.qrPayment, { margin: 1, width: 150 }).then(setQrImg).catch(() => setQrImg("")); else setQrImg(""); }, [cur.qrPayment]);
   const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
   const pay = async (method: "cash" | "card_terminal") => {
@@ -3998,7 +4014,7 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         <div className="inv-head">
           <div>
             <h2 style={{ margin: 0 }}>{DOC_TYPE_LABEL[cur.type] ?? "Doklad"}</h2>
-            <div className="muted" style={{ marginTop: 2 }}>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</div>
+            <div className="muted" style={{ marginTop: 2 }}>{isPreview ? <b style={{ color: "var(--warn)" }}>NÁHLED — zatím nevystaveno</b> : <>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</>}</div>
             <div className="muted" style={{ marginTop: 8 }}>
               <b>{cur.supplierName}</b><br />
               {cur.supplierAddress}
@@ -4036,14 +4052,19 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         {qrImg && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}><img src={qrImg} alt="QR platba" width={120} height={120} /><div className="muted" style={{ fontSize: 13 }}>QR platba<br />Naskenuj v bankovní aplikaci pro úhradu zálohy.</div></div>}
         {perr && <div className="error" style={{ marginTop: 10 }}>{perr}</div>}
         <div className="inv-actions no-print">
-          {due > 0.005 && cur.status !== "cancelled" && <>
-            <button className="btn ok" disabled={busy} onClick={() => pay("cash")}>💵 Zaplatit hotově</button>
-            <button className="btn" disabled={busy} onClick={() => pay("card_terminal")}>💳 Zaplatit kartou</button>
+          {isPreview ? <>
+            <button className="btn ok" disabled={busy} onClick={issue}>✅ Vystavit doklad</button>
+            <button className="btn ghost" disabled={busy} onClick={onClose}>Zrušit</button>
+          </> : <>
+            {due > 0.005 && cur.status !== "cancelled" && <>
+              <button className="btn ok" disabled={busy} onClick={() => pay("cash")}>💵 Zaplatit hotově</button>
+              <button className="btn" disabled={busy} onClick={() => pay("card_terminal")}>💳 Zaplatit kartou</button>
+            </>}
+            {cur.type === "proforma" && <button className="btn ghost" disabled={busy} onClick={() => act(() => api.advanceTaxDoc(cur.id))}>Daňový doklad k záloze</button>}
+            {cur.type !== "credit_note" && cur.status !== "cancelled" && <button className="btn ghost" disabled={busy} onClick={() => { const r = prompt("Důvod dobropisu (nepovinné):") ?? undefined; act(() => api.creditNote(cur.id, r)); }}>Dobropis</button>}
+            <button className="btn ghost" onClick={() => window.print()}>🖨 Tisk</button>
+            <button className="btn ghost" onClick={onClose}>Zavřít</button>
           </>}
-          {cur.type === "proforma" && <button className="btn ghost" disabled={busy} onClick={() => act(() => api.advanceTaxDoc(cur.id))}>Daňový doklad k záloze</button>}
-          {cur.type !== "credit_note" && cur.status !== "cancelled" && <button className="btn ghost" disabled={busy} onClick={() => { const r = prompt("Důvod dobropisu (nepovinné):") ?? undefined; act(() => api.creditNote(cur.id, r)); }}>Dobropis</button>}
-          <button className="btn ghost" onClick={() => window.print()}>🖨 Tisk</button>
-          <button className="btn ghost" onClick={onClose}>Zavřít</button>
         </div>
       </div>
     </div>

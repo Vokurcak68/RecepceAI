@@ -44,7 +44,7 @@ export type ReviewItem = { id: string; nps: number; comment: string | null; crea
 export type GroupBilling = "collective" | "individual";
 export type GroupListItem = { id: string; code: string; name: string; note: string | null; billing: GroupBilling; createdAt: string; rooms: number; total: number; from: string | null; to: string | null };
 export type GroupMember = { id: string; code: string; status: string; guestId: string; guestEmail: string | null; guestName: string; unit: string; roomType: string | null; checkInDate: string; checkOutDate: string; totalAmount: Money; balance: Money };
-export type GroupDetail = { id: string; code: string; name: string; note: string | null; billing: GroupBilling; createdAt: string; organizer: { firstName: string; lastName: string; email: string | null } | null; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money }; emails: EmailLog[] };
+export type GroupDetail = { id: string; code: string; name: string; note: string | null; billing: GroupBilling; createdAt: string; organizer: { firstName: string; lastName: string; email: string | null } | null; members: GroupMember[]; totals: { charges: Money; paid: Money; balance: Money }; emails: EmailLog[]; invoice?: { id: string; number: string; status: string } | null };
 export type GroupRoomInput = { roomTypeId: string; adults: number; children?: number; childAges?: number[]; firstName?: string; lastName?: string };
 export type BulkResult = { code: string; ok: boolean; error?: string };
 export type ReviewsData = { summary: { count: number; avg: number | null; nps: number | null; promoters: number; passives: number; detractors: number }; reviews: ReviewItem[] };
@@ -129,6 +129,7 @@ export type ReservationDetail = Reservation & {
   onlineCheckinAt: string | null;
   payments: Payment[]; registrationEntries: RegistrationEntry[]; property?: Property;
   previousStays?: number; review?: GuestReview | null; group?: { id: string; code: string; name: string } | null;
+  documents?: { id: string; type: string; number: string; status: string }[];
   primaryGuestLastReg?: { fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string } | null;
   energyFeeExempt?: boolean;
   bedRateId?: string | null; bedRate?: { id: string; name: string; pricePerNight: Money } | null;
@@ -222,15 +223,15 @@ export const api = {
   // doklady (faktury, zálohové, účtenky)
   documents: (q = "") => req<Doc[]>(`/admin/documents${q}`),
   document: (id: string) => req<Doc>(`/admin/documents/${id}`),
-  issueDocument: (resId: string, type: "invoice" | "receipt") => req<Doc>(`/admin/reservations/${resId}/documents`, { method: "POST", body: JSON.stringify({ type }) }),
-  issueProforma: (resId: string, amount: number, dueInDays?: number, email?: boolean, withReservation?: boolean) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays, email, withReservation }) }),
+  issueDocument: (resId: string, type: "invoice" | "receipt", preview?: boolean) => req<Doc>(`/admin/reservations/${resId}/documents`, { method: "POST", body: JSON.stringify({ type, preview }) }),
+  issueProforma: (resId: string, amount: number, dueInDays?: number, email?: boolean, withReservation?: boolean, preview?: boolean) => req<Doc>(`/admin/reservations/${resId}/proforma`, { method: "POST", body: JSON.stringify({ amount, dueInDays, email, withReservation, preview }) }),
   setReservationAccommodation: (id: string, amount: number) => req(`/admin/reservations/${id}/accommodation`, { method: "POST", body: JSON.stringify({ amount }) }),
   cancelDocument: (id: string) => req(`/admin/documents/${id}/cancel`, { method: "POST" }),
   payDocument: (id: string, method: "cash" | "card_terminal") => req<Doc>(`/admin/documents/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),
   creditNote: (id: string, reason?: string) => req<Doc>(`/admin/documents/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
   advanceTaxDoc: (id: string) => req<Doc>(`/admin/documents/${id}/advance-tax`, { method: "POST" }),
-  bulkInvoice: (reservationIds: string[], companyId?: string) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds, companyId }) }),
-  periodInvoice: (resId: string, from: string, to: string) => req<Doc>(`/admin/reservations/${resId}/period-invoice`, { method: "POST", body: JSON.stringify({ from, to }) }),
+  bulkInvoice: (reservationIds: string[], companyId?: string, preview?: boolean) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds, companyId, preview }) }),
+  periodInvoice: (resId: string, from: string, to: string, preview?: boolean) => req<Doc>(`/admin/reservations/${resId}/period-invoice`, { method: "POST", body: JSON.stringify({ from, to, preview }) }),
   documentsCsv: async (q = "") => { const r = await fetch(`/api/admin/documents/export.csv${q}`, { headers: { "x-admin-token": token(), "x-property-id": getProperty() } }); if (!r.ok) throw new Error("Export selhal"); return r.text(); },
 
   // obsazení + hosté na pokoji

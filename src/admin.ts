@@ -116,6 +116,11 @@ export async function getReservation(propertyId: string, id: string) {
     },
   });
   if (!r) throw NOT_FOUND();
+  // Vystavené doklady této rezervace (pro UI „Zobrazit × Vystavit" + zákaz duplicit).
+  const documents = await prisma.document.findMany({
+    where: { propertyId, reservations: { some: { reservationId: id } } },
+    select: { id: true, type: true, number: true, status: true }, orderBy: { issuedAt: "desc" },
+  });
   const previousStays = await previousStaysCount(propertyId, r.primaryGuestId, r.id); // pro odznak „vrací se"
   // Propojení s knihou hostů: poslední evidenční zápis tohoto hosta (z jakéhokoli pobytu) — pro
   // předvyplnění evidenční knihy (doklad, datum narození, národnost, adresa) u vracejícího se hosta.
@@ -124,7 +129,7 @@ export async function getReservation(propertyId: string, id: string) {
     orderBy: { createdAt: "desc" },
     select: { fullName: true, dateOfBirth: true, nationality: true, documentType: true, documentNumber: true, homeAddress: true },
   });
-  return { ...r, previousStays, primaryGuestLastReg: lastReg };
+  return { ...r, previousStays, primaryGuestLastReg: lastReg, documents };
 }
 
 async function assertInProperty(propertyId: string, id: string) {

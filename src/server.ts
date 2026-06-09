@@ -591,20 +591,21 @@ adminRouter.post("/documents/:id/credit-note", h((req, res) => {
 }));
 adminRouter.post("/documents/:id/advance-tax", h((req, res) => billing.issueAdvanceTaxDoc(pid(res), req.params.id)));
 adminRouter.post("/documents/bulk-invoice", h((req, res) => {
-  const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1), companyId: z.string().uuid().optional() }).parse(req.body);
-  return billing.issueBulkInvoice(pid(res), b.reservationIds, b.companyId);
+  const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1), companyId: z.string().uuid().optional(), preview: z.boolean().optional() }).parse(req.body);
+  return billing.issueBulkInvoice(pid(res), b.reservationIds, b.companyId, { preview: b.preview });
 }));
 adminRouter.post("/reservations/:id/period-invoice", h((req, res) => {
-  const b = z.object({ from: dateStr, to: dateStr }).parse(req.body);
-  return billing.issuePeriodInvoice(pid(res), req.params.id, new Date(b.from), new Date(b.to));
+  const b = z.object({ from: dateStr, to: dateStr, preview: z.boolean().optional() }).parse(req.body);
+  return billing.issuePeriodInvoice(pid(res), req.params.id, new Date(b.from), new Date(b.to), { preview: b.preview });
 }));
 adminRouter.post("/reservations/:id/documents", h((req, res) => {
-  const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice") }).parse(req.body ?? {});
-  return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType);
+  const b = z.object({ type: z.enum(["invoice", "receipt"]).default("invoice"), preview: z.boolean().optional() }).parse(req.body ?? {});
+  return billing.issueReservationDocument(pid(res), req.params.id, b.type as BillingDocType, { preview: b.preview });
 }));
 adminRouter.post("/reservations/:id/proforma", h(async (req, res) => {
-  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional(), email: z.boolean().optional(), withReservation: z.boolean().optional() }).parse(req.body);
-  const doc = await billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays);
+  const b = z.object({ amount: z.number().positive(), dueInDays: z.number().int().positive().optional(), email: z.boolean().optional(), withReservation: z.boolean().optional(), preview: z.boolean().optional() }).parse(req.body);
+  const doc = await billing.issueProforma(pid(res), req.params.id, b.amount, b.dueInDays, { preview: b.preview });
+  if (b.preview) return doc; // náhled — bez zápisu a bez e-mailu
   const info = { number: doc.number, total: Number(doc.total), dueDate: doc.dueDate };
   // withReservation: pošle JEDEN potvrzovací e-mail rovnou se zálohou (potvrzení bylo při zakládání odloženo). Jinak samostatný proforma e-mail.
   if (b.email && b.withReservation) mailer.sendReservationCreated(req.params.id, info).catch((e) => console.error("[mail] created+proforma:", (e as Error).message));

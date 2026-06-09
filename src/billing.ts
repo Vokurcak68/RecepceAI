@@ -53,42 +53,50 @@ type CreateDocInput = {
   note?: string;
 };
 
+type PropForDoc = { id: string; name: string; street: string | null; city: string | null; ico: string | null; dic: string | null; vatPayer: boolean; operatorName: string | null; operatorAddress: string | null; operatorIco: string | null; operatorDic: string | null; operatorRegistration: string | null; operatorAccount: string | null };
+
+/** Snímek dodavatele (provozovatel; fallback na provozovnu). Sdílí createDocument i náhled. */
+function supplierSnapshot(p: PropForDoc) {
+  return {
+    supplierName: p.operatorName || p.name,
+    supplierAddress: p.operatorAddress || ([p.street, p.city].filter(Boolean).join(", ") || null),
+    supplierIco: p.operatorIco || p.ico,
+    supplierDic: p.operatorDic || p.dic,
+    supplierRegistration: p.operatorRegistration || null,
+    supplierAccount: p.operatorAccount || null,
+    vatPayer: p.vatPayer,
+  };
+}
+
+/** Výpočet řádků + součtů (DPH dle plátcovství). Sdílí createDocument i náhled. */
+function computeLines(vatPayer: boolean, lines: LineInput[]) {
+  let subtotal = new Prisma.Decimal(0), vatTotal = new Prisma.Decimal(0), total = new Prisma.Decimal(0);
+  const lineData = lines.map((l) => {
+    const qty = new Prisma.Decimal(l.qty ?? 1);
+    const unit = new Prisma.Decimal(l.unitPrice);
+    const gross = round2(unit.mul(qty));
+    const rate = vatPayer ? l.vatRate : 0;
+    const { base, vat } = splitVat(gross, rate);
+    subtotal = subtotal.add(base); vatTotal = vatTotal.add(vat); total = total.add(gross);
+    return { label: l.label, qty, unitPrice: unit, vatRate: new Prisma.Decimal(rate), lineTotal: gross };
+  });
+  return { lineData, subtotal, vatTotal, total };
+}
+
 /** Jádro: vytvoří doklad se snímkem dodavatele, položkami a DPH. */
 export async function createDocument(input: CreateDocInput) {
   return prisma.$transaction(async (tx) => {
     const p = await tx.property.findUniqueOrThrow({ where: { id: input.propertyId } });
-    const year = new Date().getFullYear();
-    const number = await nextNumber(tx, input.type, year);
-
-    let subtotal = new Prisma.Decimal(0);
-    let vatTotal = new Prisma.Decimal(0);
-    let total = new Prisma.Decimal(0);
-    const lineData = input.lines.map((l) => {
-      const qty = new Prisma.Decimal(l.qty ?? 1);
-      const unit = new Prisma.Decimal(l.unitPrice);
-      const gross = round2(unit.mul(qty));
-      const rate = p.vatPayer ? l.vatRate : 0;
-      const { base, vat } = splitVat(gross, rate);
-      subtotal = subtotal.add(base); vatTotal = vatTotal.add(vat); total = total.add(gross);
-      return { label: l.label, qty, unitPrice: unit, vatRate: new Prisma.Decimal(rate), lineTotal: gross };
-    });
-
+    const number = await nextNumber(tx, input.type, new Date().getFullYear());
+    const { lineData, subtotal, vatTotal, total } = computeLines(p.vatPayer, input.lines);
     const paid = new Prisma.Decimal(input.paidTotal ?? 0);
     const status: DocumentStatus = total.lessThanOrEqualTo(paid) ? DocumentStatus.paid : DocumentStatus.issued;
-
     return tx.document.create({
       data: {
         propertyId: p.id, type: input.type, number, status,
         taxDate: input.taxDate === null ? null : toDateOnly(input.taxDate ?? new Date()),
         dueDate: input.dueInDays != null ? addDays(new Date(), input.dueInDays) : null,
-        // Dodavatel = provozovatel (fakturující firma), pokud je vyplněn; jinak fallback na údaje provozovny.
-        supplierName: p.operatorName || p.name,
-        supplierAddress: p.operatorAddress || ([p.street, p.city].filter(Boolean).join(", ") || null),
-        supplierIco: p.operatorIco || p.ico,
-        supplierDic: p.operatorDic || p.dic,
-        supplierRegistration: p.operatorRegistration || null,
-        supplierAccount: p.operatorAccount || null,
-        vatPayer: p.vatPayer,
+        ...supplierSnapshot(p),
         customerName: input.customer.name, customerAddress: input.customer.address ?? null, customerIco: input.customer.ico ?? null, customerDic: input.customer.dic ?? null,
         subtotal, vatTotal, total, paidTotal: paid, note: input.note,
         lines: { create: lineData },
@@ -97,6 +105,38 @@ export async function createDocument(input: CreateDocInput) {
       include: DOC_INCLUDE,
     });
   });
+}
+
+/** NÁHLED dokladu — spočítá obsah BEZ zápisu do DB (nečerpá číslo). Tvar jako createDocument (DOC_INCLUDE-like) + qrPayment:null. */
+export async function previewDocument(input: CreateDocInput) {
+  const p = await prisma.property.findUniqueOrThrow({ where: { id: input.propertyId } });
+  const { lineData, subtotal, vatTotal, total } = computeLines(p.vatPayer, input.lines);
+  const paid = new Prisma.Decimal(input.paidTotal ?? 0);
+  const resv = input.reservationIds?.length
+    ? await prisma.reservation.findMany({ where: { id: { in: input.reservationIds } }, select: { id: true, code: true } })
+    : [];
+  return {
+    id: "", type: input.type, number: "(náhled)", status: DocumentStatus.draft,
+    issuedAt: new Date(),
+    taxDate: input.taxDate === null ? null : toDateOnly(input.taxDate ?? new Date()),
+    dueDate: input.dueInDays != null ? addDays(new Date(), input.dueInDays) : null,
+    ...supplierSnapshot(p),
+    customerName: input.customer.name, customerAddress: input.customer.address ?? null, customerIco: input.customer.ico ?? null, customerDic: input.customer.dic ?? null,
+    subtotal, vatTotal, total, paidTotal: paid, note: input.note ?? null,
+    lines: lineData.map((l, i) => ({ id: `preview-${i}`, documentId: "", ...l })),
+    reservations: resv.map((r) => ({ documentId: "", reservationId: r.id, reservation: { code: r.code } })),
+    qrPayment: null as string | null,
+  };
+}
+
+/** Vrátí nestornovaný doklad daného druhu navázaný na rezervaci (idempotence — nezakládat duplicitní). */
+async function activeDocFor(propertyId: string, type: BillingDocType, reservationId: string) {
+  return prisma.document.findFirst({ where: { propertyId, type, status: { not: DocumentStatus.cancelled }, reservations: { some: { reservationId } } }, include: DOC_INCLUDE });
+}
+
+/** createDocument, nebo náhled (bez zápisu) podle preview. */
+function emitDoc(input: CreateDocInput, preview?: boolean) {
+  return preview ? previewDocument(input) : createDocument(input);
 }
 
 // ── Odběratel a položky z rezervace ──────────────────────────
@@ -148,7 +188,9 @@ async function advanceDeductions(reservationId: string): Promise<LineInput[]> {
 }
 
 /** Konečná faktura / účtenka za pobyt. Faktura odečte uhrazené zálohy. */
-export async function issueReservationDocument(propertyId: string, reservationId: string, type: BillingDocType = BillingDocType.invoice) {
+export async function issueReservationDocument(propertyId: string, reservationId: string, type: BillingDocType = BillingDocType.invoice, opts?: { preview?: boolean }) {
+  // Idempotence: nestornovaná faktura/účtenka už existuje → vrať ji (jen po stornu vznikne nová).
+  if (!opts?.preview) { const ex = await activeDocFor(propertyId, type, reservationId); if (ex) return ex; }
   const r = await loadReservationForDoc(propertyId, reservationId);
   const folio = await computeFolio(reservationId);
   const lines = linesFromReservation(r);
@@ -158,35 +200,37 @@ export async function issueReservationDocument(propertyId: string, reservationId
   } else if (type === BillingDocType.invoice) {
     lines.push(...(await advanceDeductions(reservationId))); // odečet uhrazených záloh
   }
-  return createDocument({ propertyId, type, customer: customerFromReservation(r), lines, reservationIds: [r.id], paidTotal, dueInDays: type === BillingDocType.invoice ? 14 : undefined });
+  return emitDoc({ propertyId, type, customer: customerFromReservation(r), lines, reservationIds: [r.id], paidTotal, dueInDays: type === BillingDocType.invoice ? 14 : undefined }, opts?.preview);
 }
 
 /** Periodická faktura za období (dlouhodobí) — poměrná část ubytování. */
-export async function issuePeriodInvoice(propertyId: string, reservationId: string, from: Date, to: Date) {
+export async function issuePeriodInvoice(propertyId: string, reservationId: string, from: Date, to: Date, opts?: { preview?: boolean }) {
   const r = await loadReservationForDoc(propertyId, reservationId);
   const nights = nightsBetween(from, to);
   if (nights < 1) throw new Error("Neplatné období.");
   const dailyAccommodation = r.totalAmount.sub(r.cityTax).div(r.nights);
   const accommodation = round2(dailyAccommodation.mul(nights));
-  return createDocument({
+  // Periodická (měsíční) faktura je záměrně opakovaná → bez dedup, jen volitelný náhled.
+  return emitDoc({
     propertyId, type: BillingDocType.invoice,
     customer: customerFromReservation(r),
     lines: [{ label: `Ubytování za období ${iso(from)} – ${iso(to)} (${nights} ${nights === 1 ? "noc" : "nocí"})`, unitPrice: accommodation, vatRate: VAT_ACCOMMODATION }],
     reservationIds: [r.id], dueInDays: 14, note: `Periodická faktura za období ${iso(from)} – ${iso(to)}`,
-  });
+  }, opts?.preview);
 }
 
 /** Zálohová faktura (proforma) na zadanou částku. */
-export async function issueProforma(propertyId: string, reservationId: string, amount: number, dueInDays = 7) {
+export async function issueProforma(propertyId: string, reservationId: string, amount: number, dueInDays = 7, opts?: { preview?: boolean }) {
+  if (!opts?.preview) { const ex = await activeDocFor(propertyId, BillingDocType.proforma, reservationId); if (ex) return ex; }
   const r = await loadReservationForDoc(propertyId, reservationId);
-  return createDocument({
+  return emitDoc({
     propertyId, type: BillingDocType.proforma,
     customer: customerFromReservation(r),
     lines: [{ label: `Záloha na ubytování — rezervace ${r.code}`, unitPrice: amount, vatRate: 0 }],
     reservationIds: [r.id],
     dueInDays,
     taxDate: null,
-  });
+  }, opts?.preview);
 }
 
 /** Daňový doklad k přijaté záloze (plátce DPH) — z uhrazené zálohové faktury. */
@@ -219,8 +263,13 @@ export async function createCreditNote(propertyId: string, originalId: string, r
 }
 
 /** Hromadná faktura za víc rezervací (firma / skupina) — jeden odběratel. */
-export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string) {
+export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string, opts?: { preview?: boolean }) {
   if (!reservationIds.length) throw new Error("Vyber alespoň jednu rezervaci.");
+  // Idempotence: kterýkoli pobyt už je na nestornované faktuře → vrať ji (skupina/firma už vyfakturovaná).
+  if (!opts?.preview) {
+    const ex = await prisma.document.findFirst({ where: { propertyId, type: BillingDocType.invoice, status: { not: DocumentStatus.cancelled }, reservations: { some: { reservationId: { in: reservationIds } } } }, include: DOC_INCLUDE });
+    if (ex) return ex;
+  }
   const lines: LineInput[] = [];
   let customer: { name: string; address?: string | null; ico?: string | null; dic?: string | null } | null = null;
   // Volitelně fakturovat na konkrétní firmu (z číselníku) — má přednost před odběratelem z rezervací.
@@ -236,7 +285,7 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
     paid = paid.add((await computeFolio(rid)).paid);
   }
   void paid; // hromadná faktura je splatná (platí se přes payDocument)
-  return createDocument({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 });
+  return emitDoc({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 }, opts?.preview);
 }
 
 // (Fakturace lůžkové obsazenosti firmě byla sjednocena do faktury z rezervací —
