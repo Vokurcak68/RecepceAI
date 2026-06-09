@@ -111,7 +111,7 @@ export async function emailGroupSummary(propertyId: string, id: string) {
   return { ok: true };
 }
 
-const memberInclude = { primaryGuest: true, roomType: true, room: true, bed: true } as const;
+const memberInclude = { primaryGuest: true, roomType: true, room: true, bed: true, charges: true } as const;
 
 export async function listGroups(propertyId: string) {
   const groups = await prisma.reservationGroup.findMany({
@@ -135,10 +135,17 @@ export async function getGroup(propertyId: string, id: string) {
   });
   if (!group) throw Object.assign(new Error("not_found"), { code: "P2025" });
   let charges = 0, paid = 0;
+  // Rozpad částky za celou skupinu (ubytování / pobytový poplatek / energie / položky) — pro Vyúčtování.
+  const propE = await prisma.property.findUnique({ where: { id: propertyId }, select: { inventoryUnit: true, energyFeePerNight: true } });
+  let acc = 0, ctax = 0, energy = 0, items = 0;
   const members = [];
   for (const r of group.reservations) {
     const folio = await computeFolio(r.id);
     charges += Number(folio.charges); paid += Number(folio.paid);
+    acc += Number(r.totalAmount) - Number(r.cityTax);
+    ctax += Number(r.cityTax);
+    if (propE?.inventoryUnit === "bed" && !r.energyFeeExempt && Number(propE.energyFeePerNight) > 0) energy += Number(propE.energyFeePerNight) * r.nights;
+    items += (r.charges ?? []).reduce((s, c) => s + Number(c.amount), 0);
     members.push({
       id: r.id, code: r.code, status: r.status,
       guestId: r.primaryGuestId, guestEmail: r.primaryGuest.email,
@@ -155,7 +162,7 @@ export async function getGroup(propertyId: string, id: string) {
   return {
     id: group.id, code: group.code, name: group.name, note: group.note, billing: group.billing, createdAt: group.createdAt,
     organizer: group.organizerGuestId ? await prisma.guest.findUnique({ where: { id: group.organizerGuestId }, select: { firstName: true, lastName: true, email: true } }) : null,
-    members, totals: { charges: charges.toFixed(2), paid: paid.toFixed(2), balance: (charges - paid).toFixed(2) },
+    members, totals: { charges: charges.toFixed(2), paid: paid.toFixed(2), balance: (charges - paid).toFixed(2), accommodation: acc.toFixed(2), cityTax: ctax.toFixed(2), energy: energy.toFixed(2), items: items.toFixed(2) },
     emails, invoice,
   };
 }

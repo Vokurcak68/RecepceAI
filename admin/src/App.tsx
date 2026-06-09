@@ -2412,6 +2412,12 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           </label>
           <span className="muted">Celkem {money(data.totals.charges)} · zaplaceno {money(data.totals.paid)} · <b style={{ color: bal > 0 ? "var(--warn)" : "var(--ok)" }}>{bal > 0 ? `zbývá ${money(bal)}` : "vyrovnáno"}</b></span>
         </div>
+        <div className="muted" style={{ marginTop: 8, fontSize: 13, display: "flex", flexWrap: "wrap", gap: 14 }}>
+          <span>Rozpad: <b style={{ color: "var(--text)" }}>{money(data.totals.accommodation ?? "0")}</b> ubytování</span>
+          {Number(data.totals.cityTax ?? 0) > 0 && <span><b style={{ color: "var(--text)" }}>{money(data.totals.cityTax!)}</b> pobyt. poplatek</span>}
+          {Number(data.totals.energy ?? 0) > 0 && <span><b style={{ color: "var(--text)" }}>{money(data.totals.energy!)}</b> energie</span>}
+          {Number(data.totals.items ?? 0) !== 0 && <span><b style={{ color: "var(--text)" }}>{money(data.totals.items!)}</b> položky/služby</span>}
+        </div>
         {data.billing === "collective" && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>👥 Kolektivní platba — účtuje se za celou skupinu (společná faktura). Jednotlivé pokoje lze odhlásit kdykoli; „Check-out vše" hlídá vyrovnaný účet celé skupiny.</div>}
         {results && (
           <div style={{ marginTop: 10 }}>
