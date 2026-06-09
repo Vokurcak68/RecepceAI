@@ -188,20 +188,28 @@ async function advanceDeductions(reservationId: string): Promise<LineInput[]> {
   return use.map((a) => ({ label: `Odečet zálohy ${a.number}`, unitPrice: a.total.neg(), vatRate: Number(a.lines[0]?.vatRate ?? 0) }));
 }
 
+/** Textová faktura „jednou částkou": sloučí položky do jednoho řádku (popis + celková částka). */
+function collapseToText(lines: LineInput[], description: string): { lines: LineInput[]; note: string } {
+  const amount = Math.round(lines.reduce((s, l) => s + Number(l.unitPrice) * (l.qty ?? 1), 0) * 100) / 100;
+  return { lines: [{ label: description.trim() || "Ubytovací a související služby", unitPrice: amount, vatRate: VAT_ACCOMMODATION }], note: description.trim() || undefined as unknown as string };
+}
+
 /** Konečná faktura / účtenka za pobyt. Faktura odečte uhrazené zálohy. */
-export async function issueReservationDocument(propertyId: string, reservationId: string, type: BillingDocType = BillingDocType.invoice, opts?: { preview?: boolean }) {
+export async function issueReservationDocument(propertyId: string, reservationId: string, type: BillingDocType = BillingDocType.invoice, opts?: { preview?: boolean; textInvoice?: { description: string } }) {
   // Idempotence: nestornovaná faktura/účtenka už existuje → vrať ji (jen po stornu vznikne nová).
   if (!opts?.preview) { const ex = await activeDocFor(propertyId, type, reservationId); if (ex) return ex; }
   const r = await loadReservationForDoc(propertyId, reservationId);
   const folio = await computeFolio(reservationId);
-  const lines = linesFromReservation(r);
+  let lines = linesFromReservation(r);
   let paidTotal: Prisma.Decimal | number = 0;
   if (type === BillingDocType.receipt) {
     paidTotal = folio.paid; // účtenka potvrzuje, co bylo zaplaceno
   } else if (type === BillingDocType.invoice) {
     lines.push(...(await advanceDeductions(reservationId))); // odečet uhrazených záloh
   }
-  return emitDoc({ propertyId, type, customer: customerFromReservation(r), lines, reservationIds: [r.id], paidTotal, dueInDays: type === BillingDocType.invoice ? 14 : undefined }, opts?.preview);
+  let note: string | undefined;
+  if (opts?.textInvoice) { const c = collapseToText(lines, opts.textInvoice.description); lines = c.lines; note = c.note; }
+  return emitDoc({ propertyId, type, customer: customerFromReservation(r), lines, reservationIds: [r.id], paidTotal, dueInDays: type === BillingDocType.invoice ? 14 : undefined, note }, opts?.preview);
 }
 
 /** Periodická faktura za období (dlouhodobí) — poměrná část ubytování. */
@@ -264,7 +272,7 @@ export async function createCreditNote(propertyId: string, originalId: string, r
 }
 
 /** Hromadná faktura za víc rezervací (firma / skupina) — jeden odběratel. */
-export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string, opts?: { preview?: boolean; groupId?: string }) {
+export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string, opts?: { preview?: boolean; groupId?: string; textInvoice?: { description: string } }) {
   if (!reservationIds.length) throw new Error("Vyber alespoň jednu rezervaci.");
   // Idempotence: u skupiny páruj JEDNOZNAČNĚ přes groupId; u ad-hoc/firmy přes překryv rezervací.
   if (!opts?.preview) {
@@ -289,7 +297,9 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
     paid = paid.add((await computeFolio(rid)).paid);
   }
   void paid; // hromadná faktura je splatná (platí se přes payDocument)
-  return emitDoc({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, groupId: opts?.groupId, paidTotal: 0, dueInDays: 14 }, opts?.preview);
+  let finalLines = lines, note: string | undefined;
+  if (opts?.textInvoice) { const c = collapseToText(lines, opts.textInvoice.description); finalLines = c.lines; note = c.note; }
+  return emitDoc({ propertyId, type: BillingDocType.invoice, customer: customer!, lines: finalLines, reservationIds, groupId: opts?.groupId, paidTotal: 0, dueInDays: 14, note }, opts?.preview);
 }
 
 // (Fakturace lůžkové obsazenosti firmě byla sjednocena do faktury z rezervací —

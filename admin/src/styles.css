@@ -252,9 +252,11 @@ tr.row-click:hover td { background: #f3f6ff; }
 
 /* Faktura */
 .inv-backdrop { position: fixed; inset: 0; background: rgba(20,30,60,0.45); display: grid; place-items: center; z-index: 50; }
-.invoice { background: #fff; width: 620px; max-width: 92vw; max-height: 90vh; overflow: auto; padding: 32px; border-radius: 12px; }
-.invoice table { margin: 8px 0; }
-.invoice th, .invoice td { padding: 9px 6px; }
+.invoice { background: #fff; width: 860px; max-width: 96vw; max-height: 90vh; overflow: auto; padding: 32px; border-radius: 12px; }
+.invoice table { margin: 8px 0; width: 100%; border-collapse: collapse; }
+.invoice th, .invoice td { padding: 8px 10px; vertical-align: top; }
+.invoice td.right, .invoice th.right { white-space: nowrap; }
+.invoice tbody tr { border-bottom: 1px solid var(--line); }
 .inv-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid var(--text); padding-bottom: 12px; }
 .inv-to { text-align: right; }
 .inv-total { display: flex; justify-content: space-between; font-size: 20px; border-top: 2px solid var(--text); padding-top: 10px; margin-top: 4px; }

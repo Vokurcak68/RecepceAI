@@ -2372,7 +2372,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
   const [results, setResults] = useState<BulkResult[] | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [invoiceCo, setInvoiceCo] = useState<{ id: string; name: string } | null>(null); // firma pro společnou fakturu
-  const [gPreview, setGPreview] = useState<{ doc: Doc; onIssue: () => Promise<Doc> } | null>(null);
+  const [gPreview, setGPreview] = useState<{ doc: Doc; onIssue: (td?: string) => Promise<Doc> } | null>(null);
   const [pickCo, setPickCo] = useState(false);
   const act = async (fn: () => Promise<unknown>, label: string) => {
     setBusy(true); setMsg(""); setResults(null);
@@ -2395,7 +2395,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <span className="row" style={{ gap: 4 }}>
             {data.invoice
               ? <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.document(data.invoice!.id)); return "Faktura"; }, "")}>🧾 Zobrazit fakturu</button>
-              : <button className="btn ghost" disabled={busy} onClick={() => act(async () => { const p = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, true, id); setGPreview({ doc: p, onIssue: async () => { const dd = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, false, id); reload(); return dd; } }); return ""; }, "")}>🧾 Společná faktura</button>}
+              : <button className="btn ghost" disabled={busy} onClick={() => act(async () => { const p = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, true, id); setGPreview({ doc: p, onIssue: async (td?: string) => { const dd = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, false, id, td); reload(); return dd; } }); return ""; }, "")}>🧾 Společná faktura</button>}
             <button className="btn ghost sm" disabled={busy} onClick={() => setPickCo(true)} title="Fakturovat na firmu">{invoiceCo ? `🏢 ${invoiceCo.name}` : "🏢 firma…"}</button>
             {invoiceCo && <button className="linkx" disabled={busy} onClick={() => setInvoiceCo(null)} title="Zrušit firmu">×</button>}
           </span>
@@ -2958,7 +2958,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   useEffect(() => { if (data) { setNoteText(data.note ?? ""); setNoteDirty(false); setReg((s) => (s.fullName ? s : { ...s, fullName: `${data.primaryGuest?.firstName ?? ""} ${data.primaryGuest?.lastName ?? ""}`.trim() })); } }, [data?.id]); // eslint-disable-line
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [issuedDoc, setIssuedDoc] = useState<Doc | null>(null);
-  const [previewState, setPreviewState] = useState<{ doc: Doc; onIssue: () => Promise<Doc> } | null>(null);
+  const [previewState, setPreviewState] = useState<{ doc: Doc; onIssue: (td?: string) => Promise<Doc> } | null>(null);
   const [guestQr, setGuestQr] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [pickGuest, setPickGuest] = useState(false);
@@ -2967,7 +2967,7 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
   const openReceipt = async (fn: () => Promise<Receipt>) => { try { setReceipt(await fn()); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } };
   const issueDoc = async (fn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { setIssuedDoc(await fn()); refresh(); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   // Náhled → teprve po „Vystavit" se doklad založí (DocumentOverlay preview). Zobrazit existující = otevře už vystavený.
-  const previewDoc = async (previewFn: () => Promise<Doc>, issueFn: () => Promise<Doc>) => { setBusy(true); setActErr(""); try { const p = await previewFn(); setPreviewState({ doc: p, onIssue: async () => { const dd = await issueFn(); refresh(); return dd; } }); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const previewDoc = async (previewFn: () => Promise<Doc>, issueFn: (td?: string) => Promise<Doc>) => { setBusy(true); setActErr(""); try { const p = await previewFn(); setPreviewState({ doc: p, onIssue: async (td?: string) => { const dd = await issueFn(td); refresh(); return dd; } }); } catch (e) { setActErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const askProforma = () => { const v = prompt("Částka zálohy (Kč):"); if (!v) return; const n = parseFloat(v.replace(",", ".")); if (!(n > 0)) return; previewDoc(() => api.issueProforma(id, n, undefined, undefined, undefined, true), () => api.issueProforma(id, n)); };
   const askPeriod = () => { const from = prompt("Období OD (RRRR-MM-DD):"); if (!from) return; const to = prompt("Období DO (RRRR-MM-DD):"); if (!to) return; previewDoc(() => api.periodInvoice(id, from, to, true), () => api.periodInvoice(id, from, to)); };
 
@@ -3040,10 +3040,10 @@ function ReservationDetailView({ id, prop, onBack }: { id: string; prop?: Proper
           {bal > 0 && showInvoice && <button className="btn secondary" disabled={busy} onClick={async () => { if (await confirm({ title: "Platba fakturou", message: <>Označit <b>{money(bal)}</b> jako zaplaceno fakturou?</>, confirmLabel: "Označit zaplaceno" })) run(() => api.addPayment(id, { type: "balance", amount: bal, method: "invoice", invoiceNumber: `FA-${r.code.replace("RC-", "")}` })); }}>Zaplaceno fakturou</button>}
           {(() => { const ex = r.documents?.find((x) => x.type === "invoice" && x.status !== "cancelled"); return ex
             ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>📄 Zobrazit fakturu</button>
-            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "invoice", true), () => api.issueDocument(id, "invoice"))}>📄 Vystavit fakturu</button>; })()}
+            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "invoice", true), (td) => api.issueDocument(id, "invoice", false, td))}>📄 Vystavit fakturu</button>; })()}
           {(() => { const ex = r.documents?.find((x) => x.type === "receipt" && x.status !== "cancelled"); return ex
             ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>🧾 Zobrazit účtenku</button>
-            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "receipt", true), () => api.issueDocument(id, "receipt"))}>🧾 Vystavit účtenku</button>; })()}
+            : <button className="btn ghost" disabled={busy} onClick={() => previewDoc(() => api.issueDocument(id, "receipt", true), (td) => api.issueDocument(id, "receipt", false, td))}>🧾 Vystavit účtenku</button>; })()}
           {(() => { const ex = r.documents?.find((x) => x.type === "proforma" && x.status !== "cancelled"); return ex
             ? <button className="btn ghost" disabled={busy} onClick={() => issueDoc(() => api.document(ex.id))}>💶 Zobrazit zálohovou f.</button>
             : <button className="btn ghost" disabled={busy} onClick={askProforma}>💶 Zálohová faktura</button>; })()}
@@ -4001,14 +4001,16 @@ function DocumentsView({ selId }: { selId: string }) {
   );
 }
 
-function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose: () => void; preview?: boolean; onIssue?: () => Promise<Doc> }) {
+function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose: () => void; preview?: boolean; onIssue?: (textDescription?: string) => Promise<Doc> }) {
   const confirm = useConfirm();
   const [cur, setCur] = useState<Doc>(doc);
   const [isPreview, setIsPreview] = useState(!!preview);
+  const [textMode, setTextMode] = useState(false); // textová faktura jednou částkou
+  const [textDesc, setTextDesc] = useState("");
   const [busy, setBusy] = useState(false);
   const [perr, setPerr] = useState("");
   const [qrImg, setQrImg] = useState("");
-  const issue = async () => { if (!onIssue) return; setBusy(true); setPerr(""); try { setCur(await onIssue()); setIsPreview(false); } catch (e) { setPerr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  const issue = async () => { if (!onIssue) return; setBusy(true); setPerr(""); try { setCur(await onIssue(textMode ? textDesc : undefined)); setIsPreview(false); setTextMode(false); } catch (e) { setPerr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   useEffect(() => { if (cur.qrPayment) QRCode.toDataURL(cur.qrPayment, { margin: 1, width: 150 }).then(setQrImg).catch(() => setQrImg("")); else setQrImg(""); }, [cur.qrPayment]);
   const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
   const pay = async (method: "cash" | "card_terminal") => {
@@ -4031,7 +4033,7 @@ function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose
       <div className="invoice" onClick={(e) => e.stopPropagation()}>
         <div className="inv-head">
           <div>
-            <h2 style={{ margin: 0 }}>{DOC_TYPE_LABEL[cur.type] ?? "Doklad"}</h2>
+            <h2 style={{ margin: 0 }}>{cur.type === "invoice" && cur.vatPayer ? "Faktura — daňový doklad" : (DOC_TYPE_LABEL[cur.type] ?? "Doklad")}</h2>
             <div className="muted" style={{ marginTop: 2 }}>{isPreview ? <b style={{ color: "var(--warn)" }}>NÁHLED — zatím nevystaveno</b> : <>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</>}</div>
             <div className="muted" style={{ marginTop: 8 }}>
               <b>{cur.supplierName}</b><br />
@@ -4054,20 +4056,31 @@ function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose
           Vystaveno {d(cur.issuedAt)}{cur.taxDate ? ` · DUZP ${d(cur.taxDate)}` : ""}{cur.dueDate ? ` · splatnost ${d(cur.dueDate)}` : ""}
           {cur.reservations?.length ? ` · rezervace ${cur.reservations.map((x) => x.reservation.code).join(", ")}` : ""}
         </div>
-        <table>
-          <thead><tr><th>Položka</th><th className="right">Množ.</th><th className="right">Cena</th>{cur.vatPayer && <th className="right">DPH</th>}<th className="right">Celkem</th></tr></thead>
-          <tbody>{(cur.lines ?? []).map((l: DocLine) => (
-            <tr key={l.id}><td>{l.label}</td><td className="right">{parseFloat(l.qty)}</td><td className="right">{money(l.unitPrice)}</td>{cur.vatPayer && <td className="right muted">{parseFloat(l.vatRate)} %</td>}<td className="right">{money(l.lineTotal)}</td></tr>
-          ))}</tbody>
-        </table>
-        {cur.vatPayer && (<>
-          <div className="kvline"><span className="muted">Základ</span><span>{money(cur.subtotal)}</span></div>
-          <div className="kvline"><span className="muted">DPH</span><span>{money(cur.vatTotal)}</span></div>
+        {isPreview && cur.type === "invoice" && <label className="row no-print" style={{ gap: 6, margin: "4px 0 10px" }}><input type="checkbox" checked={textMode} onChange={(e) => setTextMode(e.target.checked)} /> Textová faktura — jednou částkou (bez rozpisu položek)</label>}
+        {textMode ? (
+          <div style={{ margin: "8px 0 4px" }}>
+            <div className="inv-total"><span>Celkem{cur.vatPayer ? " vč. DPH" : ""}</span><b>{money(cur.total)}</b></div>
+            <label className="muted" style={{ display: "block", marginTop: 12, marginBottom: 4 }}>Popis faktury (text místo položek):</label>
+            <textarea value={textDesc} onChange={(e) => setTextDesc(e.target.value)} rows={3} style={{ width: "100%", boxSizing: "border-box", resize: "vertical" }} placeholder="např. Ubytovací a související služby dle objednávky za období …" />
+          </div>
+        ) : (<>
+          <table>
+            <thead><tr><th>Položka</th><th className="right">Množ.</th><th className="right">Cena</th>{cur.vatPayer && <th className="right">DPH</th>}<th className="right">Celkem</th></tr></thead>
+            <tbody>{(cur.lines ?? []).map((l: DocLine) => (
+              <tr key={l.id}><td>{l.label}</td><td className="right">{parseFloat(l.qty)}</td><td className="right">{money(l.unitPrice)}</td>{cur.vatPayer && <td className="right muted">{parseFloat(l.vatRate)} %</td>}<td className="right">{money(l.lineTotal)}</td></tr>
+            ))}</tbody>
+          </table>
+          {cur.note ? <div className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>{cur.note}</div> : null}
+          {cur.vatPayer && (<>
+            <div className="kvline"><span className="muted">Základ</span><span>{money(cur.subtotal)}</span></div>
+            <div className="kvline"><span className="muted">DPH</span><span>{money(cur.vatTotal)}</span></div>
+          </>)}
+          <div className="inv-total"><span>Celkem{cur.vatPayer ? " vč. DPH" : ""}</span><b>{money(cur.total)}</b></div>
+          <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(cur.paidTotal)}</span></div>
+          {due > 0.005 && <div className="kvline"><span className="muted">Zbývá uhradit</span><b>{money(due.toFixed(2))}</b></div>}
+          {qrImg && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}><img src={qrImg} alt="QR platba" width={120} height={120} /><div className="muted" style={{ fontSize: 13 }}>QR platba<br />Naskenuj v bankovní aplikaci pro úhradu.</div></div>}
         </>)}
-        <div className="inv-total"><span>Celkem{cur.vatPayer ? " vč. DPH" : ""}</span><b>{money(cur.total)}</b></div>
-        <div className="kvline"><span className="muted">Zaplaceno</span><span>{money(cur.paidTotal)}</span></div>
-        {due > 0.005 && <div className="kvline"><span className="muted">Zbývá uhradit</span><b>{money(due.toFixed(2))}</b></div>}
-        {qrImg && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}><img src={qrImg} alt="QR platba" width={120} height={120} /><div className="muted" style={{ fontSize: 13 }}>QR platba<br />Naskenuj v bankovní aplikaci pro úhradu zálohy.</div></div>}
+        {!isPreview && (cur.type === "invoice" || cur.type === "proforma") && <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>Forma úhrady: bankovním převodem{cur.supplierAccount ? ` · účet ${cur.supplierAccount}` : ""}{cur.number ? ` · variabilní symbol ${cur.number.replace(/\D/g, "")}` : ""}{!cur.vatPayer ? " · Dodavatel není plátcem DPH." : ""}</div>}
         {perr && <div className="error" style={{ marginTop: 10 }}>{perr}</div>}
         <div className="inv-actions no-print">
           {isPreview ? <>
