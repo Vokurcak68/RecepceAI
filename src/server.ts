@@ -513,6 +513,7 @@ adminRouter.post("/groups", h((req, res) => {
     name: z.string().min(1), note: z.string().optional(), from: dateStr, to: dateStr,
     billing: z.enum(["collective", "individual"]).optional(),
     organizer: z.object({ firstName: z.string().min(1), lastName: z.string().min(1), email: z.string().email().optional(), phone: z.string().optional(), language: z.string().optional() }),
+    organizerGuestId: z.string().uuid().optional(),
     rooms: z.array(groupRoom).min(1),
   }).parse(req.body);
   return groups.createGroup(pid(res), { ...b, from: new Date(b.from), to: new Date(b.to) });

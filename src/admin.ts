@@ -50,7 +50,7 @@ export async function listReservations(propertyId: string, filter: { status?: st
     ];
   }
   return prisma.reservation.findMany({
-    where, include: { primaryGuest: true, roomType: true, room: true, bed: true, payments: true },
+    where, include: { primaryGuest: true, roomType: true, room: true, bed: true, payments: true, group: { select: { id: true, code: true, name: true } } },
     orderBy: { createdAt: "desc" }, take: 200, // nejnovější (dle vzniku) nahoře
   });
 }

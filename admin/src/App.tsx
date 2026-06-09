@@ -1124,7 +1124,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
         if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: bedByIdx[0] || undefined, prepayDays: ppDays }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
-        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
+        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const ex = i >= 1 ? extra[i - 1] : null; const picked = i === 0 ? pickedGuestId : ex?.guestId; const named = !picked && ex && ex.firstName.trim() && ex.lastName.trim(); return named ? { roomTypeId: bedType.roomTypeId, adults: 1, firstName: ex!.firstName.trim(), lastName: ex!.lastName.trim() } : { roomTypeId: bedType.roomTypeId, adults: 1 }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, organizerGuestId: pickedGuestId ?? undefined, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
       } else {
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
@@ -1134,7 +1134,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {});
           for (const p of extra) { if (p.guestId) await api.addResGuest(r.id, { guestId: p.guestId }).catch(() => {}); else if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {}); }
           ids = [{ id: r.id, code: r.code }];
-        } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
+        } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, organizerGuestId: pickedGuestId ?? undefined, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
       // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + přistýlky oceněné dle typu osoby na nich.
       if (bedMode) {
@@ -1433,6 +1433,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
   const { data, error, reload } = useAsync<Reservation[]>(() => api.reservations(q, status), [selId, status]);
   const types = useAsync<RoomType[]>(() => api.roomTypes(), [selId]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [openGroup, setOpenGroup] = useState<string | null>(null); // proklik na skupinu ze seznamu
   const [guestQr, setGuestQr] = useState<Reservation[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [wizard, setWizard] = useState(false);
@@ -1455,6 +1456,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
     } catch (e) { setFormErr(e instanceof Error ? e.message : String(e)); }
   };
 
+  if (openGroup) return <GroupDetailView id={openGroup} prop={prop} onBack={() => { setOpenGroup(null); reload(); }} />;
   if (detailId) return <ReservationDetailView id={detailId} prop={prop} onBack={() => { setDetailId(null); reload(); }} />;
 
   return (
@@ -1518,7 +1520,7 @@ function ReservationsView({ selId, prop }: { selId: string; prop: Property }) {
             <tr key={r.id}>
               <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>
               <td className="muted">{r.code}</td>
-              <td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}</td>
+              <td>{r.primaryGuest?.firstName} {r.primaryGuest?.lastName}{r.group && <button className="chip" style={{ cursor: "pointer", border: "none", marginLeft: 6 }} title="Otevřít skupinu" onClick={(e) => { e.stopPropagation(); setOpenGroup(r.group!.id); }}>👥 {r.group.name} ›</button>}</td>
               <td>{d(r.checkInDate)} → {d(r.checkOutDate)}</td>
               <td className="muted" style={{ whiteSpace: "nowrap" }}>{r.createdAt ? new Date(r.createdAt).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
               <td>{r.room?.number ?? r.bed?.label ?? r.roomType?.name ?? "—"}</td>

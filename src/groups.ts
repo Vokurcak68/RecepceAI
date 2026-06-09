@@ -23,6 +23,7 @@ export type CreateGroupInput = {
   name: string; note?: string; from: Date; to: Date;
   billing?: GroupBilling; // kolektivně / individuálně (default individual)
   organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string };
+  organizerGuestId?: string; // existující host z adresáře → použít místo zakládání nového (bez duplicit)
   rooms: GroupRoomInput[];
 };
 
@@ -63,7 +64,11 @@ export async function createGroup(propertyId: string, input: CreateGroupInput) {
   }
 
   // 2) Příprava hostů a cen (čtení + založení hostů) mimo transakci.
-  const organizerId = await createGuest(organizer);
+  // Hlavní osoba z adresáře → použij existujícího hosta (bez duplikátu); jinak založ z napsaných údajů.
+  const existingOrganizer = input.organizerGuestId
+    ? await prisma.guest.findUnique({ where: { id: input.organizerGuestId }, select: { id: true } })
+    : null;
+  const organizerId = existingOrganizer?.id ?? await createGuest(organizer);
   const prepared: { room: GroupRoomInput; childAges: number[]; children: number; price: Awaited<ReturnType<typeof getStayPrice>>; guestId: string }[] = [];
   for (const room of rooms) {
     const childAges = (room.childAges ?? []).filter((a) => Number.isFinite(a));

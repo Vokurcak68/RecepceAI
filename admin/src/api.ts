@@ -54,7 +54,7 @@ export type Room = { id: string; number: string; floor: number; status: string; 
 export type Reservation = {
   id: string; code: string; status: string; checkInDate: string; checkOutDate: string;
   nights: number; adults: number; children?: number; childAges?: number[]; totalAmount: Money; cityTax: Money; billingCycle?: string;
-  primaryGuest?: Guest; roomType?: RoomType; room?: Room | null; bed?: Bed | null; createdAt?: string;
+  primaryGuest?: Guest; roomType?: RoomType; room?: Room | null; bed?: Bed | null; createdAt?: string; group?: { id: string; code: string; name: string } | null;
 };
 export type RegistrationEntry = { id: string; fullName: string; dateOfBirth: string; nationality: string; documentType: string; documentNumber: string; homeAddress: string; stayFrom: string; stayTo: string };
 export type Payment = { id: string; type: string; amount: Money; method: string; status: string; description: string | null; invoiceNumber: string | null; createdAt: string };
@@ -256,7 +256,7 @@ export const api = {
   reviews: () => req<ReviewsData>(`/admin/reviews`),
   groups: () => req<GroupListItem[]>(`/admin/groups`),
   group: (id: string) => req<GroupDetail>(`/admin/groups/${id}`),
-  createGroup: (b: { name: string; note?: string; from: string; to: string; billing?: GroupBilling; organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string }; rooms: GroupRoomInput[] }) => req<GroupDetail>(`/admin/groups`, { method: "POST", body: JSON.stringify(b) }),
+  createGroup: (b: { name: string; note?: string; from: string; to: string; billing?: GroupBilling; organizer: { firstName: string; lastName: string; email?: string; phone?: string; language?: string }; organizerGuestId?: string; rooms: GroupRoomInput[] }) => req<GroupDetail>(`/admin/groups`, { method: "POST", body: JSON.stringify(b) }),
   setGroupBilling: (id: string, billing: GroupBilling) => req<GroupDetail>(`/admin/groups/${id}/billing`, { method: "PATCH", body: JSON.stringify({ billing }) }),
   groupCheckin: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkin`, { method: "POST" }),
   groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
