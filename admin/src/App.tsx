@@ -1030,6 +1030,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
   const [pickedGuestId, setPickedGuestId] = useState<string | null>(null);
   const [roomQ, setRoomQ] = useState("");
   const [pay, setPay] = useState<"arrival" | "departure" | "deposit" | "company" | "prepay">("arrival");
+  const [groupBilling, setGroupBilling] = useState<"collective" | "individual">("collective"); // u skupiny (2+ jednotek): společný účet × každý zvlášť
   const [depositPct, setDepositPct] = useState(String(prop.depositPct || 50));
   const [prepayDays, setPrepayDays] = useState("3"); // platba předem: úhrada N dnů před příjezdem, jinak storno
   // Firemní / dlouhodobé (jen lůžková provozovna + odběratel firma): sazba z ceníku, splatnost, VIP, poznámka.
@@ -1109,7 +1110,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
       if (bedMode) {
         if (!bedType) throw new Error("Není dostupný typ lůžka.");
         if (bedsWanted === 1) { const r = await api.createReservation({ roomTypeId: bedType.roomTypeId, from, to, adults: 1, childAges: [], guest, bedId: bedByIdx[0] || undefined, prepayDays: ppDays }); ids = [{ id: r.id, code: r.code }]; memberPersons = [g]; }
-        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
+        else { const rooms = Array.from({ length: bedsWanted }, (_, i) => { const picked = i === 0 ? pickedGuestId : extra[i - 1]?.guestId; return picked ? { roomTypeId: bedType.roomTypeId, adults: 1 } : { roomTypeId: bedType.roomTypeId, adults: 1, firstName: allPersons[i]?.firstName || g.firstName, lastName: allPersons[i]?.lastName || g.lastName }; }); const grp = await api.createGroup({ name: `${g.lastName} (${bedsWanted} lůžek)`, from, to, organizer: guest, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); memberPersons = allPersons; for (let i = 0; i < ids.length; i++) { if (bedByIdx[i]) await api.assignUnit(ids[i].id, bedByIdx[i]).catch(() => {}); } }
       } else {
         const flat: string[] = [];
         for (const [rtId, n] of Object.entries(counts)) for (let i = 0; i < n; i++) flat.push(rtId);
@@ -1119,7 +1120,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
           if (prefill?.unitId) await api.assignUnit(r.id, prefill.unitId).catch(() => {});
           for (const p of extra) { if (p.guestId) await api.addResGuest(r.id, { guestId: p.guestId }).catch(() => {}); else if (p.firstName.trim()) await api.addResGuest(r.id, { firstName: p.firstName, lastName: p.lastName || g.lastName }).catch(() => {}); }
           ids = [{ id: r.id, code: r.code }];
-        } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
+        } else { const rooms = flat.map((rtId) => ({ roomTypeId: rtId, adults, childAges, firstName: g.firstName, lastName: g.lastName })); const grp = await api.createGroup({ name: `${g.lastName} (${flat.length} pokojů)`, from, to, organizer: guest, rooms, billing: groupBilling }); ids = grp.members.map((m) => ({ id: m.id, code: m.code })); }
       }
       // Cena: ubytovna = cena za lůžko/osobu (dle typu); pokoj = cena pokoje + přistýlky oceněné dle typu osoby na nich.
       if (bedMode) {
@@ -1182,7 +1183,7 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
             <div className="wz-done">
               <div className="circle">✓</div>
               <h2 style={{ margin: "0 0 8px" }}>Rezervace vytvořena</h2>
-              <div className="muted">Kód: <b style={{ color: "var(--text)", fontFamily: "monospace" }}>{done.map((d) => d.code).join(", ")}</b>{pay === "deposit" && done.length === 1 ? " · vystavena zálohová faktura, e-mail odeslán hostovi" : ""}{pay === "prepay" && customer !== "company" ? ` · odeslán e-mail s QR platbou, splatnost ${prepayDays} dnů před příjezdem` : ""}</div>
+              <div className="muted">Kód: <b style={{ color: "var(--text)", fontFamily: "monospace" }}>{done.map((d) => d.code).join(", ")}</b>{pay === "deposit" && done.length === 1 ? " · vystavena zálohová faktura, e-mail odeslán hostovi" : ""}{pay === "prepay" && customer !== "company" ? ` · odeslán e-mail s QR platbou, splatnost ${prepayDays} dnů před příjezdem` : ""}{done.length > 1 ? (groupBilling === "collective" ? " · společný účet (jeden plátce)" : " · každý platí zvlášť") : ""}</div>
             </div>
           </div>
           <div className="wz-foot">
@@ -1353,6 +1354,15 @@ function NewReservationWizard({ prop, onClose, onCreated, onOpenDetail, prefill 
                   {customer === "company" && <label className={pay === "company" ? "sel" : ""}><input type="radio" checked={pay === "company"} onChange={() => setPay("company")} /> Na fakturu firmě</label>}
                   {customer !== "company" && <label className={pay === "prepay" ? "sel" : ""}><input type="radio" checked={pay === "prepay"} onChange={() => setPay("prepay")} /> Platba předem — uhradit <input type="number" min={1} max={365} style={{ width: 56, marginLeft: 6, marginRight: 6 }} value={prepayDays} onChange={(e) => setPrepayDays(e.target.value)} /> dnů před příjezdem (jinak storno)</label>}
                 </div>
+                {(bedMode ? bedsWanted > 1 : totalRooms > 1) && (
+                  <>
+                    <div className="wz-sec">Účet skupiny</div>
+                    <div className="wz-pay">
+                      <label className={groupBilling === "collective" ? "sel" : ""}><input type="radio" checked={groupBilling === "collective"} onChange={() => setGroupBilling("collective")} /> Společný účet <span className="muted" style={{ fontSize: 12 }}>(jeden plátce za všechny)</span></label>
+                      <label className={groupBilling === "individual" ? "sel" : ""}><input type="radio" checked={groupBilling === "individual"} onChange={() => setGroupBilling("individual")} /> Každý zvlášť <span className="muted" style={{ fontSize: 12 }}>(samostatný účet na lůžko/pokoj)</span></label>
+                    </div>
+                  </>
+                )}
                 {pay === "prepay" && customer !== "company" && (() => {
                   const n = Number(prepayDays);
                   if (!(n > 0)) return null;
@@ -2344,6 +2354,8 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
           <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
           <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id))); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+          {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>hotově</b> za celou skupinu?</>, confirmLabel: "Hotově" })) act(() => api.payGroup(id, "cash"), "Skupina uhrazena hotově."); }}>💰 Vše hotově</button>}
+          {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>kartou</b> za celou skupinu?</>, confirmLabel: "Kartou" })) act(() => api.payGroup(id, "card_terminal"), "Skupina uhrazena kartou."); }}>💳 Vše kartou</button>}
           <button className="btn ghost" disabled={busy} onClick={() => act(() => api.groupEmail(id), "Souhrn odeslán organizátorovi.")}>✉️ Odeslat souhrn</button>
           <button className="btn danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Zrušit skupinu", message: <>Zrušit všechny pokoje skupiny <b>{data.name}</b>? (Odhlášené zůstanou.)</>, confirmLabel: "Zrušit vše", danger: true })) act(() => api.groupCancel(id), "Skupina zrušena."); }}>Zrušit vše</button>
           <span style={{ flex: 1 }} />

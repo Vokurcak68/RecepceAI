@@ -260,6 +260,7 @@ export const api = {
   setGroupBilling: (id: string, billing: GroupBilling) => req<GroupDetail>(`/admin/groups/${id}/billing`, { method: "PATCH", body: JSON.stringify({ billing }) }),
   groupCheckin: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkin`, { method: "POST" }),
   groupCheckout: (id: string) => req<BulkResult[]>(`/admin/groups/${id}/checkout`, { method: "POST" }),
+  payGroup: (id: string, method: "cash" | "card_terminal") => req<{ paid: string; count: number }>(`/admin/groups/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),
   groupCancel: (id: string) => req<{ ok: boolean; count: number }>(`/admin/groups/${id}/cancel`, { method: "POST" }),
   groupEmail: (id: string) => req<{ ok: boolean }>(`/admin/groups/${id}/email`, { method: "POST" }),
   assignUnit: (id: string, unitId: string, reprice?: "recompute" | "keep") => req(`/admin/reservations/${id}/assign`, { method: "POST", body: JSON.stringify({ unitId, ...(reprice ? { reprice } : {}) }) }),

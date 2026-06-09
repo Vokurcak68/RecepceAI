@@ -1,13 +1,13 @@
 // Skupinové / vícepokojové rezervace — blok více pokojů pod jednou skupinou
 // (firma, zájezd, svatba). Každý pokoj je samostatná Reservation (vlastní
 // check-in/out i účet); skupina je spojuje pro společný přehled a hromadné akce.
-import { ReservationStatus, ReservationSource, GroupBilling, InventoryUnit } from "@prisma/client";
+import { ReservationStatus, ReservationSource, GroupBilling, InventoryUnit, PaymentMethod, PaymentType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { freeUnitsForType } from "./availability";
 import { getStayPrice } from "./pricing";
 import { nightsBetween, toDateOnly } from "./dates";
 import { createGuest } from "./guests";
-import { checkIn, checkOut, computeFolio, generateReservationCode } from "./reservations";
+import { checkIn, checkOut, computeFolio, generateReservationCode, addPayment } from "./reservations";
 import * as mailer from "./mailer";
 
 function generateGroupCode(): string {
@@ -182,6 +182,20 @@ export async function checkOutGroup(propertyId: string, id: string) {
   const out = [];
   for (const r of rs) { try { await checkOut(r.id); out.push({ code: r.code, ok: true }); } catch (e) { out.push({ code: r.code, ok: false, error: (e as Error).message }); } }
   return out;
+}
+
+/** Hromadná úhrada celé skupiny jednou akcí — vyrovná zůstatek každého člena
+ * zvolenou metodou (hotově/kartou). Jedno kliknutí na recepci = celá skupina zaplacena. */
+export async function payGroup(propertyId: string, id: string, method: PaymentMethod) {
+  const g = await prisma.reservationGroup.findFirst({ where: { id, propertyId }, select: { id: true } });
+  if (!g) throw Object.assign(new Error("not_found"), { code: "P2025" });
+  const members = await prisma.reservation.findMany({ where: { groupId: id, status: { not: ReservationStatus.cancelled } }, select: { id: true } });
+  let paid = 0, count = 0;
+  for (const m of members) {
+    const bal = Number((await computeFolio(m.id)).balance);
+    if (bal > 0.005) { await addPayment({ reservationId: m.id, type: PaymentType.balance, amount: bal, method, description: "Hromadná úhrada skupiny" }); paid += bal; count++; }
+  }
+  return { paid: paid.toFixed(2), count };
 }
 
 /** Změna platebního režimu skupiny (kolektivně / individuálně). */
