@@ -69,6 +69,20 @@ const addDayIso = (iso: string) => { const t = Date.parse(iso); return Number.is
 // Odjezd ať je vždy aspoň den po příjezdu: při změně příjezdu vrátí příjezd+1, pokud odjezd není později.
 const departAfter = (arrival: string, current: string) => (arrival && (!current || current <= arrival) ? addDayIso(arrival) : current);
 
+// Před hotovostní úhradou: když není otevřená pokladní směna, doklad nevznikne → varuj a nech recepci rozhodnout.
+// Vrací true = pokračovat, false = zrušit a počkat na otevření pokladny.
+type ConfirmFn = (o: { title: string; message: ReactNode; confirmLabel?: string; danger?: boolean }) => Promise<boolean>;
+async function ensureCashOpen(confirm: ConfirmFn): Promise<boolean> {
+  let open = true;
+  try { open = !!(await api.cashState()).session; } catch { return true; } // chyba zjištění → nezdržuj
+  if (open) return true;
+  return confirm({
+    title: "Pokladna není otevřená",
+    message: <>Hotovostní platba se <b>nezapíše do pokladny</b> — není otevřená pokladní směna, takže o ní pokladní nemusí vědět.<br /><br />Pokračovat bez pokladního dokladu, nebo zrušit a počkat, až se pokladna otevře?</>,
+    confirmLabel: "Pokračovat bez dokladu", danger: true,
+  });
+}
+
 export function App() {
   const [session, setSession] = useState<LoginResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1801,7 +1815,7 @@ function RoomDetailView({ roomId, prop, onBack }: { roomId: string; prop: Proper
   const saveRoom = () => { if (ef) run(() => api.updateRoom(roomId, { number: ef.number, floor: Number(ef.floor), lockType: ef.lockType, notes: ef.notes }), "Pokoj uložen."); };
   const checkin = async (rid: string, code: string) => { if (await confirm({ title: "Check-in", message: <>Provést check-in rezervace <b>{code}</b>?</>, confirmLabel: "Check-in" })) run(() => api.checkin(rid), "Check-in proveden."); };
   const checkout = async (rid: string, code: string) => { if (await confirm({ title: "Check-out", message: <>Provést check-out rezervace <b>{code}</b>? Účet musí být vyrovnaný.</>, confirmLabel: "Check-out" })) run(async () => { const x = await api.checkout(rid); if (x.document) setDoc(x.document); }, "Check-out proveden."); };
-  const pay = async (rid: string, method: string, amount: number) => { if (!Number.isFinite(amount) || amount <= 0) { setMsg("Zadej platnou částku."); return; } if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) { run(() => api.addPayment(rid, { type: "balance", amount, method }), "Úhrada zaúčtována."); setPayAmt(""); setPayFor(null); } };
+  const pay = async (rid: string, method: string, amount: number) => { if (!Number.isFinite(amount) || amount <= 0) { setMsg("Zadej platnou částku."); return; } if (await confirm({ title: "Úhrada", message: <>Zaúčtovat <b>{money(amount)}</b> {method === "cash" ? "hotově" : "kartou"}?</>, confirmLabel: "Zaúčtovat" })) { if (method === "cash" && !(await ensureCashOpen(confirm))) return; run(() => api.addPayment(rid, { type: "balance", amount, method }), "Úhrada zaúčtována."); setPayAmt(""); setPayFor(null); } };
   const toggleDnd = (rid: string, on: boolean) => run(() => api.setDnd(rid, on), on ? "Nastaveno Nerušit." : "Nerušit zrušeno.");
   const openCharge = (q: RoomReqItem) => { setChargeReq(q); setChargeForm({ amount: "", category: q.domain === "maintenance" ? "other" : "service", description: q.note || q.description || SERVICE_LABEL[q.type] }); };
   const submitCharge = () => {
@@ -2354,7 +2368,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
           <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
           <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id))); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
-          {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>hotově</b> za celou skupinu?</>, confirmLabel: "Hotově" })) act(() => api.payGroup(id, "cash"), "Skupina uhrazena hotově."); }}>💰 Vše hotově</button>}
+          {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>hotově</b> za celou skupinu?</>, confirmLabel: "Hotově" })) { if (!(await ensureCashOpen(confirm))) return; act(() => api.payGroup(id, "cash"), "Skupina uhrazena hotově."); } }}>💰 Vše hotově</button>}
           {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>kartou</b> za celou skupinu?</>, confirmLabel: "Kartou" })) act(() => api.payGroup(id, "card_terminal"), "Skupina uhrazena kartou."); }}>💳 Vše kartou</button>}
           <button className="btn ghost" disabled={busy} onClick={() => act(() => api.groupEmail(id), "Souhrn odeslán organizátorovi.")}>✉️ Odeslat souhrn</button>
           <button className="btn danger" disabled={busy} onClick={async () => { if (await confirm({ title: "Zrušit skupinu", message: <>Zrušit všechny pokoje skupiny <b>{data.name}</b>? (Odhlášené zůstanou.)</>, confirmLabel: "Zrušit vše", danger: true })) act(() => api.groupCancel(id), "Skupina zrušena."); }}>Zrušit vše</button>
@@ -3936,6 +3950,7 @@ function DocumentOverlay({ doc, onClose }: { doc: Doc; onClose: () => void }) {
   const due = parseFloat(cur.total) - parseFloat(cur.paidTotal);
   const pay = async (method: "cash" | "card_terminal") => {
     if (!(await confirm({ title: "Zaplacení dokladu", message: <>Označit doklad jako zaplacený <b>{method === "cash" ? "hotově" : "kartou"}</b> ({money(due)})?</>, confirmLabel: "Zaplaceno" }))) return;
+    if (method === "cash" && !(await ensureCashOpen(confirm))) return;
     setBusy(true); setPerr("");
     try { setCur(await api.payDocument(cur.id, method)); }
     catch (e) { setPerr(e instanceof Error ? e.message : String(e)); }
