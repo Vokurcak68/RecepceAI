@@ -8,6 +8,7 @@ import { getStayPrice } from "./pricing";
 import { nightsBetween, toDateOnly } from "./dates";
 import { createGuest } from "./guests";
 import { checkIn, checkOut, computeFolio, generateReservationCode, addPayment } from "./reservations";
+import * as cash from "./cashregister";
 import * as mailer from "./mailer";
 
 function generateGroupCode(): string {
@@ -193,7 +194,11 @@ export async function payGroup(propertyId: string, id: string, method: PaymentMe
   let paid = 0, count = 0;
   for (const m of members) {
     const bal = Number((await computeFolio(m.id)).balance);
-    if (bal > 0.005) { await addPayment({ reservationId: m.id, type: PaymentType.balance, amount: bal, method, description: "Hromadná úhrada skupiny" }); paid += bal; count++; }
+    if (bal > 0.005) {
+      const payment = await addPayment({ reservationId: m.id, type: PaymentType.balance, amount: bal, method, description: "Hromadná úhrada skupiny" });
+      await cash.recordPayment(propertyId, { paymentId: payment.id, amount: payment.amount, method, note: "Hromadná úhrada skupiny" }); // pokladní doklad (hotovost) / navázání na směnu
+      paid += bal; count++;
+    }
   }
   return { paid: paid.toFixed(2), count };
 }
