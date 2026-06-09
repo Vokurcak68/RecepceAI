@@ -219,10 +219,15 @@ export async function createCreditNote(propertyId: string, originalId: string, r
 }
 
 /** Hromadná faktura za víc rezervací (firma / skupina) — jeden odběratel. */
-export async function issueBulkInvoice(propertyId: string, reservationIds: string[]) {
+export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string) {
   if (!reservationIds.length) throw new Error("Vyber alespoň jednu rezervaci.");
   const lines: LineInput[] = [];
   let customer: { name: string; address?: string | null; ico?: string | null; dic?: string | null } | null = null;
+  // Volitelně fakturovat na konkrétní firmu (z číselníku) — má přednost před odběratelem z rezervací.
+  if (companyId) {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true, street: true, zip: true, city: true, ico: true, dic: true } });
+    if (c) customer = { name: c.name, address: [c.street, [c.zip, c.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null, ico: c.ico, dic: c.dic };
+  }
   let paid = new Prisma.Decimal(0);
   for (const rid of reservationIds) {
     const r = await loadReservationForDoc(propertyId, rid);

@@ -2371,6 +2371,8 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
   const [msgErr, setMsgErr] = useState(false);
   const [results, setResults] = useState<BulkResult[] | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
+  const [invoiceCo, setInvoiceCo] = useState<{ id: string; name: string } | null>(null); // firma pro společnou fakturu
+  const [pickCo, setPickCo] = useState(false);
   const act = async (fn: () => Promise<unknown>, label: string) => {
     setBusy(true); setMsg(""); setResults(null);
     try { const r = await fn(); if (Array.isArray(r)) setResults(r as BulkResult[]); setMsg(label); setMsgErr(false); reload(); }
@@ -2389,7 +2391,11 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
         <div className="toolbar">
           <button className="btn ok" disabled={busy} onClick={() => act(() => api.groupCheckin(id), "Check-in proběhl.")}>Check-in vše</button>
           <button className="btn" disabled={busy} onClick={() => act(() => api.groupCheckout(id), "Check-out proběhl.")}>Check-out vše</button>
-          <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id))); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+          <span className="row" style={{ gap: 4 }}>
+            <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id)); return "Faktura"; }, "Společná faktura vystavena.")}>🧾 Společná faktura</button>
+            <button className="btn ghost sm" disabled={busy} onClick={() => setPickCo(true)} title="Fakturovat na firmu">{invoiceCo ? `🏢 ${invoiceCo.name}` : "🏢 firma…"}</button>
+            {invoiceCo && <button className="linkx" disabled={busy} onClick={() => setInvoiceCo(null)} title="Zrušit firmu">×</button>}
+          </span>
           {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>hotově</b> za celou skupinu?</>, confirmLabel: "Hotově" })) { if (!(await ensureCashOpen(confirm))) return; act(() => api.payGroup(id, "cash"), "Skupina uhrazena hotově."); } }}>💰 Vše hotově</button>}
           {bal > 0 && <button className="btn" disabled={busy} onClick={async () => { if (await confirm({ title: "Uhradit celou skupinu", message: <>Zaúčtovat <b>{money(bal)}</b> <b>kartou</b> za celou skupinu?</>, confirmLabel: "Kartou" })) act(() => api.payGroup(id, "card_terminal"), "Skupina uhrazena kartou."); }}>💳 Vše kartou</button>}
           <button className="btn ghost" disabled={busy} onClick={() => act(() => api.groupEmail(id), "Souhrn odeslán organizátorovi.")}>✉️ Odeslat souhrn</button>
@@ -2440,6 +2446,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
         )}
       </div></div>
       {doc && <DocumentOverlay doc={doc} onClose={() => setDoc(null)} />}
+      {pickCo && <CompanyPickerOverlay onClose={() => setPickCo(false)} onPick={(cid) => { api.company(cid).then((c) => setInvoiceCo({ id: c.id, name: c.name })).catch(() => {}); setPickCo(false); }} />}
       {memberPick && <GuestPickerOverlay
         prefill={memberPick.guestEmail || memberPick.guestName || ""}
         title={`Hlavní osoba pokoje ${memberPick.code}`}
