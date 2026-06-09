@@ -261,8 +261,13 @@ export async function addPayment(input: PaymentInput) {
 export type Folio = { charges: Prisma.Decimal; paid: Prisma.Decimal; balance: Prisma.Decimal };
 
 export async function computeFolio(reservationId: string): Promise<Folio> {
-  const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { payments: true, charges: true } });
-  // Náklady = ubytování (totalAmount, vč. poplatku) + připsané položky (Charge).
+  const res = await prisma.reservation.findUniqueOrThrow({ where: { id: reservationId }, include: { payments: true, charges: true, property: { select: { inventoryUnit: true, energyFeePerNight: true } } } });
+  // Náklady = ubytování (totalAmount, vč. poplatku) + energie (vzdušné) + připsané položky (Charge).
+  // POZN.: energie se musí počítat STEJNĚ jako řádek v dokladu (linesFromReservation, billing.ts), aby
+  // „k úhradě" v rezervaci sedělo s fakturou/účtenkou (jinak balance bez energie, ale doklad s ní).
+  const energyRate = Number(res.property?.energyFeePerNight ?? 0);
+  const energy = (res.property?.inventoryUnit === "bed" && !res.energyFeeExempt && energyRate > 0 && res.nights > 0)
+    ? new Prisma.Decimal(energyRate).mul(res.nights) : new Prisma.Decimal(0);
   let extra = new Prisma.Decimal(0);
   for (const c of res.charges) extra = extra.add(c.amount);
   // Zaplaceno = skutečné platby (záloha/doplatek/poplatek/vratka), NE položky.
@@ -271,7 +276,7 @@ export async function computeFolio(reservationId: string): Promise<Folio> {
     if (p.status !== PaymentStatus.succeeded) continue;
     if (p.type === PaymentType.deposit || p.type === PaymentType.balance || p.type === PaymentType.city_tax || p.type === PaymentType.refund) paid = paid.add(p.amount);
   }
-  const charges = res.totalAmount.add(extra);
+  const charges = res.totalAmount.add(energy).add(extra);
   return { charges, paid, balance: charges.sub(paid) };
 }
 
