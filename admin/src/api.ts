@@ -230,7 +230,7 @@ export const api = {
   payDocument: (id: string, method: "cash" | "card_terminal") => req<Doc>(`/admin/documents/${id}/pay`, { method: "POST", body: JSON.stringify({ method }) }),
   creditNote: (id: string, reason?: string) => req<Doc>(`/admin/documents/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
   advanceTaxDoc: (id: string) => req<Doc>(`/admin/documents/${id}/advance-tax`, { method: "POST" }),
-  bulkInvoice: (reservationIds: string[], companyId?: string, preview?: boolean) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds, companyId, preview }) }),
+  bulkInvoice: (reservationIds: string[], companyId?: string, preview?: boolean, groupId?: string) => req<Doc>(`/admin/documents/bulk-invoice`, { method: "POST", body: JSON.stringify({ reservationIds, companyId, preview, groupId }) }),
   periodInvoice: (resId: string, from: string, to: string, preview?: boolean) => req<Doc>(`/admin/reservations/${resId}/period-invoice`, { method: "POST", body: JSON.stringify({ from, to, preview }) }),
   documentsCsv: async (q = "") => { const r = await fetch(`/api/admin/documents/export.csv${q}`, { headers: { "x-admin-token": token(), "x-property-id": getProperty() } }); if (!r.ok) throw new Error("Export selhal"); return r.text(); },
 

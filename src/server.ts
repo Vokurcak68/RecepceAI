@@ -591,8 +591,8 @@ adminRouter.post("/documents/:id/credit-note", h((req, res) => {
 }));
 adminRouter.post("/documents/:id/advance-tax", h((req, res) => billing.issueAdvanceTaxDoc(pid(res), req.params.id)));
 adminRouter.post("/documents/bulk-invoice", h((req, res) => {
-  const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1), companyId: z.string().uuid().optional(), preview: z.boolean().optional() }).parse(req.body);
-  return billing.issueBulkInvoice(pid(res), b.reservationIds, b.companyId, { preview: b.preview });
+  const b = z.object({ reservationIds: z.array(z.string().uuid()).min(1), companyId: z.string().uuid().optional(), groupId: z.string().uuid().optional(), preview: z.boolean().optional() }).parse(req.body);
+  return billing.issueBulkInvoice(pid(res), b.reservationIds, b.companyId, { preview: b.preview, groupId: b.groupId });
 }));
 adminRouter.post("/reservations/:id/period-invoice", h((req, res) => {
   const b = z.object({ from: dateStr, to: dateStr, preview: z.boolean().optional() }).parse(req.body);

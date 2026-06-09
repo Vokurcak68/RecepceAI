@@ -664,6 +664,7 @@ model ReservationGroup {
 
   reservations Reservation[]
   emailLogs    EmailLog[]
+  documents    Document[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -942,6 +943,10 @@ model Document {
 
   note String?
 
+  // Skupina (jednoznačná vazba hromadné faktury na skupinu — pro „Zobrazit × Vystavit" bez záměn).
+  group   ReservationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId String?
+
   lines        DocumentLine[]
   payments     Payment[]
   reservations DocumentReservation[]
@@ -951,6 +956,7 @@ model Document {
 
   @@index([propertyId, type, issuedAt])
   @@index([propertyId, status])
+  @@index([groupId])
 }
 
 model DocumentLine {

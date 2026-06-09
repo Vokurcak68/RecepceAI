@@ -47,6 +47,7 @@ type CreateDocInput = {
   customer: { name: string; address?: string | null; ico?: string | null; dic?: string | null };
   lines: LineInput[];
   reservationIds?: string[];
+  groupId?: string; // jednoznačná vazba hromadné faktury na skupinu
   paidTotal?: Prisma.Decimal | number;
   dueInDays?: number;
   taxDate?: Date | null;
@@ -98,7 +99,7 @@ export async function createDocument(input: CreateDocInput) {
         dueDate: input.dueInDays != null ? addDays(new Date(), input.dueInDays) : null,
         ...supplierSnapshot(p),
         customerName: input.customer.name, customerAddress: input.customer.address ?? null, customerIco: input.customer.ico ?? null, customerDic: input.customer.dic ?? null,
-        subtotal, vatTotal, total, paidTotal: paid, note: input.note,
+        subtotal, vatTotal, total, paidTotal: paid, note: input.note, groupId: input.groupId ?? null,
         lines: { create: lineData },
         ...(input.reservationIds?.length ? { reservations: { create: input.reservationIds.map((reservationId) => ({ reservationId })) } } : {}),
       },
@@ -263,11 +264,14 @@ export async function createCreditNote(propertyId: string, originalId: string, r
 }
 
 /** Hromadná faktura za víc rezervací (firma / skupina) — jeden odběratel. */
-export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string, opts?: { preview?: boolean }) {
+export async function issueBulkInvoice(propertyId: string, reservationIds: string[], companyId?: string, opts?: { preview?: boolean; groupId?: string }) {
   if (!reservationIds.length) throw new Error("Vyber alespoň jednu rezervaci.");
-  // Idempotence: kterýkoli pobyt už je na nestornované faktuře → vrať ji (skupina/firma už vyfakturovaná).
+  // Idempotence: u skupiny páruj JEDNOZNAČNĚ přes groupId; u ad-hoc/firmy přes překryv rezervací.
   if (!opts?.preview) {
-    const ex = await prisma.document.findFirst({ where: { propertyId, type: BillingDocType.invoice, status: { not: DocumentStatus.cancelled }, reservations: { some: { reservationId: { in: reservationIds } } } }, include: DOC_INCLUDE });
+    const where: Prisma.DocumentWhereInput = opts?.groupId
+      ? { propertyId, type: BillingDocType.invoice, status: { not: DocumentStatus.cancelled }, groupId: opts.groupId }
+      : { propertyId, type: BillingDocType.invoice, status: { not: DocumentStatus.cancelled }, reservations: { some: { reservationId: { in: reservationIds } } } };
+    const ex = await prisma.document.findFirst({ where, include: DOC_INCLUDE });
     if (ex) return ex;
   }
   const lines: LineInput[] = [];
@@ -285,7 +289,7 @@ export async function issueBulkInvoice(propertyId: string, reservationIds: strin
     paid = paid.add((await computeFolio(rid)).paid);
   }
   void paid; // hromadná faktura je splatná (platí se přes payDocument)
-  return emitDoc({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, paidTotal: 0, dueInDays: 14 }, opts?.preview);
+  return emitDoc({ propertyId, type: BillingDocType.invoice, customer: customer!, lines, reservationIds, groupId: opts?.groupId, paidTotal: 0, dueInDays: 14 }, opts?.preview);
 }
 
 // (Fakturace lůžkové obsazenosti firmě byla sjednocena do faktury z rezervací —

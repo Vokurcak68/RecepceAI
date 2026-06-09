@@ -2395,7 +2395,7 @@ function GroupDetailView({ id, prop, onBack }: { id: string; prop: Property; onB
           <span className="row" style={{ gap: 4 }}>
             {data.invoice
               ? <button className="btn ghost" disabled={busy} onClick={() => act(async () => { setDoc(await api.document(data.invoice!.id)); return "Faktura"; }, "")}>🧾 Zobrazit fakturu</button>
-              : <button className="btn ghost" disabled={busy} onClick={() => act(async () => { const p = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, true); setGPreview({ doc: p, onIssue: async () => { const dd = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id); reload(); return dd; } }); return ""; }, "")}>🧾 Společná faktura</button>}
+              : <button className="btn ghost" disabled={busy} onClick={() => act(async () => { const p = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, true, id); setGPreview({ doc: p, onIssue: async () => { const dd = await api.bulkInvoice(data.members.map((m) => m.id), invoiceCo?.id, false, id); reload(); return dd; } }); return ""; }, "")}>🧾 Společná faktura</button>}
             <button className="btn ghost sm" disabled={busy} onClick={() => setPickCo(true)} title="Fakturovat na firmu">{invoiceCo ? `🏢 ${invoiceCo.name}` : "🏢 firma…"}</button>
             {invoiceCo && <button className="linkx" disabled={busy} onClick={() => setInvoiceCo(null)} title="Zrušit firmu">×</button>}
           </span>

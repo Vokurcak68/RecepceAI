@@ -150,10 +150,8 @@ export async function getGroup(propertyId: string, id: string) {
     });
   }
   const emails = await prisma.emailLog.findMany({ where: { groupId: id }, orderBy: { createdAt: "desc" }, take: 50 });
-  // Aktivní (nestornovaná) hromadná faktura skupiny — pro UI „Zobrazit × Vystavit".
-  const invoice = group.reservations.length
-    ? await prisma.document.findFirst({ where: { propertyId, type: "invoice", status: { not: "cancelled" }, reservations: { some: { reservationId: { in: group.reservations.map((r) => r.id) } } } }, select: { id: true, number: true, status: true } })
-    : null;
+  // Aktivní (nestornovaná) hromadná faktura skupiny — jednoznačně přes groupId.
+  const invoice = await prisma.document.findFirst({ where: { propertyId, type: "invoice", status: { not: "cancelled" }, groupId: id }, select: { id: true, number: true, status: true } });
   return {
     id: group.id, code: group.code, name: group.name, note: group.note, billing: group.billing, createdAt: group.createdAt,
     organizer: group.organizerGuestId ? await prisma.guest.findUnique({ where: { id: group.organizerGuestId }, select: { firstName: true, lastName: true, email: true } }) : null,
