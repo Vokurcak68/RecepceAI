@@ -4031,31 +4031,35 @@ function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose
   return (
     <div className="inv-backdrop" onClick={onClose}>
       <div className="invoice" onClick={(e) => e.stopPropagation()}>
+        <div className="inv-titlerow">
+          <h2 style={{ margin: 0 }}>{cur.type === "invoice" && cur.vatPayer ? "Faktura — daňový doklad" : (DOC_TYPE_LABEL[cur.type] ?? "Doklad")}</h2>
+          <div className="inv-num">{isPreview ? <b style={{ color: "var(--warn)" }}>NÁHLED — zatím nevystaveno</b> : <>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</>}</div>
+        </div>
         <div className="inv-head">
-          <div>
-            <h2 style={{ margin: 0 }}>{cur.type === "invoice" && cur.vatPayer ? "Faktura — daňový doklad" : (DOC_TYPE_LABEL[cur.type] ?? "Doklad")}</h2>
-            <div className="muted" style={{ marginTop: 2 }}>{isPreview ? <b style={{ color: "var(--warn)" }}>NÁHLED — zatím nevystaveno</b> : <>č. {cur.number}{cur.status === "cancelled" ? " · STORNO" : cur.status === "paid" ? " · ZAPLACENO" : ""}</>}</div>
-            <div className="muted" style={{ marginTop: 8 }}>
-              <b>{cur.supplierName}</b><br />
-              {cur.supplierAddress}
-              {(cur.supplierIco || cur.supplierDic) && <><br />{cur.supplierIco ? `IČO: ${cur.supplierIco}` : ""}{cur.supplierIco && cur.supplierDic ? " · " : ""}{cur.supplierDic ? `DIČ: ${cur.supplierDic}` : ""}</>}
-              {cur.supplierAccount && <><br />Účet: {cur.supplierAccount}</>}
-              {cur.supplierRegistration && <><br />{cur.supplierRegistration}</>}
-              {!cur.vatPayer && <><br />Neplátce DPH</>}
-            </div>
+          <div className="inv-party">
+            <div className="inv-plabel">Dodavatel</div>
+            <b>{cur.supplierName}</b>
+            {cur.supplierAddress && <div>{cur.supplierAddress}</div>}
+            {(cur.supplierIco || cur.supplierDic) && <div>{cur.supplierIco ? `IČO: ${cur.supplierIco}` : ""}{cur.supplierIco && cur.supplierDic ? " · " : ""}{cur.supplierDic ? `DIČ: ${cur.supplierDic}` : ""}</div>}
+            {cur.supplierRegistration && <div className="muted">{cur.supplierRegistration}</div>}
+            {!cur.vatPayer && <div className="muted">Neplátce DPH</div>}
           </div>
-          <div className="inv-to">
-            <div className="muted">Odběratel</div>
+          <div className="inv-party">
+            <div className="inv-plabel">Odběratel</div>
             <b>{cur.customerName}</b>
             {cur.customerAddress && <div>{cur.customerAddress}</div>}
-            {cur.customerIco && <div>IČO: {cur.customerIco}</div>}
-            {cur.customerDic && <div>DIČ: {cur.customerDic}</div>}
+            {(cur.customerIco || cur.customerDic) ? <div>{cur.customerIco ? `IČO: ${cur.customerIco}` : ""}{cur.customerIco && cur.customerDic ? " · " : ""}{cur.customerDic ? `DIČ: ${cur.customerDic}` : ""}</div> : null}
           </div>
         </div>
-        <div className="muted" style={{ margin: "6px 0 14px" }}>
-          Vystaveno {d(cur.issuedAt)}{cur.taxDate ? ` · DUZP ${d(cur.taxDate)}` : ""}{cur.dueDate ? ` · splatnost ${d(cur.dueDate)}` : ""}
-          {cur.reservations?.length ? ` · rezervace ${cur.reservations.map((x) => x.reservation.code).join(", ")}` : ""}
+        <div className="inv-meta">
+          {!isPreview && <div className="inv-mi"><span className="muted">Variabilní symbol</span><b>{cur.number.replace(/\D/g, "") || "—"}</b></div>}
+          <div className="inv-mi"><span className="muted">Datum vystavení</span><b>{d(cur.issuedAt)}</b></div>
+          {cur.taxDate && <div className="inv-mi"><span className="muted">DUZP</span><b>{d(cur.taxDate)}</b></div>}
+          {cur.dueDate && <div className="inv-mi"><span className="muted">Datum splatnosti</span><b>{d(cur.dueDate)}</b></div>}
+          <div className="inv-mi"><span className="muted">Forma úhrady</span><b>{cur.type === "receipt" ? "Hotově / kartou" : "Bankovním převodem"}</b></div>
+          {cur.supplierAccount && (cur.type === "invoice" || cur.type === "proforma") && <div className="inv-mi"><span className="muted">Bankovní účet</span><b>{cur.supplierAccount}</b></div>}
         </div>
+        {cur.reservations?.length ? <div className="muted" style={{ margin: "0 0 12px", fontSize: 13 }}>Rezervace: {cur.reservations.map((x) => x.reservation.code).join(", ")}</div> : null}
         {isPreview && cur.type === "invoice" && <label className="row no-print" style={{ gap: 6, margin: "4px 0 10px" }}><input type="checkbox" checked={textMode} onChange={(e) => setTextMode(e.target.checked)} /> Textová faktura — jednou částkou (bez rozpisu položek)</label>}
         {textMode ? (
           <div style={{ margin: "8px 0 4px" }}>
@@ -4080,7 +4084,7 @@ function DocumentOverlay({ doc, onClose, preview, onIssue }: { doc: Doc; onClose
           {due > 0.005 && <div className="kvline"><span className="muted">Zbývá uhradit</span><b>{money(due.toFixed(2))}</b></div>}
           {qrImg && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}><img src={qrImg} alt="QR platba" width={120} height={120} /><div className="muted" style={{ fontSize: 13 }}>QR platba<br />Naskenuj v bankovní aplikaci pro úhradu.</div></div>}
         </>)}
-        {!isPreview && (cur.type === "invoice" || cur.type === "proforma") && <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>Forma úhrady: bankovním převodem{cur.supplierAccount ? ` · účet ${cur.supplierAccount}` : ""}{cur.number ? ` · variabilní symbol ${cur.number.replace(/\D/g, "")}` : ""}{!cur.vatPayer ? " · Dodavatel není plátcem DPH." : ""}</div>}
+        {!cur.vatPayer && <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>Dodavatel není plátcem DPH.</div>}
         {perr && <div className="error" style={{ marginTop: 10 }}>{perr}</div>}
         <div className="inv-actions no-print">
           {isPreview ? <>

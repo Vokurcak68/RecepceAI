@@ -257,8 +257,16 @@ tr.row-click:hover td { background: #f3f6ff; }
 .invoice th, .invoice td { padding: 8px 10px; vertical-align: top; }
 .invoice td.right, .invoice th.right { white-space: nowrap; }
 .invoice tbody tr { border-bottom: 1px solid var(--line); }
-.inv-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid var(--text); padding-bottom: 12px; }
-.inv-to { text-align: right; }
+.inv-titlerow { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; border-bottom: 2px solid var(--text); padding-bottom: 8px; margin-bottom: 16px; }
+.inv-num { font-size: 15px; color: var(--muted); }
+.inv-head { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.inv-party { font-size: 14px; line-height: 1.55; }
+.inv-party b { font-size: 15px; }
+.inv-plabel { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 3px; }
+.inv-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 18px; margin: 16px 0; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.inv-mi { display: flex; flex-direction: column; gap: 1px; }
+.inv-mi .muted { font-size: 11px; }
+.inv-mi b { font-size: 14px; }
 .inv-total { display: flex; justify-content: space-between; font-size: 20px; border-top: 2px solid var(--text); padding-top: 10px; margin-top: 4px; }
 .inv-actions { display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end; }
 
