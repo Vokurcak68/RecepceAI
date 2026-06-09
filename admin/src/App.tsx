@@ -906,6 +906,7 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
   const [planOpen, setPlanOpen] = useState(false);
   const [arrQ, setArrQ] = useState(""); // hledání v Příjezdech dnes
   const [depQ, setDepQ] = useState(""); // hledání v Odjezdech dnes
+  const [occQ, setOccQ] = useState(""); // hledání v Obsazenosti
   const fnorm = (s: string) => (s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const matchArr = (r: { guestName: string; where?: string; code?: string }, q: string) => { const t = fnorm(q).trim(); return !t || fnorm(`${r.guestName} ${r.where ?? ""} ${r.code ?? ""}`).includes(t); };
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -1010,9 +1011,12 @@ function ReceptionView({ selId, prop, onOpen }: { selId: string; prop: Property;
             <td className="right">{resId && <button className="btn sm ghost" onClick={(e) => { e.stopPropagation(); setDetailId(resId); }}>Detail</button>}</td>
           </tr>
         );
+        const ot = fnorm(occQ).trim();
+        const shown = !ot ? units : units.filter((u) => fnorm(bedMode ? `${(u as BedBoardItem).label} ${(u as BedBoardItem).roomNumber} ${(u as BedBoardItem).current?.guestName ?? ""}` : `${(u as RoomBoardItem).number} ${(u as RoomBoardItem).occupant?.name ?? ""}`).includes(ot));
         return (
           <div className="panel"><h3>Obsazenost {bedMode ? "lůžek" : "pokojů"} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>· {occ}/{units.length} obsazeno</span></h3>
-            <Table cols={[bedMode ? "Lůžko" : "Pokoj", "Stav", "Úklid", "Host", "Do / další", ""]} rows={units} empty="—"
+            <input className="wz-filter" placeholder={bedMode ? "🔍 Hledat lůžko / pokoj / hosta…" : "🔍 Hledat pokoj / hosta…"} value={occQ} onChange={(e) => setOccQ(e.target.value)} style={{ marginBottom: 8 }} />
+            <Table cols={[bedMode ? "Lůžko" : "Pokoj", "Stav", "Úklid", "Host", "Do / další", ""]} rows={shown} empty="Nic nenalezeno."
               render={(u: RoomBoardItem | BedBoardItem) => bedMode
                 ? (() => { const b = u as BedBoardItem; return row(b.bedId, `${b.label} · pok. ${b.roomNumber} · ${b.floor}. p`, b.current?.guestName, b.current?.reservationId, b.current ? `do ${d(b.current.toDate)}` : (b.upcoming > 0 ? `příjezd ${d(b.nextFrom!)}` : undefined), b.status); })()
                 : (() => { const r = u as RoomBoardItem; return row(r.id, `${r.number} · ${r.floor}. p`, r.occupant?.name, r.occupant?.reservationId, r.occupant ? `do ${d(r.occupant.checkOutDate)}` : (r.arrival ? `příjezd: ${r.arrival.name}` : undefined), r.status); })()} />
@@ -2251,6 +2255,7 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [g, setG] = useState(blankGroupForm());
+  const [gq, setGq] = useState(""); // hledání ve skupinách
   const setRoom = (i: number, patch: Partial<GroupRoomInput>) => setG((s) => ({ ...s, rooms: s.rooms.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
   // Dostupnost ve zvoleném termínu — nabízíme/limitujeme jen volné jednotky (skupina musí jít vytvořit celá).
   const avail = useAsync<AvailUnit[]>(() => api.availabilityFor(g.from, g.to, 1), [selId, g.from, g.to]);
@@ -2339,7 +2344,8 @@ function GroupsView({ selId, prop }: { selId: string; prop: Property }) {
         </div>
       )}
       <div className="panel">
-        <Table cols={["Kód", "Název", "Pokojů", "Termín", "Celkem", ""]} rows={data ?? []} empty="Žádné skupiny"
+        {(data?.length ?? 0) > 0 && <input className="wz-filter" placeholder="🔍 Hledat skupinu (název / kód)…" value={gq} onChange={(e) => setGq(e.target.value)} style={{ marginBottom: 10 }} />}
+        <Table cols={["Kód", "Název", "Pokojů", "Termín", "Celkem", ""]} rows={(data ?? []).filter((gr) => { const t = gq.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim(); return !t || `${gr.name} ${gr.code}`.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes(t); })} empty={gq ? "Nic nenalezeno." : "Žádné skupiny"}
           render={(gr: GroupListItem) => (
             <tr key={gr.id}>
               <td className="muted">{gr.code}</td>
