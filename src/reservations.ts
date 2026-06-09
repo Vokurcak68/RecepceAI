@@ -310,10 +310,10 @@ export async function checkOut(reservationId: string) {
     data: { status: ReservationStatus.checked_out },
     include: { room: true, bed: true },
   });
-  // Úklid se vede po POKOJÍCH (uklízečka i Recepce pracují s room.status). U lůžkové rezervace
-  // proto označíme „k úklidu" POKOJ daného lůžka (ne lůžko) — ať to sedí napříč celou aplikací.
+  // Úklid se vede po JEDNOTKÁCH: pokojová rezervace ušpiní pokoj, lůžková jen své LŮŽKO
+  // (sdílený pokoj ubytovny — odjezd jednoho hosta = převléct jeho lůžko, ostatní bydlí dál).
   if (res.roomId) await prisma.room.update({ where: { id: res.roomId }, data: { status: RoomStatus.dirty } });
-  else if (res.bedId) { const bed = await prisma.bed.findUnique({ where: { id: res.bedId }, select: { roomId: true } }); if (bed) await prisma.room.update({ where: { id: bed.roomId }, data: { status: RoomStatus.dirty } }); }
+  if (res.bedId) await prisma.bed.update({ where: { id: res.bedId }, data: { status: RoomStatus.dirty } });
   // Automatický požadavek na úklid po odhlášení (fronta uklízeček).
   await prisma.serviceRequest.create({
     data: { propertyId: res.propertyId, reservationId: res.id, roomId: res.roomId, bedId: res.bedId, type: "cleaning", domain: "housekeeping", description: "Úklid po odhlášení", fromGuest: false },

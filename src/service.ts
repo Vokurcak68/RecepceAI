@@ -43,9 +43,10 @@ export async function updateStatus(id: string, status: ServiceStatus, note: stri
     if (userId) data.resolvedBy = { connect: { id: userId } };
   }
   const req = await prisma.serviceRequest.update({ where: { id }, data, include: REQ_INCLUDE });
-  // Dokončený úklid pokoje → pokoj uklizený.
-  if (status === ServiceStatus.done && req.type === ServiceType.cleaning && req.roomId) {
-    await prisma.room.update({ where: { id: req.roomId }, data: { status: "clean" } });
+  // Dokončený úklid → jednotka uklizená (pokoj u hotelu, lůžko u ubytovny).
+  if (status === ServiceStatus.done && req.type === ServiceType.cleaning) {
+    if (req.roomId) await prisma.room.update({ where: { id: req.roomId }, data: { status: "clean" } });
+    if (req.bedId) await prisma.bed.update({ where: { id: req.bedId }, data: { status: "clean" } });
   }
   return req;
 }

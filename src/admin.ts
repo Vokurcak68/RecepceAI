@@ -375,7 +375,7 @@ export async function bedReservationBoard(propertyId: string) {
     const cur = list.find((r) => r.checkInDate <= today && r.checkOutDate > today) ?? null;
     const upcoming = list.filter((r) => r.checkInDate > today);
     return {
-      bedId: b.id, label: b.label, roomId: b.room.id, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.room.status,
+      bedId: b.id, label: b.label, roomId: b.room.id, roomNumber: b.room.number, floor: b.room.floor, roomTypeId: b.room.roomTypeId, status: b.status,
       roomPosX: b.room.posX, roomPosY: b.room.posY, roomW: b.room.w, roomH: b.room.h,
       current: cur ? { reservationId: cur.id, code: cur.code, guestName: occByBed.get(b.id) ?? `${cur.primaryGuest.firstName} ${cur.primaryGuest.lastName}`, companyName: cur.company?.name ?? null, fromDate: cur.checkInDate, toDate: cur.checkOutDate, status: cur.status } : null,
       upcoming: upcoming.length, nextFrom: upcoming[0]?.checkInDate ?? null,
@@ -497,8 +497,13 @@ export async function receptionToday(propertyId: string) {
     freeUnits = Math.max(0, rooms - new Set(inHouse.map((r) => r.roomId).filter(Boolean)).size); unitLabel = "pokojů";
   }
 
+  // „K úklidu" se počítá po JEDNOTKÁCH: ubytovna = dirty lůžka, jinak dirty pokoje.
+  const dirtyCount = prop.inventoryUnit === InventoryUnit.bed
+    ? await prisma.bed.count({ where: { propertyId, status: RoomStatus.dirty } })
+    : dirtyRooms;
+
   return {
-    date: day, freeUnits, unitLabel, dirtyRooms, inHouseCount: inHouse.length,
+    date: day, freeUnits, unitLabel, dirtyRooms: dirtyCount, inHouseCount: inHouse.length,
     arrivals: arr.map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), assigned: !!(r.roomId || r.bedId) })),
     departures: dep.map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), balance: bal.get(r.id) ?? "0" })),
     unpaid: inHouse.filter((r) => Number(bal.get(r.id) ?? "0") > 0 && !depIds.has(r.id)).map((r) => ({ id: r.id, code: r.code, guestName: gName(r), where: whereOf(r), balance: bal.get(r.id)! })),
