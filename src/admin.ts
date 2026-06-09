@@ -5,7 +5,7 @@ import { toDateOnly, nightsBetween, addDays } from "./dates";
 import { getStayPrice } from "./pricing";
 import { freeUnitsForType, overlapWhere } from "./availability";
 import { InventoryUnit } from "@prisma/client";
-import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge, addRegistrationEntry } from "./reservations";
+import { generateReservationCode, checkIn, checkOut, addPayment, computeFolio, addCharge, listCharges, deleteCharge, addRegistrationEntry, autoRegisterReturningGuest } from "./reservations";
 import { ChargeCategory, DocumentType } from "@prisma/client";
 import * as mailer from "./mailer";
 import { createGuest, previousStaysCount } from "./guests";
@@ -737,50 +737,11 @@ export async function setPrimaryGuest(propertyId: string, id: string, guestId: s
         update: { isPrimary: true },
       });
     });
-    await autoRegisterReturningGuest(id, guestId);
+    // Evidenční kniha se plní až při check-inu — když měníme hlavní osobu u UŽ ubytované rezervace, doplň i zápis.
+    const r = await prisma.reservation.findUnique({ where: { id }, select: { status: true } });
+    if (r?.status === ReservationStatus.checked_in) await autoRegisterReturningGuest(id, guestId);
   }
   return getReservation(propertyId, id);
-}
-
-/** Věk k danému datu (z data narození). */
-function ageAtDate(dob: Date, ref: Date): number {
-  let a = ref.getFullYear() - dob.getFullYear();
-  const m = ref.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && ref.getDate() < dob.getDate())) a--;
-  return a;
-}
-
-/** Auto-zápis hosta (hlavního i spolubydlícího) do evidenční knihy, když ho známe z dřívějška
- * (má dřívější zápis) nebo má vyplněný profil — ať se nezadává podruhé. Děti (do `cityTaxFreeAge`
- * provozovny) se do knihy nezapisují. Bez data narození/národnosti/dokladu přeskočí. */
-async function autoRegisterReturningGuest(reservationId: string, guestId: string) {
-  const exists = await prisma.registrationEntry.findFirst({ where: { reservationId, guestId }, select: { id: true } });
-  if (exists) return; // už je v knize na téhle rezervaci
-  const res = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { checkInDate: true, checkOutDate: true, property: { select: { cityTaxFreeAge: true } } } });
-  if (!res) return;
-  const isChild = (dob: Date) => ageAtDate(dob, res.checkInDate) < res.property.cityTaxFreeAge;
-  // 1) Máme dřívější zápis v knize → zkopíruj ho (nejúplnější zdroj).
-  const prev = await prisma.registrationEntry.findFirst({ where: { guestId, reservationId: { not: reservationId } }, orderBy: { createdAt: "desc" } });
-  if (prev) {
-    if (isChild(prev.dateOfBirth)) return; // dítě se do evidenční knihy nezapisuje
-    await addRegistrationEntry({
-      reservationId, guestId, fullName: prev.fullName, dateOfBirth: prev.dateOfBirth, nationality: prev.nationality,
-      documentType: prev.documentType, documentNumber: prev.documentNumber, homeAddress: prev.homeAddress,
-      visaNumber: prev.visaNumber ?? undefined, purposeOfStay: prev.purposeOfStay ?? undefined,
-      stayFrom: res.checkInDate, stayTo: res.checkOutDate,
-    }).catch(() => {});
-    return;
-  }
-  // 2) Bez dřívějšího zápisu, ale klient vyplnil údaje pro evidenci přímo v adresáři → zapiš z profilu.
-  const g = await prisma.guest.findUnique({ where: { id: guestId } });
-  if (g?.dateOfBirth && g.nationality && g.documentNumber) {
-    if (isChild(g.dateOfBirth)) return; // dítě se do evidenční knihy nezapisuje
-    await addRegistrationEntry({
-      reservationId, guestId, fullName: `${g.firstName} ${g.lastName}`.trim(), dateOfBirth: g.dateOfBirth, nationality: g.nationality,
-      documentType: g.documentType ?? DocumentType.id_card, documentNumber: g.documentNumber, homeAddress: g.address ?? "",
-      stayFrom: res.checkInDate, stayTo: res.checkOutDate,
-    }).catch(() => {});
-  }
 }
 
 export async function cancelReservation(propertyId: string, id: string) {
