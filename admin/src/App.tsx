@@ -236,6 +236,7 @@ export function App() {
           )}
           <button onClick={() => { setNavOpen(false); logout(); }} style={{ marginTop: 24 }}>🚪 Odhlásit ({session.user.name})</button>
         </nav>
+        <img className="sidebar-portrait" src="/reception-daniel.jpg" alt="" />
       </aside>
 
       <main className="main">

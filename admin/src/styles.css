@@ -15,7 +15,9 @@ body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: va
 .app { display: flex; min-height: 100vh; }
 
 /* Sidebar */
-.sidebar { width: 230px; background: var(--panel); border-right: 1px solid var(--line); padding: 22px 14px; flex-shrink: 0; }
+.sidebar { width: 230px; background: var(--panel); border-right: 1px solid var(--line); padding: 22px 14px; flex-shrink: 0; display: flex; flex-direction: column; }
+/* Obrázek recepčního dole pod menu — šířka jen do sloupce (menu se nezvětší), zatlačený na konec */
+.sidebar-portrait { width: 100%; max-width: 100%; height: auto; display: block; margin-top: auto; padding-top: 18px; border-radius: 12px; }
 .logo { font-size: 20px; font-weight: 800; padding: 0 12px 18px; }
 .nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; padding: 13px 14px; border-radius: 10px; font-size: 16px; color: var(--muted); cursor: pointer; }
 .nav button.active { background: #eef2ff; color: var(--accent); font-weight: 600; }
