@@ -90,7 +90,22 @@ export function App() {
   const [tab, setTab] = useState("reception");
   const [openGroup, setOpenGroup] = useState(() => localStorage.getItem("navGroup") ?? "Hosté");
   const [navOpen, setNavOpen] = useState(false); // mobilní výsuvné menu
+  const navStack = useRef<{ tab: string; group: string }[]>([]); // historie záložek pro tlačítko Zpět
   useEffect(() => { localStorage.setItem("navGroup", openGroup); }, [openGroup]);
+
+  // Šipka Zpět v prohlížeči nemá u této SPA kam jít a vyhodila by z aplikace.
+  // Držíme v historii „strážní" záznam: Zpět tak místo opuštění aplikace přepne
+  // na předchozí navštívenou záložku (a na úvodní obrazovce jen zůstane).
+  useEffect(() => {
+    window.history.pushState({ ai: true }, "");
+    const onPop = () => {
+      window.history.pushState({ ai: true }, ""); // znovu naplň sentinel → Zpět neopustí appku
+      const prev = navStack.current.pop();
+      if (prev) { setTab(prev.tab); setOpenGroup(prev.group); setNavOpen(false); }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     if (!localStorage.getItem("adminToken")) { setLoading(false); return; }
@@ -161,7 +176,10 @@ export function App() {
     ] },
   ];
   const navItemsBottom = [{ id: "agents", label: "AI agenti", icon: "🤖" }];
-  const goTab = (id: string, group?: string) => { setTab(id); if (group) setOpenGroup(group); setNavOpen(false); };
+  const goTab = (id: string, group?: string) => {
+    if (id !== tab) { navStack.current.push({ tab, group: openGroup }); if (navStack.current.length > 50) navStack.current.shift(); }
+    setTab(id); if (group) setOpenGroup(group); setNavOpen(false);
+  };
 
   return (
     <div className={`app${navOpen ? " nav-open" : ""}`}>
