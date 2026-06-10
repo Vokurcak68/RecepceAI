@@ -1,0 +1,79 @@
+{
+  "cs:welcome": {
+    "lang": "cs",
+    "key": "welcome",
+    "text": "Dobrý den, vítejte. Jak vám mohu pomoci?",
+    "hash": "76bbf8020a",
+    "file": "cs-welcome-76bbf8020a.mp4"
+  },
+  "cs:escalateTitle": {
+    "lang": "cs",
+    "key": "escalateTitle",
+    "text": "Přivolávám kolegu",
+    "hash": "cfe9a2ffba",
+    "file": "cs-escalateTitle-cfe9a2ffba.mp4"
+  },
+  "cs:assistantTitle": {
+    "lang": "cs",
+    "key": "assistantTitle",
+    "text": "Zeptejte se mě",
+    "hash": "dfbd96a28a",
+    "file": "cs-assistantTitle-dfbd96a28a.mp4"
+  },
+  "cs:identifyTitle": {
+    "lang": "cs",
+    "key": "identifyTitle",
+    "text": "Najdeme vaši rezervaci",
+    "hash": "114329d65c",
+    "file": "cs-identifyTitle-114329d65c.mp4"
+  },
+  "cs:regTitle": {
+    "lang": "cs",
+    "key": "regTitle",
+    "text": "Zákonná registrace hosta",
+    "hash": "ac3234d7de",
+    "file": "cs-regTitle-ac3234d7de.mp4"
+  },
+  "cs:thanksTitle": {
+    "lang": "cs",
+    "key": "thanksTitle",
+    "text": "Děkujeme za návštěvu!",
+    "hash": "8ed76765b1",
+    "file": "cs-thanksTitle-8ed76765b1.mp4"
+  },
+  "cs:coFolioTitle": {
+    "lang": "cs",
+    "key": "coFolioTitle",
+    "text": "Vaše vyúčtování",
+    "hash": "3c8c3f4434",
+    "file": "cs-coFolioTitle-3c8c3f4434.mp4"
+  },
+  "cs:coIdentifyTitle": {
+    "lang": "cs",
+    "key": "coIdentifyTitle",
+    "text": "Odhlášení pobytu",
+    "hash": "587df36bbb",
+    "file": "cs-coIdentifyTitle-587df36bbb.mp4"
+  },
+  "cs:guestTitle": {
+    "lang": "cs",
+    "key": "guestTitle",
+    "text": "Vaše kontaktní údaje",
+    "hash": "4992829e61",
+    "file": "cs-guestTitle-4992829e61.mp4"
+  },
+  "cs:offerTitle": {
+    "lang": "cs",
+    "key": "offerTitle",
+    "text": "Volné pokoje",
+    "hash": "1ea31afca2",
+    "file": "cs-offerTitle-1ea31afca2.mp4"
+  },
+  "cs:searchStayTitle": {
+    "lang": "cs",
+    "key": "searchStayTitle",
+    "text": "Jaký termín hledáte?",
+    "hash": "a909b881de",
+    "file": "cs-searchStayTitle-a909b881de.mp4"
+  }
+}

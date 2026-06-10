@@ -30,6 +30,7 @@ import { runChecks } from "./checks";
 import { buildMaintenancePlan, briefMaintenance } from "./maintenance-triage";
 import * as callsStore from "./calls";
 import { isJaasConfigured, mintJaasToken } from "./jaas";
+import * as did from "./did";
 import * as billing from "./billing";
 import * as cash from "./cashregister";
 import { initWhatsApp, whatsappStatus, sendWhatsApp, destroyWhatsApp } from "./whatsapp";
@@ -212,6 +213,35 @@ app.post("/ai/chat", h(async (req) => {
     messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).min(1).max(40),
   }).parse(req.body);
   return aiChat(propertyId, b.lang || "cs", b.messages as ChatMsg[]);
+}));
+
+// ── D-ID real-time avatar (kiosek, cesta C) — backend proxuje signaling, klíč zůstává na serveru ──
+// Veřejné jako ostatní kioskové routy; klíč v .env. Když není nakonfigurováno, vrací enabled:false.
+app.get("/did/config", h(async () => ({ enabled: did.isDidConfigured(), sourceUrl: did.DID_SOURCE_URL() })));
+
+app.post("/did/streams", h(async () => {
+  if (!did.isDidConfigured()) throw Object.assign(new Error("D-ID není nakonfigurováno (DID_API_KEY)."), { status: 503 });
+  return did.createStream();
+}));
+
+app.post("/did/streams/:id/sdp", h(async (req) => {
+  const b = z.object({ answer: z.unknown(), session_id: z.string().min(1) }).parse(req.body);
+  return did.sendSdp(req.params.id, b.answer, b.session_id);
+}));
+
+app.post("/did/streams/:id/ice", h(async (req) => {
+  const b = z.object({ candidate: z.record(z.unknown()), session_id: z.string().min(1) }).parse(req.body);
+  return did.sendIce(req.params.id, b.candidate, b.session_id);
+}));
+
+app.post("/did/streams/:id/talk", h(async (req) => {
+  const b = z.object({ session_id: z.string().min(1), text: z.string().min(1), lang: z.string().optional() }).parse(req.body);
+  return did.sendTalk(req.params.id, b.session_id, b.text, b.lang || "cs");
+}));
+
+app.post("/did/streams/:id/close", h(async (req) => {
+  const b = z.object({ session_id: z.string().min(1) }).parse(req.body);
+  return did.closeStream(req.params.id, b.session_id);
 }));
 
 // ── Auth ─────────────────────────────────────────────────────
