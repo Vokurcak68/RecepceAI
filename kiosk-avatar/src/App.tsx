@@ -108,6 +108,10 @@ export function App() {
   };
   // AvatarStage hlásí, jestli Daniel mluví → řídí titulky i kdy spustit mikrofon.
   const onAvatarSpeaking = (b: boolean) => { setAvatarSpeaking(b); if (!b) setGreetingArmed(false); };
+  // Živý D-ID stream jen v asistentovi; mimo něj zpět na lokálního Daniela (klipy/poster).
+  useEffect(() => {
+    if (didActive && screen !== "assistant") stageRef.current?.goLocal();
+  }, [screen]); // eslint-disable-line
   // Po namountování avatara (a načtení klipů) dožeň nahromaděné věty.
   useEffect(() => {
     if (didLive && stageRef.current && pendingSay.current.length) {
@@ -221,6 +225,8 @@ export function App() {
   function openAssistant(initial?: string) {
     stopListen(); setMsgs([]); setChatInput("");
     go("assistant", "assistantTitle");
+    // Předehřej živý D-ID stream na pozadí, ať je připravený, než dorazí odpověď (žádné dlouhé čekání).
+    if (didActive) stageRef.current?.warmup();
     if (initial && initial.trim()) sendChat(initial.trim());
   }
   async function sendChat(text: string) {
