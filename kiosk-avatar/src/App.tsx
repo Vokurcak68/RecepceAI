@@ -89,7 +89,7 @@ export function App() {
   // Manifest předrenderovaných klipů pevných vět (cesta B): `${lang}|${text}` → URL.
   const [clipMap, setClipMap] = useState<Record<string, string>>({});
   useEffect(() => {
-    fetch("/clips/clips.json?v=3").then((r) => r.ok ? r.json() : {}).then((m: Record<string, { lang: string; text: string; file: string }>) => {
+    fetch("/clips/clips.json?v=5").then((r) => r.ok ? r.json() : {}).then((m: Record<string, { lang: string; text: string; file: string }>) => {
       const map: Record<string, string> = {};
       Object.values(m).forEach((e) => { map[`${e.lang}|${e.text}`] = `/clips/${e.file}`; });
       setClipMap(map);

@@ -75,5 +75,698 @@
     "text": "Jaký termín hledáte?",
     "hash": "a909b881de",
     "file": "cs-searchStayTitle-a909b881de.mp4"
+  },
+  "en:welcome": {
+    "lang": "en",
+    "key": "welcome",
+    "text": "Hello and welcome. How can I help you?",
+    "hash": "ad3e923fff",
+    "file": "en-welcome-ad3e923fff.mp4"
+  },
+  "en:escalateTitle": {
+    "lang": "en",
+    "key": "escalateTitle",
+    "text": "Calling a colleague",
+    "hash": "4db58d3c4f",
+    "file": "en-escalateTitle-4db58d3c4f.mp4"
+  },
+  "en:assistantTitle": {
+    "lang": "en",
+    "key": "assistantTitle",
+    "text": "Ask me anything",
+    "hash": "fee3324cc7",
+    "file": "en-assistantTitle-fee3324cc7.mp4"
+  },
+  "en:identifyTitle": {
+    "lang": "en",
+    "key": "identifyTitle",
+    "text": "Let's find your reservation",
+    "hash": "27e6ceae29",
+    "file": "en-identifyTitle-27e6ceae29.mp4"
+  },
+  "en:regTitle": {
+    "lang": "en",
+    "key": "regTitle",
+    "text": "Legal guest registration",
+    "hash": "81bfd18b42",
+    "file": "en-regTitle-81bfd18b42.mp4"
+  },
+  "en:thanksTitle": {
+    "lang": "en",
+    "key": "thanksTitle",
+    "text": "Thank you for your visit!",
+    "hash": "bb2e6fd744",
+    "file": "en-thanksTitle-bb2e6fd744.mp4"
+  },
+  "en:coFolioTitle": {
+    "lang": "en",
+    "key": "coFolioTitle",
+    "text": "Your bill",
+    "hash": "b6e3ec42a8",
+    "file": "en-coFolioTitle-b6e3ec42a8.mp4"
+  },
+  "en:coIdentifyTitle": {
+    "lang": "en",
+    "key": "coIdentifyTitle",
+    "text": "Check out",
+    "hash": "d11d0cea62",
+    "file": "en-coIdentifyTitle-d11d0cea62.mp4"
+  },
+  "en:guestTitle": {
+    "lang": "en",
+    "key": "guestTitle",
+    "text": "Your contact details",
+    "hash": "6e9297e796",
+    "file": "en-guestTitle-6e9297e796.mp4"
+  },
+  "en:offerTitle": {
+    "lang": "en",
+    "key": "offerTitle",
+    "text": "Available rooms",
+    "hash": "2edc0b3fe9",
+    "file": "en-offerTitle-2edc0b3fe9.mp4"
+  },
+  "en:searchStayTitle": {
+    "lang": "en",
+    "key": "searchStayTitle",
+    "text": "What dates are you looking for?",
+    "hash": "7f3a9fd9f9",
+    "file": "en-searchStayTitle-7f3a9fd9f9.mp4"
+  },
+  "de:welcome": {
+    "lang": "de",
+    "key": "welcome",
+    "text": "Guten Tag und herzlich willkommen. Wie kann ich Ihnen helfen?",
+    "hash": "2b353d00a8",
+    "file": "de-welcome-2b353d00a8.mp4"
+  },
+  "de:escalateTitle": {
+    "lang": "de",
+    "key": "escalateTitle",
+    "text": "Ich rufe einen Kollegen",
+    "hash": "7bbe2b7435",
+    "file": "de-escalateTitle-7bbe2b7435.mp4"
+  },
+  "de:assistantTitle": {
+    "lang": "de",
+    "key": "assistantTitle",
+    "text": "Fragen Sie mich",
+    "hash": "bedeb84e9b",
+    "file": "de-assistantTitle-bedeb84e9b.mp4"
+  },
+  "de:identifyTitle": {
+    "lang": "de",
+    "key": "identifyTitle",
+    "text": "Wir finden Ihre Reservierung",
+    "hash": "19ab8a8ac4",
+    "file": "de-identifyTitle-19ab8a8ac4.mp4"
+  },
+  "de:regTitle": {
+    "lang": "de",
+    "key": "regTitle",
+    "text": "Gesetzliche Gästeregistrierung",
+    "hash": "c411ca26cc",
+    "file": "de-regTitle-c411ca26cc.mp4"
+  },
+  "de:thanksTitle": {
+    "lang": "de",
+    "key": "thanksTitle",
+    "text": "Danke für Ihren Besuch!",
+    "hash": "1a1e2c43c5",
+    "file": "de-thanksTitle-1a1e2c43c5.mp4"
+  },
+  "de:coFolioTitle": {
+    "lang": "de",
+    "key": "coFolioTitle",
+    "text": "Ihre Rechnung",
+    "hash": "679d716bb9",
+    "file": "de-coFolioTitle-679d716bb9.mp4"
+  },
+  "de:coIdentifyTitle": {
+    "lang": "de",
+    "key": "coIdentifyTitle",
+    "text": "Abreise",
+    "hash": "8e686b92e4",
+    "file": "de-coIdentifyTitle-8e686b92e4.mp4"
+  },
+  "de:guestTitle": {
+    "lang": "de",
+    "key": "guestTitle",
+    "text": "Ihre Kontaktdaten",
+    "hash": "ed3795691c",
+    "file": "de-guestTitle-ed3795691c.mp4"
+  },
+  "de:offerTitle": {
+    "lang": "de",
+    "key": "offerTitle",
+    "text": "Freie Zimmer",
+    "hash": "d9de57392e",
+    "file": "de-offerTitle-d9de57392e.mp4"
+  },
+  "de:searchStayTitle": {
+    "lang": "de",
+    "key": "searchStayTitle",
+    "text": "Welchen Zeitraum suchen Sie?",
+    "hash": "a38dd0c92c",
+    "file": "de-searchStayTitle-a38dd0c92c.mp4"
+  },
+  "uk:welcome": {
+    "lang": "uk",
+    "key": "welcome",
+    "text": "Доброго дня та ласкаво просимо. Чим можу допомогти?",
+    "hash": "d85932e66e",
+    "file": "uk-welcome-d85932e66e.mp4"
+  },
+  "uk:escalateTitle": {
+    "lang": "uk",
+    "key": "escalateTitle",
+    "text": "Викликаю працівника",
+    "hash": "c372affa1a",
+    "file": "uk-escalateTitle-c372affa1a.mp4"
+  },
+  "uk:assistantTitle": {
+    "lang": "uk",
+    "key": "assistantTitle",
+    "text": "Запитайте мене",
+    "hash": "adb1b0b444",
+    "file": "uk-assistantTitle-adb1b0b444.mp4"
+  },
+  "uk:identifyTitle": {
+    "lang": "uk",
+    "key": "identifyTitle",
+    "text": "Знайдемо вашу бронь",
+    "hash": "52fe2659c3",
+    "file": "uk-identifyTitle-52fe2659c3.mp4"
+  },
+  "uk:regTitle": {
+    "lang": "uk",
+    "key": "regTitle",
+    "text": "Реєстрація гостя за законом",
+    "hash": "6529612a44",
+    "file": "uk-regTitle-6529612a44.mp4"
+  },
+  "uk:thanksTitle": {
+    "lang": "uk",
+    "key": "thanksTitle",
+    "text": "Дякуємо за візит!",
+    "hash": "aa4772eac1",
+    "file": "uk-thanksTitle-aa4772eac1.mp4"
+  },
+  "uk:coFolioTitle": {
+    "lang": "uk",
+    "key": "coFolioTitle",
+    "text": "Ваш рахунок",
+    "hash": "4179d34544",
+    "file": "uk-coFolioTitle-4179d34544.mp4"
+  },
+  "uk:coIdentifyTitle": {
+    "lang": "uk",
+    "key": "coIdentifyTitle",
+    "text": "Виїзд",
+    "hash": "9b6c116cfc",
+    "file": "uk-coIdentifyTitle-9b6c116cfc.mp4"
+  },
+  "uk:guestTitle": {
+    "lang": "uk",
+    "key": "guestTitle",
+    "text": "Ваші контактні дані",
+    "hash": "d4f2a44dc1",
+    "file": "uk-guestTitle-d4f2a44dc1.mp4"
+  },
+  "uk:offerTitle": {
+    "lang": "uk",
+    "key": "offerTitle",
+    "text": "Вільні номери",
+    "hash": "4fa64d785d",
+    "file": "uk-offerTitle-4fa64d785d.mp4"
+  },
+  "uk:searchStayTitle": {
+    "lang": "uk",
+    "key": "searchStayTitle",
+    "text": "На які дати шукаєте?",
+    "hash": "d5f5731930",
+    "file": "uk-searchStayTitle-d5f5731930.mp4"
+  },
+  "pl:welcome": {
+    "lang": "pl",
+    "key": "welcome",
+    "text": "Dzień dobry i witamy. W czym mogę pomóc?",
+    "hash": "63c9a3c00d",
+    "file": "pl-welcome-63c9a3c00d.mp4"
+  },
+  "pl:escalateTitle": {
+    "lang": "pl",
+    "key": "escalateTitle",
+    "text": "Wzywam współpracownika",
+    "hash": "2347a2cd3e",
+    "file": "pl-escalateTitle-2347a2cd3e.mp4"
+  },
+  "pl:assistantTitle": {
+    "lang": "pl",
+    "key": "assistantTitle",
+    "text": "Zapytaj mnie",
+    "hash": "c3846e8b1f",
+    "file": "pl-assistantTitle-c3846e8b1f.mp4"
+  },
+  "pl:identifyTitle": {
+    "lang": "pl",
+    "key": "identifyTitle",
+    "text": "Znajdźmy Twoją rezerwację",
+    "hash": "2c48bf8640",
+    "file": "pl-identifyTitle-2c48bf8640.mp4"
+  },
+  "pl:regTitle": {
+    "lang": "pl",
+    "key": "regTitle",
+    "text": "Ustawowa rejestracja gościa",
+    "hash": "39ec4819bd",
+    "file": "pl-regTitle-39ec4819bd.mp4"
+  },
+  "pl:thanksTitle": {
+    "lang": "pl",
+    "key": "thanksTitle",
+    "text": "Dziękujemy za wizytę!",
+    "hash": "31026c829b",
+    "file": "pl-thanksTitle-31026c829b.mp4"
+  },
+  "pl:coFolioTitle": {
+    "lang": "pl",
+    "key": "coFolioTitle",
+    "text": "Twój rachunek",
+    "hash": "fe45578b4f",
+    "file": "pl-coFolioTitle-fe45578b4f.mp4"
+  },
+  "pl:coIdentifyTitle": {
+    "lang": "pl",
+    "key": "coIdentifyTitle",
+    "text": "Wyjazd",
+    "hash": "bde60181ac",
+    "file": "pl-coIdentifyTitle-bde60181ac.mp4"
+  },
+  "pl:guestTitle": {
+    "lang": "pl",
+    "key": "guestTitle",
+    "text": "Twoje dane kontaktowe",
+    "hash": "b3b7445bba",
+    "file": "pl-guestTitle-b3b7445bba.mp4"
+  },
+  "pl:offerTitle": {
+    "lang": "pl",
+    "key": "offerTitle",
+    "text": "Wolne pokoje",
+    "hash": "1b7eb7abbf",
+    "file": "pl-offerTitle-1b7eb7abbf.mp4"
+  },
+  "pl:searchStayTitle": {
+    "lang": "pl",
+    "key": "searchStayTitle",
+    "text": "Jakiego terminu szukasz?",
+    "hash": "7fd6e514d2",
+    "file": "pl-searchStayTitle-7fd6e514d2.mp4"
+  },
+  "sk:welcome": {
+    "lang": "sk",
+    "key": "welcome",
+    "text": "Dobrý deň, vitajte. Ako vám môžem pomôcť?",
+    "hash": "95616b6f8a",
+    "file": "sk-welcome-95616b6f8a.mp4"
+  },
+  "sk:escalateTitle": {
+    "lang": "sk",
+    "key": "escalateTitle",
+    "text": "Privolávam kolegu",
+    "hash": "27d477f857",
+    "file": "sk-escalateTitle-27d477f857.mp4"
+  },
+  "sk:assistantTitle": {
+    "lang": "sk",
+    "key": "assistantTitle",
+    "text": "Opýtajte sa ma",
+    "hash": "599a24afb9",
+    "file": "sk-assistantTitle-599a24afb9.mp4"
+  },
+  "sk:coFolioTitle": {
+    "lang": "sk",
+    "key": "coFolioTitle",
+    "text": "Vaše vyúčtovanie",
+    "hash": "9a271f6ef9",
+    "file": "sk-coFolioTitle-9a271f6ef9.mp4"
+  },
+  "sk:coIdentifyTitle": {
+    "lang": "sk",
+    "key": "coIdentifyTitle",
+    "text": "Odhlásenie pobytu",
+    "hash": "024122891f",
+    "file": "sk-coIdentifyTitle-024122891f.mp4"
+  },
+  "sk:guestTitle": {
+    "lang": "sk",
+    "key": "guestTitle",
+    "text": "Vaše kontaktné údaje",
+    "hash": "75de6a41b4",
+    "file": "sk-guestTitle-75de6a41b4.mp4"
+  },
+  "sk:offerTitle": {
+    "lang": "sk",
+    "key": "offerTitle",
+    "text": "Voľné izby",
+    "hash": "ae97c53946",
+    "file": "sk-offerTitle-ae97c53946.mp4"
+  },
+  "sk:searchStayTitle": {
+    "lang": "sk",
+    "key": "searchStayTitle",
+    "text": "Aký termín hľadáte?",
+    "hash": "10b4fcc0ac",
+    "file": "sk-searchStayTitle-10b4fcc0ac.mp4"
+  },
+  "sk:identifyTitle": {
+    "lang": "sk",
+    "key": "identifyTitle",
+    "text": "Nájdeme vašu rezerváciu",
+    "hash": "4405de5f25",
+    "file": "sk-identifyTitle-4405de5f25.mp4"
+  },
+  "sk:regTitle": {
+    "lang": "sk",
+    "key": "regTitle",
+    "text": "Zákonná registrácia hosťa",
+    "hash": "8ec747821d",
+    "file": "sk-regTitle-8ec747821d.mp4"
+  },
+  "sk:thanksTitle": {
+    "lang": "sk",
+    "key": "thanksTitle",
+    "text": "Ďakujeme za návštevu!",
+    "hash": "e36a178c53",
+    "file": "sk-thanksTitle-e36a178c53.mp4"
+  },
+  "it:welcome": {
+    "lang": "it",
+    "key": "welcome",
+    "text": "Buongiorno e benvenuto. Come posso aiutarla?",
+    "hash": "5bb74d4471",
+    "file": "it-welcome-5bb74d4471.mp4"
+  },
+  "it:escalateTitle": {
+    "lang": "it",
+    "key": "escalateTitle",
+    "text": "Chiamo un collega",
+    "hash": "a4f1d6981b",
+    "file": "it-escalateTitle-a4f1d6981b.mp4"
+  },
+  "it:assistantTitle": {
+    "lang": "it",
+    "key": "assistantTitle",
+    "text": "Mi chieda pure",
+    "hash": "14a062c071",
+    "file": "it-assistantTitle-14a062c071.mp4"
+  },
+  "it:identifyTitle": {
+    "lang": "it",
+    "key": "identifyTitle",
+    "text": "Troviamo la sua prenotazione",
+    "hash": "26a82a9a8f",
+    "file": "it-identifyTitle-26a82a9a8f.mp4"
+  },
+  "it:regTitle": {
+    "lang": "it",
+    "key": "regTitle",
+    "text": "Registrazione legale dell'ospite",
+    "hash": "2d21673ba5",
+    "file": "it-regTitle-2d21673ba5.mp4"
+  },
+  "it:thanksTitle": {
+    "lang": "it",
+    "key": "thanksTitle",
+    "text": "Grazie della visita!",
+    "hash": "9b9faaf9c4",
+    "file": "it-thanksTitle-9b9faaf9c4.mp4"
+  },
+  "it:coFolioTitle": {
+    "lang": "it",
+    "key": "coFolioTitle",
+    "text": "Il suo conto",
+    "hash": "7c0a96b275",
+    "file": "it-coFolioTitle-7c0a96b275.mp4"
+  },
+  "it:coIdentifyTitle": {
+    "lang": "it",
+    "key": "coIdentifyTitle",
+    "text": "Check-out",
+    "hash": "e892eeb43c",
+    "file": "it-coIdentifyTitle-e892eeb43c.mp4"
+  },
+  "it:guestTitle": {
+    "lang": "it",
+    "key": "guestTitle",
+    "text": "I suoi dati di contatto",
+    "hash": "53e088999d",
+    "file": "it-guestTitle-53e088999d.mp4"
+  },
+  "it:offerTitle": {
+    "lang": "it",
+    "key": "offerTitle",
+    "text": "Camere disponibili",
+    "hash": "58d2cbe62d",
+    "file": "it-offerTitle-58d2cbe62d.mp4"
+  },
+  "it:searchStayTitle": {
+    "lang": "it",
+    "key": "searchStayTitle",
+    "text": "Quali date sta cercando?",
+    "hash": "e1da958976",
+    "file": "it-searchStayTitle-e1da958976.mp4"
+  },
+  "fr:welcome": {
+    "lang": "fr",
+    "key": "welcome",
+    "text": "Bonjour et bienvenue. Comment puis-je vous aider ?",
+    "hash": "8495edccee",
+    "file": "fr-welcome-8495edccee.mp4"
+  },
+  "fr:escalateTitle": {
+    "lang": "fr",
+    "key": "escalateTitle",
+    "text": "J'appelle un collègue",
+    "hash": "81e1e1a836",
+    "file": "fr-escalateTitle-81e1e1a836.mp4"
+  },
+  "fr:assistantTitle": {
+    "lang": "fr",
+    "key": "assistantTitle",
+    "text": "Posez-moi une question",
+    "hash": "73b4d738ca",
+    "file": "fr-assistantTitle-73b4d738ca.mp4"
+  },
+  "fr:identifyTitle": {
+    "lang": "fr",
+    "key": "identifyTitle",
+    "text": "Trouvons votre réservation",
+    "hash": "571907e57f",
+    "file": "fr-identifyTitle-571907e57f.mp4"
+  },
+  "fr:regTitle": {
+    "lang": "fr",
+    "key": "regTitle",
+    "text": "Enregistrement légal du client",
+    "hash": "9ea8f8b18d",
+    "file": "fr-regTitle-9ea8f8b18d.mp4"
+  },
+  "fr:thanksTitle": {
+    "lang": "fr",
+    "key": "thanksTitle",
+    "text": "Merci de votre visite !",
+    "hash": "65eb62834f",
+    "file": "fr-thanksTitle-65eb62834f.mp4"
+  },
+  "fr:coFolioTitle": {
+    "lang": "fr",
+    "key": "coFolioTitle",
+    "text": "Votre facture",
+    "hash": "fbe7b9453f",
+    "file": "fr-coFolioTitle-fbe7b9453f.mp4"
+  },
+  "fr:coIdentifyTitle": {
+    "lang": "fr",
+    "key": "coIdentifyTitle",
+    "text": "Départ",
+    "hash": "4210d115d8",
+    "file": "fr-coIdentifyTitle-4210d115d8.mp4"
+  },
+  "fr:guestTitle": {
+    "lang": "fr",
+    "key": "guestTitle",
+    "text": "Vos coordonnées",
+    "hash": "bc08dc0443",
+    "file": "fr-guestTitle-bc08dc0443.mp4"
+  },
+  "fr:offerTitle": {
+    "lang": "fr",
+    "key": "offerTitle",
+    "text": "Chambres disponibles",
+    "hash": "0e95a35b83",
+    "file": "fr-offerTitle-0e95a35b83.mp4"
+  },
+  "fr:searchStayTitle": {
+    "lang": "fr",
+    "key": "searchStayTitle",
+    "text": "Quelles dates recherchez-vous ?",
+    "hash": "1f9fa65e7b",
+    "file": "fr-searchStayTitle-1f9fa65e7b.mp4"
+  },
+  "es:welcome": {
+    "lang": "es",
+    "key": "welcome",
+    "text": "Hola y bienvenido. ¿En qué puedo ayudarle?",
+    "hash": "4d53b619cd",
+    "file": "es-welcome-4d53b619cd.mp4"
+  },
+  "es:escalateTitle": {
+    "lang": "es",
+    "key": "escalateTitle",
+    "text": "Llamo a un compañero",
+    "hash": "141784af03",
+    "file": "es-escalateTitle-141784af03.mp4"
+  },
+  "es:assistantTitle": {
+    "lang": "es",
+    "key": "assistantTitle",
+    "text": "Pregúnteme",
+    "hash": "1e6eb54a5f",
+    "file": "es-assistantTitle-1e6eb54a5f.mp4"
+  },
+  "es:identifyTitle": {
+    "lang": "es",
+    "key": "identifyTitle",
+    "text": "Busquemos su reserva",
+    "hash": "d15c2e832a",
+    "file": "es-identifyTitle-d15c2e832a.mp4"
+  },
+  "es:regTitle": {
+    "lang": "es",
+    "key": "regTitle",
+    "text": "Registro legal del huésped",
+    "hash": "6948bcc277",
+    "file": "es-regTitle-6948bcc277.mp4"
+  },
+  "es:thanksTitle": {
+    "lang": "es",
+    "key": "thanksTitle",
+    "text": "¡Gracias por su visita!",
+    "hash": "913ae6f99a",
+    "file": "es-thanksTitle-913ae6f99a.mp4"
+  },
+  "es:coFolioTitle": {
+    "lang": "es",
+    "key": "coFolioTitle",
+    "text": "Su factura",
+    "hash": "189f09dd8f",
+    "file": "es-coFolioTitle-189f09dd8f.mp4"
+  },
+  "es:coIdentifyTitle": {
+    "lang": "es",
+    "key": "coIdentifyTitle",
+    "text": "Salida",
+    "hash": "1ca5c0cf65",
+    "file": "es-coIdentifyTitle-1ca5c0cf65.mp4"
+  },
+  "es:guestTitle": {
+    "lang": "es",
+    "key": "guestTitle",
+    "text": "Sus datos de contacto",
+    "hash": "d91d4bd267",
+    "file": "es-guestTitle-d91d4bd267.mp4"
+  },
+  "es:offerTitle": {
+    "lang": "es",
+    "key": "offerTitle",
+    "text": "Habitaciones disponibles",
+    "hash": "8b5e48f955",
+    "file": "es-offerTitle-8b5e48f955.mp4"
+  },
+  "es:searchStayTitle": {
+    "lang": "es",
+    "key": "searchStayTitle",
+    "text": "¿Qué fechas busca?",
+    "hash": "cb28fb8582",
+    "file": "es-searchStayTitle-cb28fb8582.mp4"
+  },
+  "zh:welcome": {
+    "lang": "zh",
+    "key": "welcome",
+    "text": "您好，欢迎光临。我能帮您什么？",
+    "hash": "4cde953ffa",
+    "file": "zh-welcome-4cde953ffa.mp4"
+  },
+  "zh:escalateTitle": {
+    "lang": "zh",
+    "key": "escalateTitle",
+    "text": "正在呼叫同事",
+    "hash": "ab367bc247",
+    "file": "zh-escalateTitle-ab367bc247.mp4"
+  },
+  "zh:assistantTitle": {
+    "lang": "zh",
+    "key": "assistantTitle",
+    "text": "请问我",
+    "hash": "0cc8e5f2b7",
+    "file": "zh-assistantTitle-0cc8e5f2b7.mp4"
+  },
+  "zh:identifyTitle": {
+    "lang": "zh",
+    "key": "identifyTitle",
+    "text": "我们来找您的预订",
+    "hash": "7609176f26",
+    "file": "zh-identifyTitle-7609176f26.mp4"
+  },
+  "zh:regTitle": {
+    "lang": "zh",
+    "key": "regTitle",
+    "text": "法定旅客登记",
+    "hash": "969bde00c1",
+    "file": "zh-regTitle-969bde00c1.mp4"
+  },
+  "zh:thanksTitle": {
+    "lang": "zh",
+    "key": "thanksTitle",
+    "text": "感谢您的光临！",
+    "hash": "b1d8268e21",
+    "file": "zh-thanksTitle-b1d8268e21.mp4"
+  },
+  "zh:coFolioTitle": {
+    "lang": "zh",
+    "key": "coFolioTitle",
+    "text": "您的账单",
+    "hash": "33fe0049dd",
+    "file": "zh-coFolioTitle-33fe0049dd.mp4"
+  },
+  "zh:coIdentifyTitle": {
+    "lang": "zh",
+    "key": "coIdentifyTitle",
+    "text": "退房",
+    "hash": "73e6713995",
+    "file": "zh-coIdentifyTitle-73e6713995.mp4"
+  },
+  "zh:guestTitle": {
+    "lang": "zh",
+    "key": "guestTitle",
+    "text": "您的联系方式",
+    "hash": "f70b74e166",
+    "file": "zh-guestTitle-f70b74e166.mp4"
+  },
+  "zh:offerTitle": {
+    "lang": "zh",
+    "key": "offerTitle",
+    "text": "可订房间",
+    "hash": "f3e91f5b92",
+    "file": "zh-offerTitle-f3e91f5b92.mp4"
+  },
+  "zh:searchStayTitle": {
+    "lang": "zh",
+    "key": "searchStayTitle",
+    "text": "您要查询哪些日期？",
+    "hash": "a89506a31c",
+    "file": "zh-searchStayTitle-a89506a31c.mp4"
   }
 }

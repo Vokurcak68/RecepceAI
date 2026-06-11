@@ -54,7 +54,29 @@ const escXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").rep
 // Doplňovací otázky (Jak/Kde/Kdy/Co/Jaký…) mají v češtině KLESAVOU intonaci.
 // Neural hlas je ale s „?" čte stoupavě (nepřirozeně) → nahradíme „?" tečkou,
 // pak větu přečte oznamovacím (klesavým) tónem. Zjišťovací otázky (Máte…?) necháme „?".
-const WH_Q = /\b(jak|jakpak|kde|kdepak|kam|odkud|kudy|kdy|dokdy|odkdy|kdo|kdopak|co|copak|čí|čeho|čemu|čím|čem|kolik|kolikátý|proč|nač|jaký|jaká|jaké|jací|jakou|jakého|jakém|který|která|které|kterou|kterého|kterém)\b/i;
+const WH_Q = new RegExp(
+  "\\b(" + [
+    // cs
+    "jak", "jakpak", "kde", "kdepak", "kam", "odkud", "kudy", "kdy", "dokdy", "odkdy", "kdo", "kdopak", "co", "copak", "čí", "čeho", "čemu", "čím", "čem", "kolik", "kolikátý", "proč", "nač", "jaký", "jaká", "jaké", "jací", "jakou", "jakého", "jakém", "který", "která", "které", "kterou", "kterého", "kterém",
+    // en
+    "how", "where", "when", "what", "who", "whom", "whose", "which", "why",
+    // de
+    "wie", "wo", "wann", "was", "wer", "wen", "wem", "wessen", "welche", "welcher", "welches", "welchen", "warum", "wieso", "weshalb", "wieviel",
+    // pl
+    "gdzie", "kiedy", "kto", "czyj", "ile", "dlaczego", "jaki", "jaka", "jakie", "który", "która", "które",
+    // sk
+    "ako", "kedy", "čo", "kto", "koľko", "prečo", "aký", "aká", "aké", "ktorý", "ktorá", "ktoré",
+    // it
+    "come", "dove", "quando", "cosa", "che", "chi", "quale", "quali", "quanto", "quanti", "perché",
+    // fr
+    "comment", "où", "quand", "que", "qui", "quel", "quelle", "quels", "quelles", "combien", "pourquoi",
+    // es
+    "cómo", "dónde", "cuándo", "qué", "quién", "cuál", "cuánto", "cuánta", "por qué",
+    // uk (cyrilice)
+    "як", "де", "коли", "куди", "звідки", "що", "хто", "чий", "скільки", "чому", "який", "яка", "яке",
+  ].join("|") + ")\\b",
+  "i",
+);
 
 /** Text → SSML: doplňovacím otázkám vnutí klesavou intonaci (přes „.") + nastaví rychlost. */
 function toSsml(text: string): string {

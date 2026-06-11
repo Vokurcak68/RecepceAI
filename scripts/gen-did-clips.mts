@@ -21,7 +21,8 @@ const KEYS = [
   "thanksTitle", "coFolioTitle", "coIdentifyTitle", "guestTitle", "offerTitle", "searchStayTitle",
 ] as const;
 
-const LANGS = ["cs"]; // dle rozhodnutí zatím jen čeština
+// jazyky: default cs, nebo přes env CLIP_LANGS="en,de" (postupné generování)
+const LANGS = (process.env.CLIP_LANGS || "cs").split(",").map((s) => s.trim()).filter(Boolean);
 const CLIP_VER = "3";  // bump → nové názvy souborů (obejde cache) + vynutí přegenerování
 // volitelně přegeneruj jen vybrané klíče: CLIP_ONLY="welcome,searchStayTitle"
 const ONLY = (process.env.CLIP_ONLY || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -45,15 +46,23 @@ for (const lang of LANGS) {
     const prev = manifest[mkey];
     if (prev && prev.hash === hash && fs.existsSync(path.join(outDir, prev.file))) { console.log("skip ", mkey); skipped++; continue; }
     console.log("render", mkey, "→", text);
-    const url = await renderTalk(text, lang);
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-    fs.writeFileSync(path.join(outDir, file), buf);
-    // starý soubor (jiný hash) ukliď
-    if (prev && prev.file !== file) { try { fs.unlinkSync(path.join(outDir, prev.file)); } catch { /* ignore */ } }
-    manifest[mkey] = { lang, key, text, hash, file };
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-    console.log("  saved", file, buf.length, "B");
-    made++;
+    try {
+      const url = await renderTalk(text, lang);
+      // stažení výsledku z S3 občas vyprší → pár pokusů
+      let buf: Buffer | null = null;
+      for (let a = 0; a < 4 && !buf; a++) {
+        try { const r = await fetch(url); if (!r.ok) throw new Error("HTTP " + r.status); buf = Buffer.from(await r.arrayBuffer()); }
+        catch (e) { if (a === 3) throw e; await new Promise((res) => setTimeout(res, 2500)); }
+      }
+      fs.writeFileSync(path.join(outDir, file), buf!);
+      if (prev && prev.file !== file) { try { fs.unlinkSync(path.join(outDir, prev.file)); } catch { /* ignore */ } }
+      manifest[mkey] = { lang, key, text, hash, file };
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      console.log("  saved", file, buf!.length, "B");
+      made++;
+    } catch (e) {
+      console.warn("  CHYBA", mkey, String(e).slice(0, 120)); // přeskoč, znovuspuštění dožene
+    }
   }
 }
 console.log(`HOTOVO — vyrobeno ${made}, přeskočeno ${skipped}. Manifest: ${manifestPath}`);
