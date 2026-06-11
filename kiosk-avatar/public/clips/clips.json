@@ -768,5 +768,82 @@
     "text": "您要查询哪些日期？",
     "hash": "a89506a31c",
     "file": "zh-searchStayTitle-a89506a31c.mp4"
+  },
+  "ru:welcome": {
+    "lang": "ru",
+    "key": "welcome",
+    "text": "Здравствуйте и добро пожаловать. Чем могу помочь?",
+    "hash": "4ca7c53b1e",
+    "file": "ru-welcome-4ca7c53b1e.mp4"
+  },
+  "ru:escalateTitle": {
+    "lang": "ru",
+    "key": "escalateTitle",
+    "text": "Вызываю сотрудника",
+    "hash": "67f73fc9ca",
+    "file": "ru-escalateTitle-67f73fc9ca.mp4"
+  },
+  "ru:assistantTitle": {
+    "lang": "ru",
+    "key": "assistantTitle",
+    "text": "Спросите меня",
+    "hash": "801a52a194",
+    "file": "ru-assistantTitle-801a52a194.mp4"
+  },
+  "ru:identifyTitle": {
+    "lang": "ru",
+    "key": "identifyTitle",
+    "text": "Найдём вашу бронь",
+    "hash": "d4a5dcd6c2",
+    "file": "ru-identifyTitle-d4a5dcd6c2.mp4"
+  },
+  "ru:regTitle": {
+    "lang": "ru",
+    "key": "regTitle",
+    "text": "Регистрация гостя по закону",
+    "hash": "179615a827",
+    "file": "ru-regTitle-179615a827.mp4"
+  },
+  "ru:thanksTitle": {
+    "lang": "ru",
+    "key": "thanksTitle",
+    "text": "Спасибо за визит!",
+    "hash": "e05fd5fee0",
+    "file": "ru-thanksTitle-e05fd5fee0.mp4"
+  },
+  "ru:coFolioTitle": {
+    "lang": "ru",
+    "key": "coFolioTitle",
+    "text": "Ваш счёт",
+    "hash": "cfa6134e7f",
+    "file": "ru-coFolioTitle-cfa6134e7f.mp4"
+  },
+  "ru:coIdentifyTitle": {
+    "lang": "ru",
+    "key": "coIdentifyTitle",
+    "text": "Выезд",
+    "hash": "e9880f2438",
+    "file": "ru-coIdentifyTitle-e9880f2438.mp4"
+  },
+  "ru:guestTitle": {
+    "lang": "ru",
+    "key": "guestTitle",
+    "text": "Ваши контактные данные",
+    "hash": "ac82f93509",
+    "file": "ru-guestTitle-ac82f93509.mp4"
+  },
+  "ru:offerTitle": {
+    "lang": "ru",
+    "key": "offerTitle",
+    "text": "Свободные номера",
+    "hash": "c65997482c",
+    "file": "ru-offerTitle-c65997482c.mp4"
+  },
+  "ru:searchStayTitle": {
+    "lang": "ru",
+    "key": "searchStayTitle",
+    "text": "На какие даты ищете?",
+    "hash": "629e286cba",
+    "file": "ru-searchStayTitle-629e286cba.mp4"
   }
 }
